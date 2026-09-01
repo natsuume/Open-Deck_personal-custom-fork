@@ -61,11 +61,12 @@ jobs:
       #       fast-forward 同期する (--force は付けない)。diverge している
       #       場合、および upstream の変更に .github/workflows/ 配下のファ
       #       イルが含まれる場合はこのステップが失敗し、workflow は失敗
-      #       終了する契約
+      #       終了する契約。同期元は --source で明示し、GitHub 上の
+      #       fork-parent メタデータに依存しない
       - name: Sync Release from upstream (fast-forward)
         id: sync
         shell: bash
-        run: gh repo sync "$GITHUB_REPOSITORY" --branch Release
+        run: gh repo sync "$GITHUB_REPOSITORY" --source kawa-nobu/Open-Deck --branch Release
 
       # 入力: 同期済みの Release ブランチ
       # 処理: gh api で Release ブランチの最新 commit SHA を取得する。取得
@@ -85,8 +86,8 @@ jobs:
       # 入力: custom と Release の SHA (前ステップの `sha`) の比較
       # 処理: 取り込まれる差分ファイル一覧を取得し、センシティブパス
       #       (.github/ 配下、package.sh、package.ps1) が含まれるか判定
-      #       する。ファイル一覧が 300 件で切り詰められている可能性がある
-      #       場合は fail-closed でセンシティブ扱いとする
+      #       する。files 300 件到達または commits 250 件超のいずれかで
+      #       fail-closed とする
       # 出力: 判定結果を step output `sensitive` (true / false) として
       #       公開する
       - name: Check sensitive paths
@@ -100,13 +101,14 @@ jobs:
             exit 1
           fi
 
-          files=$(gh api "repos/${GITHUB_REPOSITORY}/compare/custom...${HEAD_SHA}" --jq '.files[].filename')
+          compare=$(gh api "repos/${GITHUB_REPOSITORY}/compare/custom...${HEAD_SHA}")
+          total_commits=$(echo "$compare" | jq -r '.total_commits')
+          file_count=$(echo "$compare" | jq -r '.files | length')
+          files=$(echo "$compare" | jq -r '.files[].filename')
 
           sensitive=false
-          count=0
           while IFS= read -r f; do
             [ -z "$f" ] && continue
-            count=$((count + 1))
             case "$f" in
               .github/*|package.sh|package.ps1)
                 sensitive=true
@@ -114,14 +116,15 @@ jobs:
             esac
           done <<< "$files"
 
-          # compare API はファイル一覧を最大 300 件しか返さないため、
-          # 300 件に達している場合は一覧が不完全な可能性があり fail-closed とする
-          if [ "$count" -ge 300 ]; then
+          # compare API の切り詰め 2 経路 (files 最大 300 件 / commits 250 件超で
+          # files 一覧が不完全になりうる) のいずれかに該当する場合は、一覧が完全で
+          # ある保証が無いため fail-closed でセンシティブ扱いとする
+          if [ "$file_count" -ge 300 ] || [ "$total_commits" -gt 250 ]; then
             sensitive=true
           fi
 
           echo "sensitive=$sensitive" >> "$GITHUB_OUTPUT"
-          echo "- sensitive paths: $sensitive (changed files: $count)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- sensitive paths: $sensitive (changed files: $file_count, commits: $total_commits)" >> "$GITHUB_STEP_SUMMARY"
 
       # 入力: 前ステップの step output `sha` (head)、`sensitive` 判定、
       #       base は custom ブランチ
