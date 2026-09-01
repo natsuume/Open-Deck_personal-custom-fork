@@ -17,7 +17,8 @@
 #     (a) upstream の変更に .github/workflows/ 配下のファイルが含まれる場合、
 #         Release への同期ステップは失敗する。これは CI 定義が無審査で流入
 #         して secrets 付きで実行されることを防ぐ review gate として意図し
-#         た挙動であり、その場合はローカルから手動同期する
+#         た挙動であり、その場合は upstream の workflow 変更内容を確認した
+#         うえでローカルから手動同期する
 #         (git fetch upstream → git push origin upstream/Release:Release)。
 #         手動同期後の custom への自動マージも github.token では拒否される
 #         ため、workflow は同期 PR を作成して手動マージに委ねる
@@ -63,7 +64,8 @@ jobs:
       #       は 422 で失敗する。upstream の変更に .github/workflows/ 配下
       #       のファイルが含まれる場合も github.token の制約でこのステップ
       #       が失敗し、workflow は失敗終了する契約。同期元は API パスで
-      #       明示し、GitHub 上の fork-parent メタデータに依存しない
+      #       明示し、GitHub 上の fork-parent メタデータに依存しない。
+      #       両者が既に一致している場合は ref 更新を行わず no-op 成功とする
       - name: Sync Release from upstream (fast-forward)
         id: sync
         shell: bash
@@ -73,9 +75,15 @@ jobs:
             echo "::error::upstream の Release の commit SHA を取得できませんでした"
             exit 1
           fi
-          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/Release" \
-            -f sha="$upstream_sha" -F force=false
-          echo "- Release synced to upstream SHA: $upstream_sha" >> "$GITHUB_STEP_SUMMARY"
+
+          fork_sha=$(gh api "repos/${GITHUB_REPOSITORY}/branches/Release" --jq .commit.sha)
+          if [ "$fork_sha" = "$upstream_sha" ]; then
+            echo "- Release already up to date ($upstream_sha)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/Release" \
+              -f sha="$upstream_sha" -F force=false
+            echo "- Release synced to upstream SHA: $upstream_sha" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # 入力: 同期済みの Release ブランチ
       # 処理: gh api で Release ブランチの最新 commit SHA を取得する。取得
@@ -95,8 +103,9 @@ jobs:
       # 入力: custom と Release の SHA (前ステップの `sha`) の比較
       # 処理: 取り込まれる差分ファイル一覧を取得し、センシティブパス
       #       (.github/ 配下、package.sh、package.ps1) が含まれるか判定
-      #       する。files 300 件到達または commits 250 件超のいずれかで
-      #       fail-closed とする
+      #       する。files 300 件到達・commits 250 件超・応答が想定外の形
+      #       (JSON でない / files が配列でない / total_commits が数値でな
+      #       い) のいずれかで fail-closed とする
       # 出力: 判定結果を step output `sensitive` (true / false) として
       #       公開する
       - name: Check sensitive paths
@@ -111,32 +120,45 @@ jobs:
           fi
 
           compare=$(gh api "repos/${GITHUB_REPOSITORY}/compare/custom...${HEAD_SHA}")
-          total_commits=$(echo "$compare" | jq -r '.total_commits')
-          file_count=$(echo "$compare" | jq -r '.files | length')
-          files=$(echo "$compare" | jq -r '.files[].filename')
+
+          # 応答の形を抽出より先に検証し、想定外の形 (JSON でない / files が
+          # 配列でない / total_commits が数値でない) は fail-closed で
+          # センシティブ扱いとする
+          shape_ok=$(echo "$compare" | jq -r 'if (.files | type) == "array" and (.total_commits | type) == "number" then "true" else "false" end' 2>/dev/null) || shape_ok=false
 
           sensitive=false
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            case "$f" in
-              .github/*|package.sh|package.ps1)
-                sensitive=true
-                ;;
-            esac
-          done <<< "$files"
+          file_count="-"
+          total_commits="-"
 
-          # API 応答が想定外の形の場合 (数値が取れない場合) も fail-closed とする
-          valid=true
-          case "$file_count" in ''|*[!0-9]*) valid=false ;; esac
-          case "$total_commits" in ''|*[!0-9]*) valid=false ;; esac
+          if [ "$shape_ok" != "true" ]; then
+            sensitive=true
+          else
+            total_commits=$(echo "$compare" | jq -r '.total_commits')
+            file_count=$(echo "$compare" | jq -r '.files | length')
+            files=$(echo "$compare" | jq -r '.files[].filename')
 
-          # compare API の切り詰め 2 経路 (files 最大 300 件 / commits 250 件超で
-          # files 一覧が不完全になりうる) のいずれかに該当する場合は、一覧が完全で
-          # ある保証が無いため fail-closed でセンシティブ扱いとする
-          if [ "$valid" = "false" ]; then
-            sensitive=true
-          elif [ "$file_count" -ge 300 ] || [ "$total_commits" -gt 250 ]; then
-            sensitive=true
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              case "$f" in
+                .github/*|package.sh|package.ps1)
+                  sensitive=true
+                  ;;
+              esac
+            done <<< "$files"
+
+            # 数値が整数として取れない場合も fail-closed とする
+            valid=true
+            case "$file_count" in ''|*[!0-9]*) valid=false ;; esac
+            case "$total_commits" in ''|*[!0-9]*) valid=false ;; esac
+
+            # compare API の切り詰め 2 経路 (files 最大 300 件 / commits 250 件超で
+            # files 一覧が不完全になりうる) のいずれかに該当する場合は、一覧が完全で
+            # ある保証が無いため fail-closed でセンシティブ扱いとする
+            if [ "$valid" = "false" ]; then
+              sensitive=true
+            elif [ "$file_count" -ge 300 ] || [ "$total_commits" -gt 250 ]; then
+              sensitive=true
+            fi
           fi
 
           echo "sensitive=$sensitive" >> "$GITHUB_OUTPUT"
@@ -211,8 +233,9 @@ jobs:
       # 入力: 前ステップの step output `result` と `reason`
       #       (needs-manual の場合のみ reason を PR 本文へ伝搬させる)
       # 処理: result が needs-manual の場合は、open な Release→custom PR
-      #       が無ければ reason に応じた本文で作成する。result が merged
-      #       または up-to-date の場合は逆に、残存する open な
+      #       が無ければ reason に応じた本文で作成する。既存の open な同期
+      #       PR がある場合は本文を現在のブロック原因で更新する。result が
+      #       merged または up-to-date の場合は逆に、残存する open な
       #       Release→custom PR があれば close する (close 失敗でも
       #       workflow は失敗させない。次回実行で再試行される)。PR の特定
       #       は base/head 名に加えて head リポジトリの owner 一致で行う
@@ -235,24 +258,26 @@ jobs:
 
           case "$RESULT" in
             needs-manual)
+              case "$REASON" in
+                workflow-permission)
+                  cause="原因: CI 定義 (.github/workflows 配下) の変更を含むため、github.token では取り込めません。特権的な変更としてレビューしてください。"
+                  ;;
+                sensitive-path)
+                  cause="原因: センシティブパス (.github/ 配下・package.sh・package.ps1) の変更を含むため、自動マージを停止しました。内容をレビューのうえマージしてください。"
+                  ;;
+                *)
+                  cause="原因: マージコンフリクトが発生しました。"
+                  ;;
+              esac
+              body="upstream の Release を custom へ自動マージできませんでした。${cause} 解決方法: custom から作業ブランチを作成し、Release をマージして (コンフリクトがあれば解決して) PR で custom へ取り込んでください。取り込みは merge commit で行ってください (squash / rebase では次回の同期で同じコンフリクトが再検出されます)。取り込み完了後、この PR は次回の同期実行時に自動で close されます。"
               if [ -z "$pr_number" ]; then
-                case "$REASON" in
-                  workflow-permission)
-                    cause="原因: CI 定義 (.github/workflows 配下) の変更を含むため、github.token では取り込めません。特権的な変更としてレビューしてください。"
-                    ;;
-                  sensitive-path)
-                    cause="原因: センシティブパス (.github/ 配下・package.sh・package.ps1) の変更を含むため、自動マージを停止しました。内容をレビューのうえマージしてください。"
-                    ;;
-                  *)
-                    cause="原因: マージコンフリクトが発生しました。"
-                    ;;
-                esac
                 gh pr create --repo "$GITHUB_REPOSITORY" --base custom --head Release \
                   --title "upstream sync: Release → custom (要手動対応)" \
-                  --body "upstream の Release を custom へ自動マージできませんでした。${cause} 解決方法: custom から作業ブランチを作成し、Release をマージして (コンフリクトがあれば解決して) PR で custom へ取り込んでください。取り込みは merge commit で行ってください (squash / rebase では次回の同期で同じコンフリクトが再検出されます)。取り込み完了後、この PR は次回の同期実行時に自動で close されます。"
+                  --body "$body"
                 echo "- created sync PR" >> "$GITHUB_STEP_SUMMARY"
               else
-                echo "- sync PR already open (#$pr_number)" >> "$GITHUB_STEP_SUMMARY"
+                gh pr edit "$pr_number" --repo "$GITHUB_REPOSITORY" --body "$body"
+                echo "- sync PR already open (#$pr_number), body refreshed" >> "$GITHUB_STEP_SUMMARY"
               fi
               ;;
             merged|up-to-date)
