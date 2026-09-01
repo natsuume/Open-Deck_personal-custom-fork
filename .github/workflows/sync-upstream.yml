@@ -1,0 +1,80 @@
+# ============================================================
+# 設計契約
+# ------------------------------------------------------------
+# 目的:
+#   upstream (kawa-nobu/Open-Deck) の Release を fork の Release (完全ミラー)
+#   へ fast-forward 同期し、その後 Release の内容を custom (default branch、
+#   個人カスタマイズ置き場) へ自動マージする。コンフリクト時は Release→custom
+#   の PR を作成して自動マージを断念し、後続の解決 (定期実行の Claude Code
+#   エージェントまたは手動) に委ねる。
+#
+# 前提:
+#   Release には個人コミットを置かない。fast-forward 前提が崩れると同期ステ
+#   ップは失敗するが、それは意図した挙動である。
+#
+# token 契約:
+#   secrets.SYNC_TOKEN (fine-grained PAT: 対象リポジトリ限定、Contents
+#   read/write + Workflows read/write + Pull requests read/write) が登録さ
+#   れていればそれを使い、未登録なら github.token にフォールバックする。
+#   github.token 使用時の制約:
+#     (a) upstream の変更に .github/workflows/ 配下のファイルが含まれる場合、
+#         同期は失敗する
+#     (b) コンフリクト時の PR 作成にはリポジトリ設定「Allow GitHub Actions
+#         to create and approve pull requests」の有効化が必要
+#
+# エラー方針:
+#   コンフリクト (HTTP 409) は正常系として扱い、workflow は成功終了する。
+#   それ以外の API エラー (403/422 等) は権限・設定異常として workflow を
+#   失敗させる。
+# ============================================================
+
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+    steps:
+      # 入力: upstream リポジトリ (kawa-nobu/Open-Deck) の Release ブランチ
+      # 処理: gh repo sync により fork の Release を upstream の Release へ
+      #       fast-forward 同期する。diverge (fast-forward 不可) の場合はこの
+      #       ステップが失敗し、workflow は失敗終了する契約
+      - name: Sync Release from upstream (fast-forward)
+        run: 'echo "TODO(Phase B): not implemented"'
+
+      # 入力: 同期済みの Release ブランチ
+      # 出力: Release の最新 commit SHA を step output `sha` として公開する
+      #       (後続の Merge ステップが head として固定的に参照する)
+      - name: Get Release SHA
+        run: 'echo "TODO(Phase B): not implemented"'
+
+      # 入力: 前ステップの step output `sha` (head)、base は custom ブランチ
+      # 処理: POST /repos/{repository}/merges を実行し、HTTP ステータスで
+      #       分岐する — 201: マージ成功 / 204: 取り込み済み (差分なし) /
+      #       409: コンフリクト (次ステップへ処理を委譲) / その他: 権限・
+      #       設定異常として workflow を失敗させる
+      # 出力: マージ結果を step output `result` (merged / up-to-date /
+      #       conflict のいずれか) として公開する
+      - name: Merge Release into custom
+        run: 'echo "TODO(Phase B): not implemented"'
+
+      # 入力: 前ステップの step output `result`
+      # 処理: result が conflict の場合のみ、open な Release→custom PR が
+      #       無ければ新規作成する。result が merged の場合は逆に、残存する
+      #       open な Release→custom PR があれば close する
+      - name: Handle conflict (create PR)
+        run: 'echo "TODO(Phase B): not implemented"'
