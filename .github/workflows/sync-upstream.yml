@@ -23,14 +23,16 @@
 #         ため、workflow は同期 PR を作成して手動マージに委ねる
 #     (b) コンフリクト時の PR 作成には、リポジトリ設定「Allow GitHub Actions
 #         to create and approve pull requests」の有効化が前提
-#     (c) この gate の対象は workflow 定義のみである。CI から実行されるそ
-#         の他のファイル (package.sh 等) の upstream 変更は、無審査で
-#         custom へ自動マージされる
+#     (c) workflow 定義の gate (a) に加えて、CI から実行されるセンシティブ
+#         パス (.github/ 配下、package.sh、package.ps1) の変更を含む同期は
+#         自動マージせず、同期 PR を作成して手動レビューに委ねる。それ以外
+#         のファイルの upstream 変更は無審査で custom へ自動マージされる
 #
 # エラー方針:
-#   自動マージ不能 (コンフリクト / workflow 権限拒否) は正常系として扱い、
-#   同期 PR を作成して workflow は成功終了する。それ以外の API エラー
-#   (403/422 等) は権限・設定異常として workflow を失敗させる。
+#   自動マージ不能 (コンフリクト / workflow 権限拒否 / センシティブパス検知)
+#   は正常系として扱い、同期 PR を作成して workflow は成功終了する。それ以
+#   外の API エラー (403/422 等) は権限・設定異常として workflow を失敗さ
+#   せる。
 # ============================================================
 
 name: Sync upstream
@@ -80,22 +82,15 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      # 入力: 前ステップの step output `sha` (head)、base は custom ブランチ
-      # 処理: POST /repos/{repository}/merges を実行し、結果で分岐する —
-      #       exit 0 かつ応答が空: up-to-date (取り込み済み) /
-      #       exit 0 かつ応答が非空: merged (マージ成功) /
-      #       exit 非 0 かつ応答に "HTTP 409" を含む: needs-manual
-      #       (reason=conflict、コンフリクトのため次ステップへ処理を委譲) /
-      #       exit 非 0 かつ応答に "refusing to allow" を含む: needs-manual
-      #       (reason=workflow-permission、github.token が workflow ファイ
-      #       ルを含むマージを拒否したため次ステップへ処理を委譲) /
-      #       それ以外: 権限・設定異常として workflow を失敗させる
-      # 出力: マージ結果を step output `result` (merged / up-to-date /
-      #       needs-manual のいずれか) として公開する。result が
-      #       needs-manual の場合は step output `reason` (conflict /
-      #       workflow-permission) も公開する
-      - name: Merge Release into custom
-        id: merge
+      # 入力: custom と Release の SHA (前ステップの `sha`) の比較
+      # 処理: 取り込まれる差分ファイル一覧を取得し、センシティブパス
+      #       (.github/ 配下、package.sh、package.ps1) が含まれるか判定
+      #       する。ファイル一覧が 300 件で切り詰められている可能性がある
+      #       場合は fail-closed でセンシティブ扱いとする
+      # 出力: 判定結果を step output `sensitive` (true / false) として
+      #       公開する
+      - name: Check sensitive paths
+        id: check_paths
         shell: bash
         env:
           HEAD_SHA: ${{ steps.get_sha.outputs.sha }}
@@ -103,6 +98,63 @@ jobs:
           if [ -z "$HEAD_SHA" ]; then
             echo "::error::HEAD_SHA (Release の commit SHA) が空です"
             exit 1
+          fi
+
+          files=$(gh api "repos/${GITHUB_REPOSITORY}/compare/custom...${HEAD_SHA}" --jq '.files[].filename')
+
+          sensitive=false
+          count=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            count=$((count + 1))
+            case "$f" in
+              .github/*|package.sh|package.ps1)
+                sensitive=true
+                ;;
+            esac
+          done <<< "$files"
+
+          # compare API はファイル一覧を最大 300 件しか返さないため、
+          # 300 件に達している場合は一覧が不完全な可能性があり fail-closed とする
+          if [ "$count" -ge 300 ]; then
+            sensitive=true
+          fi
+
+          echo "sensitive=$sensitive" >> "$GITHUB_OUTPUT"
+          echo "- sensitive paths: $sensitive (changed files: $count)" >> "$GITHUB_STEP_SUMMARY"
+
+      # 入力: 前ステップの step output `sha` (head)、`sensitive` 判定、
+      #       base は custom ブランチ
+      # 処理: sensitive が true の場合は API を呼ばず needs-manual とする。
+      #       それ以外は POST /repos/{repository}/merges を実行し、結果で
+      #       分岐する — exit 0 かつ応答が空: up-to-date (取り込み済み) /
+      #       exit 0 かつ応答が非空: merged (マージ成功) /
+      #       exit 非 0 かつ応答に "HTTP 409" を含む: needs-manual
+      #       (reason=conflict) /
+      #       exit 非 0 かつ応答に "refusing to allow" を含む: needs-manual
+      #       (reason=workflow-permission) /
+      #       それ以外: 権限・設定異常として workflow を失敗させる
+      # 出力: マージ結果を step output `result` (merged / up-to-date /
+      #       needs-manual のいずれか) として公開する。result が
+      #       needs-manual の場合は step output `reason`
+      #       (conflict / workflow-permission / sensitive-path) も公開する
+      - name: Merge Release into custom
+        id: merge
+        shell: bash
+        env:
+          HEAD_SHA: ${{ steps.get_sha.outputs.sha }}
+          SENSITIVE: ${{ steps.check_paths.outputs.sensitive }}
+        run: |
+          if [ -z "$HEAD_SHA" ]; then
+            echo "::error::HEAD_SHA (Release の commit SHA) が空です"
+            exit 1
+          fi
+
+          if [ "$SENSITIVE" = "true" ]; then
+            echo "result=needs-manual" >> "$GITHUB_OUTPUT"
+            echo "reason=sensitive-path" >> "$GITHUB_OUTPUT"
+            echo "- merge result: needs-manual (sensitive-path)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
           set +e
@@ -137,20 +189,21 @@ jobs:
             echo "- merge result: $result" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # 入力: 前ステップの step output `result` (needs-manual の場合は
-      #       `reason` も参照可能)
+      # 入力: 前ステップの step output `result` と `reason`
+      #       (needs-manual の場合のみ reason を PR 本文へ伝搬させる)
       # 処理: result が needs-manual の場合は、open な Release→custom PR
-      #       が無ければ作成する。result が merged または up-to-date の場合
-      #       は逆に、残存する open な Release→custom PR があれば close す
-      #       る (close 失敗でも workflow は失敗させない。次回実行で再試行
-      #       される)。PR の特定は base/head 名に加えて head リポジトリの
-      #       owner 一致で行う (外部 fork 由来の同名ブランチ PR を対象にし
-      #       ない)
+      #       が無ければ reason に応じた本文で作成する。result が merged
+      #       または up-to-date の場合は逆に、残存する open な
+      #       Release→custom PR があれば close する (close 失敗でも
+      #       workflow は失敗させない。次回実行で再試行される)。PR の特定
+      #       は base/head 名に加えて head リポジトリの owner 一致で行う
+      #       (外部 fork 由来の同名ブランチ PR を対象にしない)
       - name: Reconcile sync PR
         id: reconcile
         shell: bash
         env:
           RESULT: ${{ steps.merge.outputs.result }}
+          REASON: ${{ steps.merge.outputs.reason }}
         run: |
           if [ -z "$RESULT" ]; then
             echo "::error::RESULT (merge ステップの結果) が空です"
@@ -164,9 +217,20 @@ jobs:
           case "$RESULT" in
             needs-manual)
               if [ -z "$pr_number" ]; then
+                case "$REASON" in
+                  workflow-permission)
+                    cause="原因: CI 定義 (.github/workflows 配下) の変更を含むため、github.token では取り込めません。特権的な変更としてレビューしてください。"
+                    ;;
+                  sensitive-path)
+                    cause="原因: センシティブパス (.github/ 配下・package.sh・package.ps1) の変更を含むため、自動マージを停止しました。内容をレビューのうえマージしてください。"
+                    ;;
+                  *)
+                    cause="原因: マージコンフリクトが発生しました。"
+                    ;;
+                esac
                 gh pr create --repo "$GITHUB_REPOSITORY" --base custom --head Release \
                   --title "upstream sync: Release → custom (要手動対応)" \
-                  --body "upstream の Release を custom へ自動マージできませんでした (コンフリクトが発生したか、workflow ファイルの変更を含むため github.token では取り込めません)。解決方法: custom から作業ブランチを作成し、Release をマージして (コンフリクトがあれば解決して) PR で custom へ取り込んでください。取り込みは merge commit で行ってください (squash / rebase では次回の同期で同じコンフリクトが再検出されます)。取り込み完了後、この PR は次回の同期実行時に自動で close されます。"
+                  --body "upstream の Release を custom へ自動マージできませんでした。${cause} 解決方法: custom から作業ブランチを作成し、Release をマージして (コンフリクトがあれば解決して) PR で custom へ取り込んでください。取り込みは merge commit で行ってください (squash / rebase では次回の同期で同じコンフリクトが再検出されます)。取り込み完了後、この PR は次回の同期実行時に自動で close されます。"
                 echo "- created sync PR" >> "$GITHUB_STEP_SUMMARY"
               else
                 echo "- sync PR already open (#$pr_number)" >> "$GITHUB_STEP_SUMMARY"
@@ -177,8 +241,8 @@ jobs:
                 if gh pr close "$pr_number" --repo "$GITHUB_REPOSITORY" --comment "custom へ取り込み済みのため close します"; then
                   echo "- closed sync PR (#$pr_number)" >> "$GITHUB_STEP_SUMMARY"
                 else
-                  state=$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json state --jq .state)
-                  if [ "$state" != "OPEN" ]; then
+                  state=$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json state --jq .state 2>/dev/null) || state=""
+                  if [ "$state" = "CLOSED" ] || [ "$state" = "MERGED" ]; then
                     echo "- sync PR (#$pr_number) は既に close 済み" >> "$GITHUB_STEP_SUMMARY"
                   else
                     echo "::warning::sync PR (#$pr_number) の close に失敗しました (次回実行で再試行されます)"
