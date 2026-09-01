@@ -56,17 +56,26 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      # 入力: upstream リポジトリ (kawa-nobu/Open-Deck) の Release ブランチ
-      # 処理: gh repo sync により fork の Release を upstream の Release へ
-      #       fast-forward 同期する (--force は付けない)。diverge している
-      #       場合、および upstream の変更に .github/workflows/ 配下のファ
-      #       イルが含まれる場合はこのステップが失敗し、workflow は失敗
-      #       終了する契約。同期元は --source で明示し、GitHub 上の
-      #       fork-parent メタデータに依存しない
+      # 入力: upstream (kawa-nobu/Open-Deck) の Release ブランチ
+      # 処理: upstream の Release の commit SHA を明示取得し、Git refs API
+      #       (force=false) で fork の Release を更新する。force=false の
+      #       ref 更新は fast-forward 限定で、diverge (ミラー前提の破れ)
+      #       は 422 で失敗する。upstream の変更に .github/workflows/ 配下
+      #       のファイルが含まれる場合も github.token の制約でこのステップ
+      #       が失敗し、workflow は失敗終了する契約。同期元は API パスで
+      #       明示し、GitHub 上の fork-parent メタデータに依存しない
       - name: Sync Release from upstream (fast-forward)
         id: sync
         shell: bash
-        run: gh repo sync "$GITHUB_REPOSITORY" --source kawa-nobu/Open-Deck --branch Release
+        run: |
+          upstream_sha=$(gh api "repos/kawa-nobu/Open-Deck/branches/Release" --jq .commit.sha)
+          if [ -z "$upstream_sha" ]; then
+            echo "::error::upstream の Release の commit SHA を取得できませんでした"
+            exit 1
+          fi
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/Release" \
+            -f sha="$upstream_sha" -F force=false
+          echo "- Release synced to upstream SHA: $upstream_sha" >> "$GITHUB_STEP_SUMMARY"
 
       # 入力: 同期済みの Release ブランチ
       # 処理: gh api で Release ブランチの最新 commit SHA を取得する。取得
@@ -116,10 +125,17 @@ jobs:
             esac
           done <<< "$files"
 
+          # API 応答が想定外の形の場合 (数値が取れない場合) も fail-closed とする
+          valid=true
+          case "$file_count" in ''|*[!0-9]*) valid=false ;; esac
+          case "$total_commits" in ''|*[!0-9]*) valid=false ;; esac
+
           # compare API の切り詰め 2 経路 (files 最大 300 件 / commits 250 件超で
           # files 一覧が不完全になりうる) のいずれかに該当する場合は、一覧が完全で
           # ある保証が無いため fail-closed でセンシティブ扱いとする
-          if [ "$file_count" -ge 300 ] || [ "$total_commits" -gt 250 ]; then
+          if [ "$valid" = "false" ]; then
+            sensitive=true
+          elif [ "$file_count" -ge 300 ] || [ "$total_commits" -gt 250 ]; then
             sensitive=true
           fi
 
