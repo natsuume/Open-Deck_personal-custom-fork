@@ -66,6 +66,10 @@ jobs:
       #       が失敗し、workflow は失敗終了する契約。同期元は API パスで
       #       明示し、GitHub 上の fork-parent メタデータに依存しない。
       #       両者が既に一致している場合は ref 更新を行わず no-op 成功とする
+      # 出力: 同期後の Release の commit SHA (= upstream の SHA) を step
+      #       output `sha` として公開する (ref 更新直後の branch API 再読
+      #       による read-after-write 依存を避け、下流はこの固定 SHA のみ
+      #       を使う)
       - name: Sync Release from upstream (fast-forward)
         id: sync
         shell: bash
@@ -85,22 +89,10 @@ jobs:
             echo "- Release synced to upstream SHA: $upstream_sha" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # 入力: 同期済みの Release ブランチ
-      # 処理: gh api で Release ブランチの最新 commit SHA を取得する。取得
-      #       できなかった場合は ::error:: を出して exit 1 (fail-fast)
-      # 出力: 取得した SHA を step output `sha` として公開する
-      - name: Get Release SHA
-        id: get_sha
-        shell: bash
-        run: |
-          sha=$(gh api "repos/${GITHUB_REPOSITORY}/branches/Release" --jq .commit.sha)
-          if [ -z "$sha" ]; then
-            echo "::error::Release ブランチの commit SHA を取得できませんでした"
-            exit 1
-          fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "sha=$upstream_sha" >> "$GITHUB_OUTPUT"
 
-      # 入力: custom と Release の SHA (前ステップの `sha`) の比較
+      # 入力: custom と sync ステップの step output `sha` (upstream 同期後の
+      #       Release の commit SHA) の比較
       # 処理: 取り込まれる差分ファイル一覧を取得し、センシティブパス
       #       (.github/ 配下、package.sh、package.ps1) が含まれるか判定
       #       する。rename は変更後パスと変更前パス (previous_filename) の
@@ -113,7 +105,7 @@ jobs:
         id: check_paths
         shell: bash
         env:
-          HEAD_SHA: ${{ steps.get_sha.outputs.sha }}
+          HEAD_SHA: ${{ steps.sync.outputs.sha }}
         run: |
           if [ -z "$HEAD_SHA" ]; then
             echo "::error::HEAD_SHA (Release の commit SHA) が空です"
@@ -165,8 +157,8 @@ jobs:
           echo "sensitive=$sensitive" >> "$GITHUB_OUTPUT"
           echo "- sensitive paths: $sensitive (changed files: $file_count, commits: $total_commits)" >> "$GITHUB_STEP_SUMMARY"
 
-      # 入力: 前ステップの step output `sha` (head)、`sensitive` 判定、
-      #       base は custom ブランチ
+      # 入力: sync ステップの step output `sha` (head)、check_paths の
+      #       `sensitive` 判定、base は custom ブランチ
       # 処理: sensitive が true の場合は API を呼ばず needs-manual とする。
       #       それ以外は POST /repos/{repository}/merges を実行し、結果で
       #       分岐する — exit 0 かつ応答が空: up-to-date (取り込み済み) /
@@ -184,7 +176,7 @@ jobs:
         id: merge
         shell: bash
         env:
-          HEAD_SHA: ${{ steps.get_sha.outputs.sha }}
+          HEAD_SHA: ${{ steps.sync.outputs.sha }}
           SENSITIVE: ${{ steps.check_paths.outputs.sensitive }}
         run: |
           if [ -z "$HEAD_SHA" ]; then
@@ -235,9 +227,10 @@ jobs:
       #       (needs-manual の場合のみ reason を PR 本文へ伝搬させる)
       # 処理: result が needs-manual の場合は、open な Release→custom PR
       #       が無ければ reason に応じた本文で作成する。既存の open な同期
-      #       PR の本文は、ブロック原因が変わった場合のみ現在の原因で更新
-      #       する (原因が同じ間は人間の追記を保持するため編集しない)。
-      #       result が merged または up-to-date の場合は逆に、残存する open な
+      #       PR の本文は、本文末尾の機械可読マーカー (sync-reason) が現在
+      #       の原因と異なる場合のみ更新する (人間の編集を誤検知して上書
+      #       きしない)。result が merged または up-to-date の場合は逆に、
+      #       残存する open な
       #       Release→custom PR があれば close する (close 失敗でも
       #       workflow は失敗させない。次回実行で再試行される)。PR の特定
       #       は base/head 名に加えて head リポジトリの owner 一致で行う
@@ -271,7 +264,7 @@ jobs:
                   cause="原因: マージコンフリクトが発生しました。"
                   ;;
               esac
-              body="upstream の Release を custom へ自動マージできませんでした。${cause} 解決方法: custom から作業ブランチを作成し、Release をマージして (コンフリクトがあれば解決して) PR で custom へ取り込んでください。取り込みは merge commit で行ってください (squash / rebase では次回の同期で同じコンフリクトが再検出されます)。取り込み完了後、この PR は次回の同期実行時に自動で close されます。"
+              body="upstream の Release を custom へ自動マージできませんでした。${cause} 解決方法: custom から作業ブランチを作成し、Release をマージして (コンフリクトがあれば解決して) PR で custom へ取り込んでください。取り込みは merge commit で行ってください (squash / rebase では次回の同期で同じコンフリクトが再検出されます)。取り込み完了後、この PR は次回の同期実行時に自動で close されます。"$'\n\n'"<!-- sync-reason: ${REASON:-conflict} -->"
               if [ -z "$pr_number" ]; then
                 gh pr create --repo "$GITHUB_REPOSITORY" --base custom --head Release \
                   --title "upstream sync: Release → custom (要手動対応)" \
@@ -280,7 +273,7 @@ jobs:
               else
                 current_body=$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
                 case "$current_body" in
-                  *"$cause"*)
+                  *"<!-- sync-reason: ${REASON:-conflict} -->"*)
                     echo "- sync PR already open (#$pr_number), cause unchanged" >> "$GITHUB_STEP_SUMMARY"
                     ;;
                   *)
