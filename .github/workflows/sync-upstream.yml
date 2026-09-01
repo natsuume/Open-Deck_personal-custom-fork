@@ -103,9 +103,10 @@ jobs:
       # 入力: custom と Release の SHA (前ステップの `sha`) の比較
       # 処理: 取り込まれる差分ファイル一覧を取得し、センシティブパス
       #       (.github/ 配下、package.sh、package.ps1) が含まれるか判定
-      #       する。files 300 件到達・commits 250 件超・応答が想定外の形
-      #       (JSON でない / files が配列でない / total_commits が数値でな
-      #       い) のいずれかで fail-closed とする
+      #       する。rename は変更後パスと変更前パス (previous_filename) の
+      #       両方を判定する。files 300 件到達・commits 250 件超・応答が
+      #       想定外の形 (JSON でない / files が配列でない / total_commits
+      #       が数値でない) のいずれかで fail-closed とする
       # 出力: 判定結果を step output `sensitive` (true / false) として
       #       公開する
       - name: Check sensitive paths
@@ -135,7 +136,7 @@ jobs:
           else
             total_commits=$(echo "$compare" | jq -r '.total_commits')
             file_count=$(echo "$compare" | jq -r '.files | length')
-            files=$(echo "$compare" | jq -r '.files[].filename')
+            files=$(echo "$compare" | jq -r '.files[] | .filename, (.previous_filename // empty)')
 
             while IFS= read -r f; do
               [ -z "$f" ] && continue
@@ -234,8 +235,9 @@ jobs:
       #       (needs-manual の場合のみ reason を PR 本文へ伝搬させる)
       # 処理: result が needs-manual の場合は、open な Release→custom PR
       #       が無ければ reason に応じた本文で作成する。既存の open な同期
-      #       PR がある場合は本文を現在のブロック原因で更新する。result が
-      #       merged または up-to-date の場合は逆に、残存する open な
+      #       PR の本文は、ブロック原因が変わった場合のみ現在の原因で更新
+      #       する (原因が同じ間は人間の追記を保持するため編集しない)。
+      #       result が merged または up-to-date の場合は逆に、残存する open な
       #       Release→custom PR があれば close する (close 失敗でも
       #       workflow は失敗させない。次回実行で再試行される)。PR の特定
       #       は base/head 名に加えて head リポジトリの owner 一致で行う
@@ -276,8 +278,16 @@ jobs:
                   --body "$body"
                 echo "- created sync PR" >> "$GITHUB_STEP_SUMMARY"
               else
-                gh pr edit "$pr_number" --repo "$GITHUB_REPOSITORY" --body "$body"
-                echo "- sync PR already open (#$pr_number), body refreshed" >> "$GITHUB_STEP_SUMMARY"
+                current_body=$(gh pr view "$pr_number" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+                case "$current_body" in
+                  *"$cause"*)
+                    echo "- sync PR already open (#$pr_number), cause unchanged" >> "$GITHUB_STEP_SUMMARY"
+                    ;;
+                  *)
+                    gh pr edit "$pr_number" --repo "$GITHUB_REPOSITORY" --body "$body"
+                    echo "- sync PR already open (#$pr_number), body refreshed (cause changed)" >> "$GITHUB_STEP_SUMMARY"
+                    ;;
+                esac
               fi
               ;;
             merged|up-to-date)
