@@ -41,6 +41,9 @@
   "ui_add_explore_column_title": {
     "message": "Add Explore (universal) column"
   },
+  "ui_add_list_column_title": {
+    "message": "Add list column"
+  },
   "ui_toggle_second_rack_title": {
     "message": "Toggle multi-row layout"
   },
@@ -67,6 +70,9 @@
   },
   "ui_column_explore_title": {
     "message": "Explore"
+  },
+  "ui_column_list_title": {
+    "message": "List"
   },
   "ui_settings_header": {
     "message": "Settings"
@@ -172,6 +178,9 @@
   },
   "msg_invalid_value_alert": {
     "message": "Please enter a valid value."
+  },
+  "msg_list_column_path_prompt": {
+    "message": "Could not detect your username.\nEnter a username (with or without @) to open its lists, or a list URL / ID"
   },
   "msg_auto_reload_set": {
     "message": "Auto-load interval set to $1 seconds."
