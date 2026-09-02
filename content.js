@@ -2105,18 +2105,30 @@ function get_login_screen_name(){
     }
     return null;
 }
+//「/lists」や「/i/lists/<id>」の直後の残り文字列からサブパス(タブや旧形式のスラッグ)を取り出す
+//URL の属性埋め込みに安全な文字種のみ許可し、想定外の文字を含む場合は空文字(リストのトップ)にフォールバックする
+function extract_list_sub_path(rest){
+    const match = rest.match(/^((?:\/[A-Za-z0-9_\-.%~]+)*)\/?(?:[?#]|$)/);
+    return match ? match[1] : "";
+}
 //ユーザー入力(ユーザー名・リストURL・リストID)からリストカラムの初期パスを決める(解決できない場合はnull)
 function resolve_list_column_path(input){
     const value = (input ?? "").trim();
     if(value === "") return null;
     //リストID(数字のみ)
     if(/^\d+$/.test(value)) return `/i/lists/${value}`;
-    //リストURLまたはパス
+    //リストURLまたはパス(/i/lists/<id>)
     const list_id_match = value.match(/(?:^|\/)i\/lists\/(\d+)/);
-    if(list_id_match) return `/i/lists/${list_id_match[1]}`;
-    //ユーザーのリスト一覧URLまたはパス(/<screen_name>/lists 以降のサブパスは保持し、旧形式のリストURLはXのリダイレクトに委ねる)
-    const user_lists_match = value.match(/(?:^|\/)@?([A-Za-z0-9_]{1,15})\/lists((?:\/[A-Za-z0-9_\-]+)*)\/?(?:[?#]|$)/);
-    if(user_lists_match && is_valid_screen_name(user_lists_match[1])) return `/${user_lists_match[1]}/lists${user_lists_match[2]}`;
+    if(list_id_match){
+        const sub_path = extract_list_sub_path(value.slice(list_id_match.index + list_id_match[0].length));
+        return `/i/lists/${list_id_match[1]}${sub_path}`;
+    }
+    //ユーザーのリスト一覧URLまたはパス(/<screen_name>/lists)。旧形式のリストURLはサブパスを保持してXのリダイレクトに委ねる
+    const user_lists_match = value.match(/(?:^|\/)@?([A-Za-z0-9_]{1,15})\/lists(?=[\/?#]|$)/);
+    if(user_lists_match && is_valid_screen_name(user_lists_match[1])){
+        const sub_path = extract_list_sub_path(value.slice(user_lists_match.index + user_lists_match[0].length));
+        return `/${user_lists_match[1]}/lists${sub_path}`;
+    }
     //ユーザー名(@は省略可)
     const screen_name_match = value.match(/^@?([A-Za-z0-9_]{1,15})$/);
     if(screen_name_match && is_valid_screen_name(screen_name_match[1])) return `/${screen_name_match[1]}/lists`;
