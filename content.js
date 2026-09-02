@@ -1851,7 +1851,7 @@ function run(settings){
         let probe_started_at = 0;
         let probe_stable_elapsed = 0;
         let probe_last_state = "";
-        //ヘルパーの状態が ready にも failed にもならないまま待った時間。上限を超えたらヘルパー無しとして進める
+        //ヘルパーの状態が ready にも failed にもならないまま待った時間。上限に達したらヘルパー無しとして進める
         let helper_wait_elapsed = 0;
         let is_probe_loading = false;
         //本文のある document を一度でも読めたか(打ち切り時に未検出とエラーを区別する)
