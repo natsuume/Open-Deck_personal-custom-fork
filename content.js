@@ -2114,9 +2114,9 @@ function resolve_list_column_path(input){
     //リストURLまたはパス
     const list_id_match = value.match(/(?:^|\/)i\/lists\/(\d+)/);
     if(list_id_match) return `/i/lists/${list_id_match[1]}`;
-    //ユーザーのリスト一覧URLまたはパス(/<screen_name>/lists)
-    const user_lists_match = value.match(/(?:^|\/)@?([A-Za-z0-9_]{1,15})\/lists(?:[\/?#]|$)/);
-    if(user_lists_match && is_valid_screen_name(user_lists_match[1])) return `/${user_lists_match[1]}/lists`;
+    //ユーザーのリスト一覧URLまたはパス(/<screen_name>/lists 以降のサブパスは保持し、旧形式のリストURLはXのリダイレクトに委ねる)
+    const user_lists_match = value.match(/(?:^|\/)@?([A-Za-z0-9_]{1,15})\/lists((?:\/[A-Za-z0-9_\-]+)*)\/?(?:[?#]|$)/);
+    if(user_lists_match && is_valid_screen_name(user_lists_match[1])) return `/${user_lists_match[1]}/lists${user_lists_match[2]}`;
     //ユーザー名(@は省略可)
     const screen_name_match = value.match(/^@?([A-Za-z0-9_]{1,15})$/);
     if(screen_name_match && is_valid_screen_name(screen_name_match[1])) return `/${screen_name_match[1]}/lists`;
