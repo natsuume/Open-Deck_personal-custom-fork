@@ -1474,8 +1474,7 @@ function run(settings){
                             element.setAttribute("opd_explore_path", `${exp_url.pathname}${exp_url.search}`);
                             exp_old_url = exp_object.contentWindow.location.href;
                             element.setAttribute("opd_explore_title", exp_title);
-                            const column_title_elem = element.querySelector(".dsp_explore_column_title");
-                            if(column_title_elem) column_title_elem.textContent = get_explore_column_title(`${exp_url.pathname}${exp_url.search}`);
+                            set_explore_column_title(element, `${exp_url.pathname}${exp_url.search}`);
                             //console.log(exp_title);
                             column_settings_save("", last_load_profile);
                         }
@@ -1757,11 +1756,14 @@ function run(settings){
                 const dr_elem = document.getElementById(dt_id);
                 if(dr_elem != null){
                     if(dr_elem?.querySelector("div")?.getAttribute("opd_column_type") == 'explore'){
+                        let reload_path = "";
                         if(dr_elem.querySelector("div").getAttribute("opd_pinned_path") != ""){
-                            dr_elem.querySelector("div").querySelector("iframe").src = `https://x.com${dr_elem.querySelector("div").getAttribute("opd_pinned_path")}`;
+                            reload_path = dr_elem.querySelector("div").getAttribute("opd_pinned_path");
                         }else{
-                            dr_elem.querySelector("div").querySelector("iframe").src = `https://x.com${dr_elem.querySelector("div").getAttribute("opd_explore_path")}`;
+                            reload_path = dr_elem.querySelector("div").getAttribute("opd_explore_path");
                         }
+                        dr_elem.querySelector("div").querySelector("iframe").src = `https://x.com${reload_path}`;
+                        set_explore_column_title(dr_elem.querySelector("div"), reload_path);
                     }
                     this.parentNode.insertBefore(dr_elem, this);
                     this.style.borderLeft = '';
@@ -2075,6 +2077,11 @@ function get_explore_column_title(path){
     const list_path_pattern = /^\/(?:i\/lists|[^\/?#]+\/lists)(?:[\/?#]|$)/;
     if(list_path_pattern.test(path ?? "")) return i18n_message("ui_column_list_title");
     return i18n_message("ui_column_explore_title");
+}
+//Explore系カラムのカラムバーのタイトル表示を、そのカラムが表示しているパスに合わせて更新する
+function set_explore_column_title(column_div, path){
+    const column_title_elem = column_div?.querySelector(".dsp_explore_column_title");
+    if(column_title_elem) column_title_elem.textContent = get_explore_column_title(path);
 }
 //Xのscreen_nameとして妥当か(文字種・長さを満たし、Xのルーティング予約名 i でないこと)
 function is_valid_screen_name(name){
