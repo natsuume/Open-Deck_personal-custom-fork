@@ -9,6 +9,7 @@
 //      別々の fiber からそれぞれ同じ ID に解決したセル(同じリストが2箇所に描画されている場合)には両方に書く
 //解決方法: listCell の __reactFiber$… から return チェーンを祖先方向に辿り、セル自身の fiber を含めて最大 50 個の fiber を調べる
 //          辿り始める fiber は、DOM の __reactProps$… の値と memoizedProps が一致する側(alternate を含む)を選ぶ
+//          __reactProps$… が無い場合や、どちらの memoizedProps とも一致しない場合は __reactFiber$… の fiber をそのまま使う
 //          各 fiber の memoizedProps を深さ6(memoizedProps 自体を深さ0とする)・訪問オブジェクト数 300 個・配列先頭 50 要素までの範囲で幅優先に探索し、浅い値から先に候補を探す
 //          候補が見つかった最も近い祖先の結果を採用する
 //          HostRoot(tag === 3)または stateNode が primaryColumn 要素・document.body に達したら打ち切る
@@ -20,7 +21,7 @@
 //          さらに「__typename === "List"」「member_count / subscriber_count / mode のいずれかを自身または legacy に持つ」
 //          「名前が listCell 内のいずれかの span のテキストと一致する」のどれか1つ以上を満たすものだけを候補とする
 //          名前の一致は絵文字(国旗・肌色修飾子・キーキャップを含む)と空白を除いて比較する
-//          同じ祖先段に異なる ID の候補が複数ある場合、__typename === "List" かリスト固有フィールドを持つ候補が1つだけならそれを採り、そうでなければ属性を書かない
+//          同じ祖先段に異なる ID の候補が複数ある場合、__typename === "List" かリスト固有フィールドを持つ候補が指す ID が1種類ならそれを採り、そうでなければ属性を書かない
 //探索の安全策: プロパティは Object.getOwnPropertyDescriptor(s) で data descriptor の value のみ読む(getter は呼ばない)
 //              関数・DOM Node・Window・Map/Set/WeakMap/WeakSet・Promise は葉として扱い、React element($$typeof を持つオブジェクト)は候補判定も探索もしない
 //              "_" 始まりのキーは __typename を除き読まない
@@ -181,7 +182,7 @@
             if(Array.isArray(value)){
                 const element_limit = Math.min(value.length, max_array_elements);
                 for (let index = 0; index < element_limit; index++) {
-                    queue.push({value: value[index], depth: entry.depth + 1});
+                    queue.push({value: read_data_property(value, String(index)), depth: entry.depth + 1});
                 }
                 continue;
             }

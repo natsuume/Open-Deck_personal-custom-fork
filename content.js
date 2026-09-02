@@ -1762,13 +1762,13 @@ function run(settings){
     //  ・role="dialog" aria-modal="true" のダイアログ本体
     //  ・リスト列挙用の非表示 iframe(リストが描画されるだけの画面内サイズを持ち、opacity 0・pointer-events none で操作対象から外す)。iframe 内の listCell には page world ヘルパー(extensions/list_picker_helper.js)がリスト ID を属性として付与する
     //  ・リスト一覧を取得するユーザー名の入力欄と取得ボタン
-    //  ・取得状態の表示(loading / partial / not_detected / error / login_required)
+    //  ・取得状態の表示(loading / partial / some_unresolved / not_detected / error / login_required)
     //  ・検出したリストのチェックボックス一覧と、全て選択・選択解除のボタン
     //  ・追加するリストの URL か ID を1行1件で入力する textarea
     //  ・追加するカラム件数の表示と、追加ボタン・キャンセルボタン
     //Esc キー・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe を破棄して opener_element にフォーカスを戻す
     //開いているあいだは overlay 以外の #opd_main_element の子要素を inert にして背景を操作対象から外し、閉じるときに解除する(元から inert が付いていた要素は触らない)
-    //取得をやり直したときはチェック済みのエントリを「選択済み」セクションとして残し、完了・打ち切りの判定には今回の列挙で検出した件数だけを使う
+    //取得をやり直したときはチェック済みのエントリを「選択済み」セクションとして残し、完了・打ち切りの判定には今回の列挙で検出した件数と未解決の listCell 数を使う
     //追加時はチェックしたリストのパスと手動入力から解釈したパスを結合し、重複を除去して add_explore_columns に渡す
     //ダイアログ内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない(カラムを一括走査するセレクタに拾われるため)
     function open_list_picker_dialog(insert_first, opener_element){
@@ -1792,7 +1792,7 @@ function run(settings){
         const probe_interval_ms = 400;
         const probe_stable_ms = 2000;
         const probe_limit_ms = 15000;
-        const helper_inject_retry_limit = 3;
+        const helper_inject_failure_limit = 3;
         const many_columns_threshold = 10;
 
         const overlay = document.createElement("div");
@@ -1952,7 +1952,7 @@ function run(settings){
         //documentElement の data-opd-list-picker-helper 属性が既にある document には注入しない(Document ごとに1回)
         //head が無い場合は何もしない(次回のポーリングで再試行する)
         //注入時は属性を "loading" にし、ヘルパー自身が読み込み完了時に属性を "ready" へ更新する
-        //script の error は属性を削除して3回まで再試行し、それ以降は属性を "failed" にする
+        //script の error は失敗回数が3回に達するまで属性を削除して再試行し(合計3回試行)、3回目の失敗で属性を "failed" にする
         //script の load 後も属性が "ready" でなければ "failed" にする。"failed" の document には再注入せず、走査依頼も送らない
         function inject_list_picker_helper(probe_document){
             try{
@@ -1964,7 +1964,7 @@ function run(settings){
                     //読み込みに失敗した document は属性を消して次回のポーリングで注入し直すが、繰り返し失敗する document は打ち切る
                     const failure_count = (helper_inject_failures.get(probe_document) ?? 0) + 1;
                     helper_inject_failures.set(probe_document, failure_count);
-                    if(failure_count < helper_inject_retry_limit){
+                    if(failure_count < helper_inject_failure_limit){
                         probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
                         return;
                     }
@@ -1992,8 +1992,8 @@ function run(settings){
             navigate_probe_frame("about:blank");
         }
         //指定ユーザーのリスト一覧ページを非表示 iframe に読み込み、描画されたリストを定期的に拾い集める
-        //読み込み完了かつ今回の検出件数と文書高が一定時間変化しなければ完了、制限時間の経過で打ち切り、中身を読めない場合はエラーとして終了する
-        //完了・打ち切りの判定には今回の列挙で検出した件数だけを使い、選択を保つために残した前回のエントリは判定に含めない
+        //読み込み完了かつ今回の検出件数・未解決の listCell 数・文書高が一定時間変化しなければ完了、制限時間の経過で打ち切り、中身を読めない場合はエラーとして終了する
+        //完了・打ち切りの判定には今回の列挙で検出した件数と未解決の listCell 数を使い、選択を保つために残した前回のエントリは判定に含めない
         function start_probe(screen_name){
             stop_probe();
             //取得し直してもチェック済みのリストは選択を保てるよう残す
@@ -2063,10 +2063,13 @@ function run(settings){
 
                 //リスト一覧ページを表示できたら page world ヘルパーを注入する(注入済みの document では何もしない)
                 inject_list_picker_helper(probe_document);
+                const helper_state = probe_document.documentElement.getAttribute("data-opd-list-picker-helper");
                 //ヘルパーが準備できていれば listCell へのリスト ID 付与を依頼してから収集する
-                if(probe_document.documentElement.getAttribute("data-opd-list-picker-helper") === "ready"){
+                if(helper_state === "ready"){
                     probe_document.dispatchEvent(new CustomEvent("opd_list_picker_scan"));
                 }
+                //ヘルパーが走査できるようになったか、読み込めないと分かった状態。読み込みを待っているあいだは画面の内容を動かさない
+                const is_helper_settled = (helper_state === "ready" || helper_state === "failed");
 
                 const before_size = found_lists.size;
                 let is_kept_entry_replaced = false;
@@ -2085,17 +2088,21 @@ function run(settings){
                 if(found_lists.size !== before_size || is_kept_entry_replaced) render_results();
 
                 //段階的に読み込まれるリストを引き出すため最下部までスクロールする
+                //ヘルパーの読み込み中にスクロールすると、最初に見えていたセルが走査される前に画面外へ出てしまうため待つ
                 const scrolling_element = probe_document.scrollingElement;
-                if(scrolling_element) scrolling_element.scrollTop = scrolling_element.scrollHeight;
+                if(is_helper_settled && scrolling_element) scrolling_element.scrollTop = scrolling_element.scrollHeight;
 
                 //仮想リストで画面外に出たセルも数え続けるため、未解決のセルはキーで累積し、解決できたキーだけを取り下げる
-                collect_list_cell_states(probe_document).forEach((cell_state) => {
-                    if(cell_state.is_resolved){
-                        probe_unresolved_keys.delete(cell_state.key);
-                        return;
-                    }
-                    if(cell_state.key !== "") probe_unresolved_keys.add(cell_state.key);
-                });
+                //ヘルパーの走査前に数えるとすべてのセルが未解決に見えるため、ヘルパーの状態が定まってから累積する
+                if(is_helper_settled){
+                    collect_list_cell_states(probe_document).forEach((cell_state) => {
+                        if(cell_state.is_resolved){
+                            probe_unresolved_keys.delete(cell_state.key);
+                            return;
+                        }
+                        if(cell_state.key !== "") probe_unresolved_keys.add(cell_state.key);
+                    });
+                }
                 //未解決のセルはヘルパーの走査で減っていくため、安定状態の判定材料に含める
                 const unresolved_count = probe_unresolved_keys.size;
                 const probe_state = `${probe_found_ids.size}:${unresolved_count}:${scrolling_element?.scrollHeight}`;
@@ -2884,16 +2891,8 @@ function collect_lists_from_document(doc){
         }
         const list_id = extract_list_id_from_href(scan_target.getAttribute("href"), doc.location.href);
         if(list_id === null || found_lists.has(list_id)) continue;
-        //リンク配下の span のうち最初に現れる非空のテキストをリスト名として使う
-        let list_name = "";
-        const name_candidates = scan_target.querySelectorAll("span");
-        for (let name_index = 0; name_index < name_candidates.length; name_index++) {
-            const name_text = name_candidates[name_index].textContent.trim();
-            if(name_text !== ""){
-                list_name = name_text;
-                break;
-            }
-        }
+        //リンク配下の span のうち最初に現れる非空のテキストをリスト名として使い、span が無ければリンク自体のテキストを使う
+        let list_name = first_non_empty_span_text(scan_target);
         if(list_name === "") list_name = scan_target.textContent.trim();
         found_lists.set(list_id, {id: list_id, path: `/i/lists/${list_id}`, name: list_name, section: current_section});
     }
@@ -2901,7 +2900,7 @@ function collect_lists_from_document(doc){
 }
 //リスト一覧ページの Document から、並んでいる listCell の識別キーと解決状態を列挙する
 //doc: リスト一覧ページの Document
-//戻り値: {key: セル内の最初の非空 span テキスト(無い場合は空文字), is_resolved: resolve_list_cell_info でリスト ID を決められたか} の配列
+//戻り値: {key: セル内の非空 span テキスト(trim 後)を文書順に改行で連結した文字列(span が無い場合は空文字), is_resolved: resolve_list_cell_info でリスト ID を決められたか} の配列
 //走査範囲は [data-testid="primaryColumn"] 配下の [data-testid="listCell"] のみで、文書順に並べる。primaryColumn が無い場合は空配列を返す
 function collect_list_cell_states(doc){
     const root = doc.querySelector('[data-testid="primaryColumn"]');
@@ -2910,7 +2909,14 @@ function collect_list_cell_states(doc){
     const cells = root.querySelectorAll('[data-testid="listCell"]');
     for (let index = 0; index < cells.length; index++) {
         const cell = cells[index];
-        cell_states.push({key: first_non_empty_span_text(cell), is_resolved: resolve_list_cell_info(cell, doc.location.href) !== null});
+        //リスト名だけでは別のセルと衝突しうるため、セル内の文言をまとめて識別キーにする
+        const key_parts = [];
+        const span_elements = cell.querySelectorAll("span");
+        for (let span_index = 0; span_index < span_elements.length; span_index++) {
+            const span_text = span_elements[span_index].textContent.trim();
+            if(span_text !== "") key_parts.push(span_text);
+        }
+        cell_states.push({key: key_parts.join("\n"), is_resolved: resolve_list_cell_info(cell, doc.location.href) !== null});
     }
     return cell_states;
 }
