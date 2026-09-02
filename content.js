@@ -1853,12 +1853,6 @@ function run(settings){
         let is_overlay_mouseup = false;
         //ダイアログ内で最後にフォーカスを受けた要素。列挙用 iframe にフォーカスを奪われたときの戻り先に使う
         let last_focused_element = null;
-        //「全て選択」の状態。真のあいだは列挙の途中で追加された項目もチェック済みで描画する
-        let is_select_all = false;
-        //「全て選択」の状態を切り替える
-        function set_select_all(is_active){
-            is_select_all = is_active;
-        }
         //今回の取得対象のパス(小文字)。iframe がこのパスを表示するまでは採取しない
         let probe_expected_path = "";
 
@@ -1878,11 +1872,6 @@ function run(settings){
             let count_text = i18n_message("ui_list_picker_selected_count", [String(add_targets.paths.length)]);
             if(add_targets.invalid.length > 0) count_text += ` ${i18n_message("ui_list_picker_invalid_count", [String(add_targets.invalid.length)])}`;
             count_area.textContent = count_text;
-        }
-        //個別にチェックを外したら「全て選択」の追従をやめる
-        function on_checkbox_change(event){
-            if(!event.target.checked) set_select_all(false);
-            update_count();
         }
         //見つかったリストをセクションごとにまとめて結果領域へ描画する。読み込み中で0件のあいだは skeleton を表示する
         function render_results(){
@@ -1925,8 +1914,8 @@ function run(settings){
                     checkbox.type = "checkbox";
                     checkbox.value = list_info.path;
                     checkbox.setAttribute("data-list-id", list_info.id);
-                    checkbox.checked = checked_ids.has(list_info.id) || is_select_all;
-                    checkbox.addEventListener("change", on_checkbox_change);
+                    checkbox.checked = checked_ids.has(list_info.id);
+                    checkbox.addEventListener("change", update_count);
                     const name_text = document.createElement("span");
                     name_text.textContent = list_info.name !== "" ? list_info.name : i18n_message("ui_list_picker_list_fallback_name", [list_info.id]);
                     item_label.appendChild(checkbox);
@@ -1966,7 +1955,6 @@ function run(settings){
         //完了・打ち切りの判定には今回の列挙で検出した件数だけを使い、選択を保つために残した前回のエントリは判定に含めない
         function start_probe(screen_name){
             stop_probe();
-            set_select_all(false);
             //取得し直してもチェック済みのリストは選択を保てるよう残す
             const kept_ids = new Set();
             results_area.querySelectorAll('input[type="checkbox"]:checked').forEach((checkbox) => {
@@ -2016,6 +2004,7 @@ function run(settings){
                 }
                 //読み込み前の about:blank と本文が無い状態は判定材料にならないので次回に回す
                 if(!probe_document || probe_document.location.href === "about:blank" || !probe_document.body) return;
+                has_probe_document = true;
                 //取得をやり直した直後は前回のページが残っていることがあるため、対象のパスを表示するまで採取しない
                 const probe_path_lower = probe_document.location.pathname.toLowerCase();
                 if(probe_path_lower.replace(/\/+$/, "") !== probe_expected_path){
@@ -2027,7 +2016,6 @@ function run(settings){
                     }
                     return;
                 }
-                has_probe_document = true;
 
                 const before_size = found_lists.size;
                 let is_kept_entry_replaced = false;
@@ -2148,13 +2136,12 @@ function run(settings){
             event.preventDefault();
             start_probe_from_input();
         });
+        //どちらも押した時点で描画されているチェックボックスだけを対象にする
         select_all_btn.addEventListener("click", function(){
-            set_select_all(true);
             results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = true;});
             update_count();
         });
         clear_all_btn.addEventListener("click", function(){
-            set_select_all(false);
             results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = false;});
             update_count();
         });
