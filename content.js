@@ -2889,7 +2889,7 @@ function resolve_list_cell_info(cell, base_url){
 //戻り値: {id: リストID, path: "/i/lists/<id>", name: リスト名(取得できない場合は空文字), section: 直前の h2 見出し文(見出しが無い場合は空文字)} の配列
 //走査範囲は [data-testid="primaryColumn"] の配下のみとし、それが無い文書(リスト一覧ページ以外や描画前)は空配列を返す
 //h2, a[href], [data-testid="listCell"] を文書順に走査し、直前に現れた h2 の見出し文をそのリストのセクション名として扱う
-//a[href] は href から /i/lists/<id> の ID を取る
+//a[href] は href から /i/lists/<id> の ID を取る。ただし listCell を含む a[href] は listCell 側で扱い、リンクとしては収集しない
 //listCell の ID とリスト名は resolve_list_cell_info で取り出し、ID を決められないセルは戻り値に含めない
 //同一 id は最初に見つかった1件のみ含める
 function collect_lists_from_document(doc){
@@ -2911,6 +2911,8 @@ function collect_lists_from_document(doc){
             found_lists.set(cell_info.id, {id: cell_info.id, path: `/i/lists/${cell_info.id}`, name: cell_info.name, section: current_section});
             continue;
         }
+        //セルを包むリンクは listCell 側で解決させ、リスト名をセルの文言から取れるようにする
+        if(scan_target.querySelector('[data-testid="listCell"]') !== null) continue;
         const list_id = extract_list_id_from_href(scan_target.getAttribute("href"), doc.location.href);
         if(list_id === null || found_lists.has(list_id)) continue;
         //リンク配下の span のうち最初に現れる非空のテキストをリスト名として使い、非空の span が無ければリンク自体のテキストを使う

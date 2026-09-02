@@ -13,7 +13,7 @@
 //          各 fiber の memoizedProps を深さ6(memoizedProps 自体を深さ0とする)・訪問オブジェクト数 300 個・配列先頭 50 要素までの範囲で幅優先に探索し、浅い値から先に候補を探す
 //          候補が見つかった最も近い祖先の結果を採用する
 //          HostRoot(tag === 3)または stateNode が primaryColumn 要素・document.body に達したら打ち切る
-//          fiber と memoizedProps が前回の走査と同一のセルは探索を省略し、前回の結果を使う(解決できなかった結果は4回まで使い回し、5回目の走査で再探索する)
+//          fiber と memoizedProps が前回の走査と同一のセルは探索を省略し、前回の結果を使う(解決できなかった結果は、探索した走査を1回目として2・3回目は使い回し、4回目の走査で再探索する)
 //          探索を省略したセルでも属性の削除と再設定は毎回行う
 //候補条件: ID は id_str / rest_id / legacy.id_str のうち /^[1-9]\d{0,19}$/ に一致する文字列(Number 化しない)
 //          名前は name / legacy.name の trim 後の非空文字列(属性にも trim 後の値を書く)
@@ -36,7 +36,8 @@
     const max_visited_objects = 300;
     const max_array_elements = 50;
     //解決できなかった結果をキャッシュから使い回せる回数。これを超えたら探索し直す
-    const max_negative_cache_reuse = 4;
+    //安定判定の待ち時間(content.js の probe_stable_ms)の内側で再探索が1回以上走る値にする
+    const max_negative_cache_reuse = 2;
     //セルごとの前回の解決結果。fiber と memoizedProps が変わっていなければ探索をやり直さない
     const cell_resolutions = new WeakMap();
 
@@ -247,18 +248,26 @@
     //戻り値: resolve_list_info と同じ {id, name, source_fiber} または null
     //fiber と memoizedProps が前回の走査と同一なら探索せず、前回の結果をそのまま返す
     //解決できなかった結果は max_negative_cache_reuse 回まで使い回し、それを超えたら同じ fiber でも探索し直す
+    //解決中の例外は結果無しとして扱い、解決できなかった結果と同じようにキャッシュする
     const resolve_list_info_from_cache = (cell) => {
         const fiber = get_fiber(cell);
         const props = fiber?.memoizedProps;
         const cached = cell_resolutions.get(cell);
         if(cached !== undefined && cached.fiber === fiber && cached.props === props){
-            //同じ props でも探索の上限に阻まれて取りこぼしただけのことがあるため、未解決の結果は使い回しを打ち切って試し直す
-            if(cached.info !== null || cached.reuse_count < max_negative_cache_reuse){
+            if(cached.info !== null) return cached.info;
+            //props の中身や祖先 fiber の繋がりが後から変わることがあるため、未解決の結果は一定回数使い回したら試し直す
+            if(cached.reuse_count < max_negative_cache_reuse){
                 cached.reuse_count++;
                 return cached.info;
             }
         }
-        const list_info = resolve_list_info(cell);
+        let list_info = null;
+        try{
+            list_info = resolve_list_info(cell);
+        }catch(e){
+            //例外を投げ続けるセルが毎回の走査で探索をやり直さないよう、結果無しとして同じくキャッシュする
+            list_info = null;
+        }
         cell_resolutions.set(cell, {fiber: fiber, props: props, info: list_info, reuse_count: 0});
         return list_info;
     };
