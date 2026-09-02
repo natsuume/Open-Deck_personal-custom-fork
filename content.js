@@ -1793,6 +1793,7 @@ function run(settings){
         const probe_stable_ms = 2000;
         const probe_limit_ms = 15000;
         const helper_inject_failure_limit = 3;
+        const helper_settle_limit_ms = 3000;
         const many_columns_threshold = 10;
 
         const overlay = document.createElement("div");
@@ -1850,6 +1851,8 @@ function run(settings){
         let probe_started_at = 0;
         let probe_stable_elapsed = 0;
         let probe_last_state = "";
+        //ヘルパーの状態が ready にも failed にもならないまま待った時間。上限を超えたらヘルパー無しとして進める
+        let helper_wait_elapsed = 0;
         let is_probe_loading = false;
         //本文のある document を一度でも読めたか(打ち切り時に未検出とエラーを区別する)
         let has_probe_document = false;
@@ -2002,6 +2005,7 @@ function run(settings){
         //完了・打ち切りの判定には今回の列挙で検出した件数と未解決の listCell 数を使い、選択を保つために残した前回のエントリは判定に含めない
         //今回の列挙で1件も検出していないあいだは安定しても完了せず、制限時間の経過で打ち切る
         //ヘルパー(data-opd-list-picker-helper 属性)の状態が ready か failed に定まるまでは、スクロール・未解決セルの累積・安定時間の加算を行わない
+        //ただし3秒(helper_settle_limit_ms)待っても定まらない場合はヘルパー無しとして進める
         function start_probe(screen_name){
             stop_probe();
             //取得し直してもチェック済みのリストは選択を保てるよう残す
@@ -2024,6 +2028,7 @@ function run(settings){
             probe_started_at = Date.now();
             probe_stable_elapsed = 0;
             probe_last_state = "";
+            helper_wait_elapsed = 0;
             probe_expected_path = `/${screen_name}/lists`.toLowerCase();
             render_results();
             status_area.textContent = i18n_message("ui_list_picker_loading");
@@ -2077,7 +2082,10 @@ function run(settings){
                     probe_document.dispatchEvent(new CustomEvent("opd_list_picker_scan"));
                 }
                 //ヘルパーが走査できるようになったか、読み込めないと分かった状態。読み込みを待っているあいだは画面の内容を動かさない
-                const is_helper_settled = (helper_state === "ready" || helper_state === "failed");
+                //ただし読み込みの成否がいつまでも分からない document で待ち続けないよう、待ち時間が上限に達したらヘルパー無しとして進める
+                const is_helper_state_known = (helper_state === "ready" || helper_state === "failed");
+                if(!is_helper_state_known) helper_wait_elapsed += probe_interval_ms;
+                const is_helper_settled = (is_helper_state_known || helper_wait_elapsed >= helper_settle_limit_ms);
 
                 const before_size = found_lists.size;
                 let is_kept_entry_replaced = false;
