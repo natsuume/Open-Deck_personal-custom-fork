@@ -59,6 +59,10 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('keyup', (event) => {
     if (event.key === 'Shift') is_shift_pressed = false;
 });
+//ダイアログ表示などでフォーカスを失うと keyup を取りこぼすため、押下状態を解除する
+window.addEventListener('blur', () => {
+    is_shift_pressed = false;
+});
 //ストレージの書き込み監視(主にAPIリミット監視に使う)
 let api_limit_obj = null;
 let api_limit_dsc_obj = {time_line:"", recommend_timeline:"", search:""};
@@ -853,12 +857,25 @@ function run(settings){
                     }else{
                     }
                 }
-                //保存されたパス・タイトルはプレースホルダー区切りの % を含みうるため、再展開されないよう置換連鎖の最後に埋める
+                const column_html = fill_column_template(default_element[Object.keys(default_element)[default_index]]["html"], {
+                    column_num: create_random_id(),
+                    column_banner_ch: banner_checked,
+                    column_top_bar_ch: init_top_visible_checked,
+                    column_tw_view_mode: tw_view_type,
+                    column_pinned_ch: init_pinned_checked,
+                    column_width_num: column_width_init,
+                    column_auto_reload_ch: init_auto_reload_checked,
+                    column_auto_reload_time: auto_reload_time,
+                    column_title: get_explore_column_title(init_column_save_path),
+                    column_save_title: init_column_save_title,
+                    column_pinned_save_path: init_pinned_path,
+                    column_save_path: init_column_save_path,
+                });
                 //一段目終了検出にもかかわらず設定が存在していた場合2段目の変数に保存
                 if(first_column_end == true){
-                    second_column_html += default_element[Object.keys(default_element)[default_index]]["html"].replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", banner_checked).replace("%column_top_bar_ch%", init_top_visible_checked).replace("%column_tw_view_mode%", tw_view_type).replace("%column_pinned_ch%", init_pinned_checked).replaceAll("%column_width_num%", column_width_init).replaceAll("%column_auto_reload_ch%", init_auto_reload_checked).replaceAll("%column_auto_reload_time%", auto_reload_time).replaceAll("%column_title%", get_explore_column_title(init_column_save_path)).replaceAll("%column_save_title%", init_column_save_title).replaceAll("%column_pinned_save_path%", init_pinned_path).replaceAll("%column_save_path%", init_column_save_path);
+                    second_column_html += column_html;
                 }else{
-                    main_column_html += default_element[Object.keys(default_element)[default_index]]["html"].replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", banner_checked).replace("%column_top_bar_ch%", init_top_visible_checked).replace("%column_tw_view_mode%", tw_view_type).replace("%column_pinned_ch%", init_pinned_checked).replaceAll("%column_width_num%", column_width_init).replaceAll("%column_auto_reload_ch%", init_auto_reload_checked).replaceAll("%column_auto_reload_time%", auto_reload_time).replaceAll("%column_title%", get_explore_column_title(init_column_save_path)).replaceAll("%column_save_title%", init_column_save_title).replaceAll("%column_pinned_save_path%", init_pinned_path).replaceAll("%column_save_path%", init_column_save_path);
+                    main_column_html += column_html;
                 }
                 //一段目読込終了検出
                 if(first_column_end == false && settings.column_settings[index].type == "empty_column"){
@@ -1597,13 +1614,26 @@ function run(settings){
         column_close();
         column_settings_save("", last_load_profile);
     });
-    //Explore系カラム追加(Explore本体・リストカラムの共通処理)
-    function add_explore_column(initial_path){
+    //Explore系カラム追加(Explore本体・リストカラムの共通処理)。insert_first が真なら末尾ではなく先頭に追加する
+    function add_explore_column(initial_path, insert_first = is_shift_pressed){
         const empty_column = document.querySelector(".dsp_column_emptycolumn");
         const first_column = empty_column?.closest('div')?.querySelector('section[draggable="true"]');
-        const add_target_column = (is_shift_pressed && first_column) ? first_column : empty_column;
+        const add_target_column = (insert_first && first_column) ? first_column : empty_column;
         
-        const new_column = default_element["explore"]["html"].replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", "").replace("%column_top_bar_ch%", "checked").replace("%column_tw_view_mode%", "0").replaceAll("%column_pinned_save_path%", "").replaceAll("%column_width_num%", "30").replaceAll("%column_auto_reload_ch%", "").replaceAll("%column_auto_reload_time%", "10000").replaceAll("%column_title%", get_explore_column_title(initial_path)).replaceAll("%column_save_path%", initial_path);
+        const new_column = fill_column_template(default_element["explore"]["html"], {
+            column_num: create_random_id(),
+            column_banner_ch: "",
+            column_top_bar_ch: "checked",
+            column_tw_view_mode: "0",
+            column_pinned_ch: "",
+            column_pinned_save_path: "",
+            column_save_title: "",
+            column_width_num: "30",
+            column_auto_reload_ch: "",
+            column_auto_reload_time: "10000",
+            column_title: get_explore_column_title(initial_path),
+            column_save_path: initial_path,
+        });
         add_target_column.insertAdjacentHTML("beforebegin", new_column);
         add_target_column.scrollIntoView({behavior: "smooth",inline: "end"});
         const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview]');
@@ -1618,6 +1648,8 @@ function run(settings){
     });
     //リストカラム追加(Exploreカラムの派生。ログインユーザーのリスト一覧を初期表示する)
     document.getElementById("add_list").addEventListener("click", function(){
+        //prompt 表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
+        const insert_first = is_shift_pressed;
         const screen_name = get_login_screen_name();
         let list_path = null;
         if(screen_name){
@@ -1631,7 +1663,7 @@ function run(settings){
                 return;
             }
         }
-        add_explore_column(list_path);
+        add_explore_column(list_path, insert_first);
     });
     //プロファイル保存ボタン
     document.getElementById("profile_save").addEventListener("click", function(){
@@ -2073,6 +2105,11 @@ function set_title_favicon(){
     head_favicon_observer.observe(document.head, { childList: true });
 }
 
+//カラムテンプレートの %name% プレースホルダーを values の同名キーで一括置換する
+//1 パスで置換し、埋めた値を再走査しないため、値に %...% が含まれていても再展開されない
+function fill_column_template(template_html, values){
+    return template_html.replace(/%([a-z_]+)%/g, (token, name) => Object.hasOwn(values, name) ? String(values[name]) : token);
+}
 //Explore系カラムのパスからカラムバーに表示するタイトルを決める
 function get_explore_column_title(path){
     const list_path_pattern = /^\/(?:i\/lists|[^\/?#]+\/lists)(?:[\/?#]|$)/;
@@ -2131,7 +2168,7 @@ function resolve_list_column_path(input){
         return build_list_path(`/i/lists/${list_id_match[1]}`, sub_path);
     }
     //ユーザーのリスト一覧URLまたはパス(/<screen_name>/lists)。旧形式のリストURLはサブパスを保持してXのリダイレクトに委ねる
-    const user_lists_match = value.match(/(?:^|\/)@?([A-Za-z0-9_]{1,15})\/lists(?=[\/?#]|$)/);
+    const user_lists_match = value.match(/(?:^|\/)@?([A-Za-z0-9_]{1,15})\/lists(?=[\/?#]|$)/i);
     if(user_lists_match && is_valid_screen_name(user_lists_match[1])){
         const sub_path = extract_list_sub_path(value.slice(user_lists_match.index + user_lists_match[0].length));
         return build_list_path(`/${user_lists_match[1]}/lists`, sub_path);
