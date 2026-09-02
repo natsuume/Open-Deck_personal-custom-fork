@@ -1948,7 +1948,21 @@ function run(settings){
         //head が無い場合は何もしない(次回のポーリングで再試行する)
         //注入時は属性を "loading" にし、script の error で属性を削除して再試行できるようにする。ヘルパー自身が読み込み完了時に属性を "ready" へ更新する
         function inject_list_picker_helper(probe_document){
-            return;
+            try{
+                if(probe_document.documentElement.hasAttribute("data-opd-list-picker-helper")) return;
+                if(!probe_document.head) return;
+                const helper_script = probe_document.createElement("script");
+                helper_script.src = chrome.runtime.getURL("extensions/list_picker_helper.js");
+                helper_script.addEventListener("error", function(){
+                    //読み込みに失敗した document は属性を消して、次回のポーリングで注入し直せるようにする
+                    probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
+                });
+                probe_document.documentElement.setAttribute("data-opd-list-picker-helper", "loading");
+                probe_document.head.appendChild(helper_script);
+            }catch(e){
+                //注入できなかった場合は属性を残さず、次回のポーリングでやり直す
+                probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
+            }
         }
         //列挙用のタイマーを止め、iframe が読み込んだページを解放する
         function stop_probe(){
@@ -2053,14 +2067,16 @@ function run(settings){
                 const scrolling_element = probe_document.scrollingElement;
                 if(scrolling_element) scrolling_element.scrollTop = scrolling_element.scrollHeight;
 
-                //未解決の listCell(count_unresolved_list_cells)が残っている間は安定状態とみなさず完了しない
-                const probe_state = `${probe_found_ids.size}:${scrolling_element?.scrollHeight}`;
+                //リスト ID を解決できていない listCell はヘルパーの走査で減っていくため、安定状態の判定材料に含める
+                const unresolved_count = count_unresolved_list_cells(probe_document);
+                const probe_state = `${probe_found_ids.size}:${unresolved_count}:${scrolling_element?.scrollHeight}`;
                 probe_stable_elapsed = (probe_state === probe_last_state) ? probe_stable_elapsed + probe_interval_ms : 0;
                 probe_last_state = probe_state;
 
                 if(probe_document.readyState === "complete" && probe_found_ids.size > 0 && probe_stable_elapsed >= probe_stable_ms){
                     stop_probe();
-                    status_area.textContent = "";
+                    //リスト ID を解決できなかった listCell が残っている場合は取りこぼしがあるため部分取得として知らせる
+                    status_area.textContent = unresolved_count > 0 ? i18n_message("ui_list_picker_partial") : "";
                 }
             }, probe_interval_ms);
         }
@@ -2762,6 +2778,24 @@ function extract_list_id_from_href(href, base_url){
     const list_id_match = list_url.pathname.match(/^\/i\/lists\/(\d+)(?:\/|$)/);
     return list_id_match ? list_id_match[1] : null;
 }
+//listCell に付いた属性値がリスト ID として使えるかを判定する
+//value: 判定する値
+//戻り値: 文字列で /^[1-9]\d{0,19}$/ に一致すれば true
+function is_valid_list_id(value){
+    return typeof value === "string" && /^[1-9]\d{0,19}$/.test(value);
+}
+//listCell からリスト ID を取り出す
+//cell: [data-testid="listCell"] の要素、base_url: href を絶対 URL に解決するための基準 URL
+//戻り値: リスト ID。配下に /i/lists/<id> へ解決できる a[href] があればその ID を優先し、無ければ有効な data-opd-list-id を使う。どちらも無ければ null
+function resolve_list_cell_id(cell, base_url){
+    const cell_links = cell.querySelectorAll("a[href]");
+    for (let index = 0; index < cell_links.length; index++) {
+        const link_list_id = extract_list_id_from_href(cell_links[index].getAttribute("href"), base_url);
+        if(link_list_id !== null) return link_list_id;
+    }
+    const attribute_list_id = cell.getAttribute("data-opd-list-id");
+    return is_valid_list_id(attribute_list_id) ? attribute_list_id : null;
+}
 //リスト一覧ページの Document から、そのページに並んでいるリストを列挙する
 //doc: リスト一覧ページの Document
 //戻り値: {id: リストID, path: "/i/lists/<id>", name: リスト名(取得できない場合は空文字), section: 直前の h2 見出し文(見出しが無い場合は空文字)} の配列
@@ -2776,12 +2810,30 @@ function collect_lists_from_document(doc){
     if(!root) return [];
     const found_lists = new Map();
     let current_section = "";
-    //見出しとリンクを文書順に走査し、直前に現れた見出しをそのリンクのセクション名として扱う
-    const scan_targets = root.querySelectorAll('h2, a[href]');
+    //見出し・リンク・listCell を文書順に走査し、直前に現れた見出しをそのリストのセクション名として扱う
+    const scan_targets = root.querySelectorAll('h2, a[href], [data-testid="listCell"]');
     for (let index = 0; index < scan_targets.length; index++) {
         const scan_target = scan_targets[index];
         if(scan_target.tagName === "H2"){
             current_section = scan_target.textContent.trim();
+            continue;
+        }
+        if(scan_target.getAttribute("data-testid") === "listCell"){
+            const cell_list_id = resolve_list_cell_id(scan_target, doc.location.href);
+            if(cell_list_id === null || found_lists.has(cell_list_id)) continue;
+            //ヘルパーが付けたリスト名を優先し、無い場合はセル配下の最初の非空 span テキストを使う
+            let cell_list_name = (scan_target.getAttribute("data-opd-list-name") ?? "").trim();
+            if(cell_list_name === ""){
+                const cell_name_candidates = scan_target.querySelectorAll("span");
+                for (let name_index = 0; name_index < cell_name_candidates.length; name_index++) {
+                    const cell_name_text = cell_name_candidates[name_index].textContent.trim();
+                    if(cell_name_text !== ""){
+                        cell_list_name = cell_name_text;
+                        break;
+                    }
+                }
+            }
+            found_lists.set(cell_list_id, {id: cell_list_id, path: `/i/lists/${cell_list_id}`, name: cell_list_name, section: current_section});
             continue;
         }
         const list_id = extract_list_id_from_href(scan_target.getAttribute("href"), doc.location.href);
@@ -2803,9 +2855,16 @@ function collect_lists_from_document(doc){
 }
 //リスト一覧ページの Document から、リスト ID を解決できていない listCell の数を数える
 //doc: リスト一覧ページの Document
-//戻り値: [data-testid="primaryColumn"] 配下の [data-testid="listCell"] のうち、data-opd-list-id を持たず、かつ配下に /i/lists/<id> へ解決できる a[href] も持たないセルの数。primaryColumn が無い場合は 0
+//戻り値: [data-testid="primaryColumn"] 配下の [data-testid="listCell"] のうち、有効な data-opd-list-id を持たず、かつ配下に /i/lists/<id> へ解決できる a[href] も持たないセルの数。primaryColumn が無い場合は 0
 function count_unresolved_list_cells(doc){
-    return 0;
+    const root = doc.querySelector('[data-testid="primaryColumn"]');
+    if(!root) return 0;
+    let unresolved_count = 0;
+    const cells = root.querySelectorAll('[data-testid="listCell"]');
+    for (let index = 0; index < cells.length; index++) {
+        if(resolve_list_cell_id(cells[index], doc.location.href) === null) unresolved_count++;
+    }
+    return unresolved_count;
 }
 //手動入力欄の文字列を1行1件として解釈し、リストカラムのパスに変換する
 //text: textarea の文字列
