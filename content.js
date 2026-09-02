@@ -1859,7 +1859,8 @@ function run(settings){
         //チェックしたリストと手動入力を結合し、重複を除いた追加対象のパスと、解釈できなかった入力行を返す
         function collect_add_paths(){
             const manual_entries = parse_manual_list_entries(manual_textarea.value);
-            const checked_paths = Array.from(results_area.querySelectorAll('input[type="checkbox"]:checked')).map((checkbox) => checkbox.value);
+            //チェックボックスの値も手動入力と同じ解決関数を通し、リストのパスとして解釈できるものだけを使う
+            const checked_paths = Array.from(results_area.querySelectorAll('input[type="checkbox"]:checked')).map((checkbox) => resolve_list_column_path(checkbox.value)).filter((list_path) => list_path !== null);
             const paths = [];
             checked_paths.concat(manual_entries.paths).forEach((list_path) => {
                 if(!paths.includes(list_path)) paths.push(list_path);
