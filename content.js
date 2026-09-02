@@ -1947,12 +1947,24 @@ function run(settings){
                 probe_frame.src = url;
             }
         }
+        //ヘルパーの注入に失敗したことを記録する
+        //probe_document: 注入に失敗した Document
+        //上限に達するまでは属性を消して次回のポーリングで注入し直せるようにし、上限に達したら属性を "failed" にして打ち切る
+        function record_helper_inject_failure(probe_document){
+            const failure_count = (helper_inject_failures.get(probe_document) ?? 0) + 1;
+            helper_inject_failures.set(probe_document, failure_count);
+            if(failure_count < helper_inject_failure_limit){
+                probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
+                return;
+            }
+            probe_document.documentElement?.setAttribute("data-opd-list-picker-helper", "failed");
+        }
         //probe document に page world ヘルパー extensions/list_picker_helper.js を注入する
         //probe_document: リスト一覧ページを読み込んでいる iframe の Document
         //documentElement の data-opd-list-picker-helper 属性が既にある document には注入しない(Document ごとに1回)
         //head が無い場合は何もしない(次回のポーリングで再試行する)
         //注入時は属性を "loading" にし、ヘルパー自身が読み込み完了時に属性を "ready" へ更新する
-        //script の error は失敗回数が3回に達するまで属性を削除して再試行し(合計3回試行)、3回目の失敗で属性を "failed" にする
+        //script の error と注入時の例外は失敗回数が3回に達するまで属性を削除して再試行し(合計3回試行)、3回目の失敗で属性を "failed" にする
         //script の load 後も属性が "ready" でなければ "failed" にする。"failed" の document には再注入せず、走査依頼も送らない
         function inject_list_picker_helper(probe_document){
             try{
@@ -1962,13 +1974,7 @@ function run(settings){
                 helper_script.src = chrome.runtime.getURL("extensions/list_picker_helper.js");
                 helper_script.addEventListener("error", function(){
                     //読み込みに失敗した document は属性を消して次回のポーリングで注入し直すが、繰り返し失敗する document は打ち切る
-                    const failure_count = (helper_inject_failures.get(probe_document) ?? 0) + 1;
-                    helper_inject_failures.set(probe_document, failure_count);
-                    if(failure_count < helper_inject_failure_limit){
-                        probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
-                        return;
-                    }
-                    probe_document.documentElement?.setAttribute("data-opd-list-picker-helper", "failed");
+                    record_helper_inject_failure(probe_document);
                 });
                 helper_script.addEventListener("load", function(){
                     //読み込めてもヘルパーが ready にできなかった document は、入れ直しても同じ結果になるため打ち切る
@@ -1978,8 +1984,8 @@ function run(settings){
                 probe_document.documentElement.setAttribute("data-opd-list-picker-helper", "loading");
                 probe_document.head.appendChild(helper_script);
             }catch(e){
-                //注入できなかった場合は属性を残さず、次回のポーリングでやり直す
-                probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
+                //注入できなかった場合も失敗として数え、上限に達するまでは次回のポーリングでやり直す
+                record_helper_inject_failure(probe_document);
             }
         }
         //列挙用のタイマーを止め、iframe が読み込んだページを解放する
@@ -1994,6 +2000,7 @@ function run(settings){
         //指定ユーザーのリスト一覧ページを非表示 iframe に読み込み、描画されたリストを定期的に拾い集める
         //読み込み完了かつ今回の検出件数・未解決の listCell 数・文書高が一定時間変化しなければ完了、制限時間の経過で打ち切り、中身を読めない場合はエラーとして終了する
         //完了・打ち切りの判定には今回の列挙で検出した件数と未解決の listCell 数を使い、選択を保つために残した前回のエントリは判定に含めない
+        //今回の列挙で1件も検出していないあいだは安定しても完了せず、制限時間の経過で打ち切る
         function start_probe(screen_name){
             stop_probe();
             //取得し直してもチェック済みのリストは選択を保てるよう残す
@@ -2106,7 +2113,8 @@ function run(settings){
                 //未解決のセルはヘルパーの走査で減っていくため、安定状態の判定材料に含める
                 const unresolved_count = probe_unresolved_keys.size;
                 const probe_state = `${probe_found_ids.size}:${unresolved_count}:${scrolling_element?.scrollHeight}`;
-                probe_stable_elapsed = (probe_state === probe_last_state) ? probe_stable_elapsed + probe_interval_ms : 0;
+                //ヘルパーの状態が定まるまではスクロールも走査もしていないため、状態が変わらなくても安定とはみなさない
+                probe_stable_elapsed = (is_helper_settled && probe_state === probe_last_state) ? probe_stable_elapsed + probe_interval_ms : 0;
                 probe_last_state = probe_state;
 
                 if(probe_document.readyState === "complete" && probe_found_ids.size > 0 && probe_stable_elapsed >= probe_stable_ms){
@@ -2834,7 +2842,8 @@ function first_non_empty_span_text(element){
 //listCell からリスト ID とリスト名を取り出す
 //cell: [data-testid="listCell"] の要素、base_url: href を絶対 URL に解決するための基準 URL
 //戻り値: {id: リストID, name: リスト名(取得できない場合は空文字)}。ID を決められない場合は null
-//ID は配下に /i/lists/<id> へ解決できる a[href] があればその ID を優先し、無ければ有効な data-opd-list-id を使う
+//ID は配下に /i/lists/<id> へ解決できる a[href] があればその ID を優先し、配下に無ければセルを包む祖先の a[href] も見る
+//どちらのリンクからも取れなければ有効な data-opd-list-id を使う
 //名前は、ID がリンク由来で data-opd-list-id も同じ ID を指している場合と ID が属性由来の場合に data-opd-list-name(trim 後非空)を使う
 //それ以外(ID がリンク由来で、属性が無い・属性名が空・属性が別のリストを指している場合)は、そのリンク配下の最初の非空 span テキスト、無ければリンク自体のテキスト、無ければセル内の最初の非空 span テキストの順に使う
 function resolve_list_cell_info(cell, base_url){
@@ -2847,6 +2856,15 @@ function resolve_list_cell_info(cell, base_url){
             link_element = cell_links[index];
             link_list_id = found_list_id;
             break;
+        }
+    }
+    if(link_list_id === null){
+        //セル全体がリンクで包まれている描画もあるため、配下に無ければ最も近い祖先のリンクを見る
+        const ancestor_link = cell.closest("a[href]");
+        const ancestor_list_id = ancestor_link === null ? null : extract_list_id_from_href(ancestor_link.getAttribute("href"), base_url);
+        if(ancestor_list_id !== null){
+            link_element = ancestor_link;
+            link_list_id = ancestor_list_id;
         }
     }
     const attribute_list_id = cell.getAttribute("data-opd-list-id");
@@ -2891,7 +2909,7 @@ function collect_lists_from_document(doc){
         }
         const list_id = extract_list_id_from_href(scan_target.getAttribute("href"), doc.location.href);
         if(list_id === null || found_lists.has(list_id)) continue;
-        //リンク配下の span のうち最初に現れる非空のテキストをリスト名として使い、span が無ければリンク自体のテキストを使う
+        //リンク配下の span のうち最初に現れる非空のテキストをリスト名として使い、非空の span が無ければリンク自体のテキストを使う
         let list_name = first_non_empty_span_text(scan_target);
         if(list_name === "") list_name = scan_target.textContent.trim();
         found_lists.set(list_id, {id: list_id, path: `/i/lists/${list_id}`, name: list_name, section: current_section});
@@ -2900,7 +2918,7 @@ function collect_lists_from_document(doc){
 }
 //リスト一覧ページの Document から、並んでいる listCell の識別キーと解決状態を列挙する
 //doc: リスト一覧ページの Document
-//戻り値: {key: セル内の非空 span テキスト(trim 後)を文書順に改行で連結した文字列(span が無い場合は空文字), is_resolved: resolve_list_cell_info でリスト ID を決められたか} の配列
+//戻り値: {key: セル内の非空 span テキスト(trim 後)を文書順に改行で連結した文字列(非空の span が無い場合は空文字), is_resolved: resolve_list_cell_info でリスト ID を決められたか} の配列
 //走査範囲は [data-testid="primaryColumn"] 配下の [data-testid="listCell"] のみで、文書順に並べる。primaryColumn が無い場合は空配列を返す
 function collect_list_cell_states(doc){
     const root = doc.querySelector('[data-testid="primaryColumn"]');
