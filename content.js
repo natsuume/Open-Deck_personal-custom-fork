@@ -853,11 +853,12 @@ function run(settings){
                     }else{
                     }
                 }
+                //保存されたパス・タイトルはプレースホルダー区切りの % を含みうるため、再展開されないよう置換連鎖の最後に埋める
                 //一段目終了検出にもかかわらず設定が存在していた場合2段目の変数に保存
                 if(first_column_end == true){
-                    second_column_html += default_element[Object.keys(default_element)[default_index]]["html"].replaceAll("%column_save_path%", init_column_save_path).replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", banner_checked).replace("%column_top_bar_ch%", init_top_visible_checked).replace("%column_tw_view_mode%", tw_view_type).replace("%column_pinned_ch%", init_pinned_checked).replaceAll("%column_pinned_save_path%", init_pinned_path).replaceAll("%column_save_title%", init_column_save_title).replaceAll("%column_width_num%", column_width_init).replaceAll("%column_auto_reload_ch%", init_auto_reload_checked).replaceAll("%column_auto_reload_time%", auto_reload_time).replaceAll("%column_title%", get_explore_column_title(init_column_save_path));
+                    second_column_html += default_element[Object.keys(default_element)[default_index]]["html"].replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", banner_checked).replace("%column_top_bar_ch%", init_top_visible_checked).replace("%column_tw_view_mode%", tw_view_type).replace("%column_pinned_ch%", init_pinned_checked).replaceAll("%column_width_num%", column_width_init).replaceAll("%column_auto_reload_ch%", init_auto_reload_checked).replaceAll("%column_auto_reload_time%", auto_reload_time).replaceAll("%column_title%", get_explore_column_title(init_column_save_path)).replaceAll("%column_save_title%", init_column_save_title).replaceAll("%column_pinned_save_path%", init_pinned_path).replaceAll("%column_save_path%", init_column_save_path);
                 }else{
-                    main_column_html += default_element[Object.keys(default_element)[default_index]]["html"].replaceAll("%column_save_path%", init_column_save_path).replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", banner_checked).replace("%column_top_bar_ch%", init_top_visible_checked).replace("%column_tw_view_mode%", tw_view_type).replace("%column_pinned_ch%", init_pinned_checked).replaceAll("%column_pinned_save_path%", init_pinned_path).replaceAll("%column_save_title%", init_column_save_title).replaceAll("%column_width_num%", column_width_init).replaceAll("%column_auto_reload_ch%", init_auto_reload_checked).replaceAll("%column_auto_reload_time%", auto_reload_time).replaceAll("%column_title%", get_explore_column_title(init_column_save_path));
+                    main_column_html += default_element[Object.keys(default_element)[default_index]]["html"].replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", banner_checked).replace("%column_top_bar_ch%", init_top_visible_checked).replace("%column_tw_view_mode%", tw_view_type).replace("%column_pinned_ch%", init_pinned_checked).replaceAll("%column_width_num%", column_width_init).replaceAll("%column_auto_reload_ch%", init_auto_reload_checked).replaceAll("%column_auto_reload_time%", auto_reload_time).replaceAll("%column_title%", get_explore_column_title(init_column_save_path)).replaceAll("%column_save_title%", init_column_save_title).replaceAll("%column_pinned_save_path%", init_pinned_path).replaceAll("%column_save_path%", init_column_save_path);
                 }
                 //一段目読込終了検出
                 if(first_column_end == false && settings.column_settings[index].type == "empty_column"){
@@ -1602,7 +1603,7 @@ function run(settings){
         const first_column = empty_column?.closest('div')?.querySelector('section[draggable="true"]');
         const add_target_column = (is_shift_pressed && first_column) ? first_column : empty_column;
         
-        const new_column = default_element["explore"]["html"].replaceAll("%column_save_path%", initial_path).replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", "").replace("%column_top_bar_ch%", "checked").replace("%column_tw_view_mode%", "0").replaceAll("%column_pinned_save_path%", "").replaceAll("%column_width_num%", "30").replaceAll("%column_auto_reload_ch%", "").replaceAll("%column_auto_reload_time%", "10000").replaceAll("%column_title%", get_explore_column_title(initial_path));
+        const new_column = default_element["explore"]["html"].replaceAll("%column_num%", create_random_id()).replace("%column_banner_ch%", "").replace("%column_top_bar_ch%", "checked").replace("%column_tw_view_mode%", "0").replaceAll("%column_pinned_save_path%", "").replaceAll("%column_width_num%", "30").replaceAll("%column_auto_reload_ch%", "").replaceAll("%column_auto_reload_time%", "10000").replaceAll("%column_title%", get_explore_column_title(initial_path)).replaceAll("%column_save_path%", initial_path);
         add_target_column.insertAdjacentHTML("beforebegin", new_column);
         add_target_column.scrollIntoView({behavior: "smooth",inline: "end"});
         const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview]');
@@ -2083,9 +2084,9 @@ function set_explore_column_title(column_div, path){
     const column_title_elem = column_div?.querySelector(".dsp_explore_column_title");
     if(column_title_elem) column_title_elem.textContent = get_explore_column_title(path);
 }
-//Xのscreen_nameとして妥当か(文字種・長さを満たし、Xのルーティング予約名 i でないこと)
+//Xのscreen_nameとして妥当か(文字種・長さを満たし、Xのルーティング予約名 i でないこと。大文字小文字は区別しない)
 function is_valid_screen_name(name){
-    return /^[A-Za-z0-9_]{1,15}$/.test(name ?? "") && name !== "i";
+    return /^[A-Za-z0-9_]{1,15}$/.test(name ?? "") && name.toLowerCase() !== "i";
 }
 //ログイン中ユーザーのscreen_nameをXのナビゲーションにあるプロフィールリンクから取得する(取得できない場合はnull)
 function get_login_screen_name(){
@@ -2106,9 +2107,9 @@ function get_login_screen_name(){
     return null;
 }
 //「/lists」や「/i/lists/<id>」の直後の残り文字列からサブパス(タブや旧形式のスラッグ)を取り出す
-//URL の属性埋め込みとカラムテンプレートのプレースホルダー置換(%...%)に対して安全な文字種のみ許可し、想定外の文字を含む場合は空文字(リストのトップ)にフォールバックする
+//URL の属性埋め込みに安全な文字種(パーセントエンコード含む)のみ許可し、想定外の文字を含む場合は空文字(リストのトップ)にフォールバックする
 function extract_list_sub_path(rest){
-    const match = rest.match(/^((?:\/[A-Za-z0-9_\-.~]+)*)\/?(?:[?#]|$)/);
+    const match = rest.match(/^((?:\/[A-Za-z0-9_\-.%~]+)*)\/?(?:[?#]|$)/);
     return match ? match[1] : "";
 }
 //ユーザー入力(ユーザー名・リストURL・リストID)からリストカラムの初期パスを決める(解決できない場合はnull)
@@ -2117,8 +2118,8 @@ function resolve_list_column_path(input){
     if(value === "") return null;
     //リストID(数字のみ)
     if(/^\d+$/.test(value)) return `/i/lists/${value}`;
-    //リストURLまたはパス(/i/lists/<id>)
-    const list_id_match = value.match(/(?:^|\/)i\/lists\/(\d+)/);
+    //リストURLまたはパス(/i/lists/<id>)。予約名 i は大文字小文字を区別しない
+    const list_id_match = value.match(/(?:^|\/)i\/lists\/(\d+)/i);
     if(list_id_match){
         const sub_path = extract_list_sub_path(value.slice(list_id_match.index + list_id_match[0].length));
         return `/i/lists/${list_id_match[1]}${sub_path}`;
