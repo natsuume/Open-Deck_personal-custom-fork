@@ -204,7 +204,7 @@
     "message": "リストを自動検出できませんでした。下の入力欄に URL か ID を入力してください"
   },
   "ui_list_picker_error": {
-    "message": "リスト一覧ページを読み込めませんでした"
+    "message": "リスト一覧ページを読み込めませんでした。下の入力欄に URL か ID を入力してください"
   },
   "ui_list_picker_select_all": {
     "message": "全て選択"
@@ -235,6 +235,9 @@
   },
   "msg_list_picker_many_columns_confirm": {
     "message": "$1 件のカラムを追加します。多数のカラムはメモリと通信量を消費します。続行しますか？"
+  },
+  "msg_list_picker_user_required": {
+    "message": "ユーザー名またはリスト一覧の URL を入力してください。リストの URL や ID は下の入力欄に入力してください"
   },
   "msg_auto_reload_set": {
     "message": "自動更新の秒数を$1秒に設定しました"

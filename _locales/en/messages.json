@@ -204,7 +204,7 @@
     "message": "Could not detect lists automatically. Enter list URLs or IDs below"
   },
   "ui_list_picker_error": {
-    "message": "Could not load the lists page"
+    "message": "Could not load the lists page. Enter list URLs or IDs below"
   },
   "ui_list_picker_select_all": {
     "message": "Select all"
@@ -235,6 +235,9 @@
   },
   "msg_list_picker_many_columns_confirm": {
     "message": "Add $1 columns? Many columns consume memory and network. Continue?"
+  },
+  "msg_list_picker_user_required": {
+    "message": "Enter a username or a lists page URL. Put list URLs or IDs in the text area below"
   },
   "msg_auto_reload_set": {
     "message": "Auto-load interval set to $1 seconds."
