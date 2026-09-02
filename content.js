@@ -1760,7 +1760,7 @@ function run(settings){
     //insert_first: 追加するカラムを末尾ではなく先頭に入れる場合は true、opener_element: ダイアログを閉じたときにフォーカスを戻す要素
     //#opd_main_element の直下にオーバーレイ #opd_list_picker_overlay を1つだけ生成する(既に開いている場合は生成しない)。オーバーレイは次の要素を持つ:
     //  ・role="dialog" aria-modal="true" のダイアログ本体
-    //  ・リスト列挙用の非表示 iframe(リストが描画されるだけの画面内サイズを持ち、opacity 0・pointer-events none で操作対象から外す)
+    //  ・リスト列挙用の非表示 iframe(リストが描画されるだけの画面内サイズを持ち、opacity 0・pointer-events none で操作対象から外す)。iframe 内の listCell には page world ヘルパー(extensions/list_picker_helper.js)がリスト ID を属性として付与する
     //  ・リスト一覧を取得するユーザー名の入力欄と取得ボタン
     //  ・取得状態の表示(loading / partial / not_detected / error / login_required)
     //  ・検出したリストのチェックボックス一覧と、全て選択・選択解除のボタン
@@ -1942,6 +1942,14 @@ function run(settings){
                 probe_frame.src = url;
             }
         }
+        //probe document に page world ヘルパー extensions/list_picker_helper.js を注入する
+        //probe_document: リスト一覧ページを読み込んでいる iframe の Document
+        //documentElement の data-opd-list-picker-helper 属性が既にある document には注入しない(Document ごとに1回)
+        //head が無い場合は何もしない(次回のポーリングで再試行する)
+        //注入時は属性を "loading" にし、script の error で属性を削除して再試行できるようにする。ヘルパー自身が読み込み完了時に属性を "ready" へ更新する
+        function inject_list_picker_helper(probe_document){
+            return;
+        }
         //列挙用のタイマーを止め、iframe が読み込んだページを解放する
         function stop_probe(){
             if(probe_interval !== null){
@@ -2018,6 +2026,13 @@ function run(settings){
                     return;
                 }
 
+                //リスト一覧ページを表示できたら page world ヘルパーを注入する(注入済みの document では何もしない)
+                inject_list_picker_helper(probe_document);
+                //ヘルパーが準備できていれば listCell へのリスト ID 付与を依頼してから収集する
+                if(probe_document.documentElement.getAttribute("data-opd-list-picker-helper") === "ready"){
+                    probe_document.dispatchEvent(new CustomEvent("opd_list_picker_scan"));
+                }
+
                 const before_size = found_lists.size;
                 let is_kept_entry_replaced = false;
                 collect_lists_from_document(probe_document).forEach((list_info) => {
@@ -2038,6 +2053,7 @@ function run(settings){
                 const scrolling_element = probe_document.scrollingElement;
                 if(scrolling_element) scrolling_element.scrollTop = scrolling_element.scrollHeight;
 
+                //未解決の listCell(count_unresolved_list_cells)が残っている間は安定状態とみなさず完了しない
                 const probe_state = `${probe_found_ids.size}:${scrolling_element?.scrollHeight}`;
                 probe_stable_elapsed = (probe_state === probe_last_state) ? probe_stable_elapsed + probe_interval_ms : 0;
                 probe_last_state = probe_state;
@@ -2749,7 +2765,12 @@ function extract_list_id_from_href(href, base_url){
 //リスト一覧ページの Document から、そのページに並んでいるリストを列挙する
 //doc: リスト一覧ページの Document
 //戻り値: {id: リストID, path: "/i/lists/<id>", name: リスト名(取得できない場合は空文字), section: 直前の h2 見出し文(見出しが無い場合は空文字)} の配列
-//走査範囲は [data-testid="primaryColumn"] の配下のみとし、それが無い文書(リスト一覧ページ以外や描画前)は空配列を返す。同一 id は最初に見つかった1件のみ含める
+//走査範囲は [data-testid="primaryColumn"] の配下のみとし、それが無い文書(リスト一覧ページ以外や描画前)は空配列を返す
+//h2, a[href], [data-testid="listCell"] を文書順に走査し、直前に現れた h2 の見出し文をそのリストのセクション名として扱う
+//a[href] は href から /i/lists/<id> の ID を取る
+//listCell は配下に /i/lists/<id> へ解決できる a[href] があればその ID を優先し、無ければ data-opd-list-id(/^[1-9]\d{0,19}$/ に一致するもののみ)を使う
+//listCell のリスト名は data-opd-list-name の非空文字列を使い、無ければセル内の最初の非空 span テキストを使う。ID が得られないセルは戻り値に含めない
+//同一 id は最初に見つかった1件のみ含める
 function collect_lists_from_document(doc){
     const root = doc.querySelector('[data-testid="primaryColumn"]');
     if(!root) return [];
@@ -2779,6 +2800,12 @@ function collect_lists_from_document(doc){
         found_lists.set(list_id, {id: list_id, path: `/i/lists/${list_id}`, name: list_name, section: current_section});
     }
     return Array.from(found_lists.values());
+}
+//リスト一覧ページの Document から、リスト ID を解決できていない listCell の数を数える
+//doc: リスト一覧ページの Document
+//戻り値: [data-testid="primaryColumn"] 配下の [data-testid="listCell"] のうち、data-opd-list-id を持たず、かつ配下に /i/lists/<id> へ解決できる a[href] も持たないセルの数。primaryColumn が無い場合は 0
+function count_unresolved_list_cells(doc){
+    return 0;
 }
 //手動入力欄の文字列を1行1件として解釈し、リストカラムのパスに変換する
 //text: textarea の文字列

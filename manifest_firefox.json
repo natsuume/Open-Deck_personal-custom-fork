@@ -22,6 +22,7 @@
     "extensions/text_review_helper.js",
     "extensions/auto_reload_helper.js",
     "extensions/media_viewer_block_helper.js",
+    "extensions/list_picker_helper.js",
     "extensions/media_viewer/media_viewer.js",
     "icon.png", 
     "icon/logo_icon.svg",
