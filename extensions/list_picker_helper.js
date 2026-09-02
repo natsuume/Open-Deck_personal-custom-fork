@@ -27,7 +27,7 @@
 //              関数・DOM Node・Window・Map/Set/WeakMap/WeakSet・Promise は葉として扱い、React element($$typeof を持つオブジェクト)は候補判定も探索もしない
 //              "_" 始まりのキーは __typename を除き読まない
 //              訪問済み集合で循環を避け、例外が出たオブジェクトはその場で打ち切る
-//              1セルの処理は try/catch で囲み、失敗したセルは属性無しのままにする(次回の走査で再試行される)
+//              1セルの処理は try/catch で囲み、失敗したセルは属性無しのままにする(解決中の例外は結果無しとしてキャッシュされ、解決できなかったセルと同じ周期で再試行される)
 (() => {
     const list_id_pattern = /^[1-9]\d{0,19}$/;
     const list_only_fields = ["member_count", "subscriber_count", "mode"];
