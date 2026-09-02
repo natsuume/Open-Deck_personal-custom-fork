@@ -337,6 +337,10 @@ function run(settings){
         background: #d5d5d5;
         cursor: pointer;
     }
+    .dsp_btn_parent:focus-visible{
+        outline: 2px solid currentColor;
+        outline-offset: -2px;
+    }
     .dsp_btn_add_post_img{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
         background-size: cover;
@@ -657,6 +661,7 @@ function run(settings){
         font-size: 0.9rem;
     }
     .opd_list_picker_results{
+        min-height: 10rem;
         height: 20rem;
         overflow-y: auto;
         padding: 0.5rem;
@@ -1759,6 +1764,8 @@ function run(settings){
     //  ・追加するリストの URL か ID を1行1件で入力する textarea
     //  ・追加するカラム件数の表示と、追加ボタン・キャンセルボタン
     //Esc キー・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe を破棄して opener_element にフォーカスを戻す
+    //開いているあいだは overlay 以外の #opd_main_element の子要素を inert にして背景を操作対象から外し、閉じるときに解除する(元から inert が付いていた要素は触らない)
+    //取得をやり直したときはチェック済みのエントリを「選択済み」セクションとして残し、完了・打ち切りの判定には今回の列挙で検出した件数だけを使う
     //追加時はチェックしたリストのパスと手動入力から解釈したパスを結合し、重複を除去して add_explore_columns に渡す
     //ダイアログ内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない(カラムを一括走査するセレクタに拾われるため)
     function open_list_picker_dialog(insert_first, opener_element){
@@ -1794,8 +1801,8 @@ function run(settings){
         <div class="opd_list_picker_results"></div>
         <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"> <input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
         <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><textarea class="opd_list_picker_manual" id="opd_list_picker_manual_input" rows="4"></textarea></div>
-        <div class="opd_list_picker_count"></div>
-        <div class="opd_list_picker_actions"><input class="opd_list_picker_add_btn" type="button" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
+        <div class="opd_list_picker_count" id="opd_list_picker_count"></div>
+        <div class="opd_list_picker_actions"><input class="opd_list_picker_add_btn" type="button" aria-describedby="opd_list_picker_count" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
         </div>`;
         main_element.appendChild(overlay);
         //ダイアログを開いているあいだは背景を操作対象から外す(元から inert のものは対象にしない)
@@ -1805,6 +1812,13 @@ function run(settings){
             child.setAttribute("inert", "");
             inert_applied_elements.push(child);
         });
+        //オーバーレイが close_dialog を経由せず外された場合でも背景の inert を必ず解除する
+        const overlay_observer = new MutationObserver(function(){
+            if(overlay.isConnected) return;
+            inert_applied_elements.forEach((element) => element.removeAttribute("inert"));
+            overlay_observer.disconnect();
+        });
+        overlay_observer.observe(main_element, {childList: true});
 
         const dialog = overlay.querySelector(".opd_list_picker_dialog");
         const probe_frame = overlay.querySelector(".opd_list_picker_probe");
@@ -1832,6 +1846,10 @@ function run(settings){
         let has_probe_document = false;
         //背景クリック判定用。ダイアログ内で押してオーバーレイ上で離した操作で閉じないようにする
         let is_overlay_mousedown = false;
+        //「全て選択」の状態。真のあいだは列挙の途中で追加された項目もチェック済みで描画する
+        let is_select_all = false;
+        //今回の取得対象のパス(小文字)。iframe がこのパスを表示するまでは採取しない
+        let probe_expected_path = "";
 
         //チェックしたリストと手動入力を結合し、重複を除いた追加対象のパスと、解釈できなかった入力行を返す
         function collect_add_paths(){
@@ -1843,12 +1861,21 @@ function run(settings){
             });
             return {paths: paths, invalid: manual_entries.invalid};
         }
-        //実際に追加されるカラム件数を表示する
+        //実際に追加されるカラム件数を表示する。解釈できない入力行があればその件数も添える
         function update_count(){
-            count_area.textContent = i18n_message("ui_list_picker_selected_count", [String(collect_add_paths().paths.length)]);
+            const add_targets = collect_add_paths();
+            let count_text = i18n_message("ui_list_picker_selected_count", [String(add_targets.paths.length)]);
+            if(add_targets.invalid.length > 0) count_text += ` ${i18n_message("ui_list_picker_invalid_count", [String(add_targets.invalid.length)])}`;
+            count_area.textContent = count_text;
+        }
+        //個別にチェックを外したら「全て選択」の追従をやめる
+        function on_checkbox_change(event){
+            if(!event.target.checked) is_select_all = false;
+            update_count();
         }
         //見つかったリストをセクションごとにまとめて結果領域へ描画する。読み込み中で0件のあいだは skeleton を表示する
         function render_results(){
+            const saved_scroll_top = results_area.scrollTop;
             const active_element = document.activeElement;
             const active_checkbox_id = (active_element !== null && results_area.contains(active_element) && active_element.type === "checkbox")
                 ? active_element.getAttribute("data-list-id") : null;
@@ -1887,8 +1914,8 @@ function run(settings){
                     checkbox.type = "checkbox";
                     checkbox.value = list_info.path;
                     checkbox.setAttribute("data-list-id", list_info.id);
-                    checkbox.checked = checked_ids.has(list_info.id);
-                    checkbox.addEventListener("change", update_count);
+                    checkbox.checked = checked_ids.has(list_info.id) || is_select_all;
+                    checkbox.addEventListener("change", on_checkbox_change);
                     const name_text = document.createElement("span");
                     name_text.textContent = list_info.name !== "" ? list_info.name : i18n_message("ui_list_picker_list_fallback_name", [list_info.id]);
                     item_label.appendChild(checkbox);
@@ -1897,6 +1924,7 @@ function run(settings){
                 });
                 results_area.appendChild(group);
             });
+            results_area.scrollTop = saved_scroll_top;
             if(active_checkbox_id !== null){
                 results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
                     if(checkbox.getAttribute("data-list-id") === active_checkbox_id) checkbox.focus();
@@ -1933,7 +1961,12 @@ function run(settings){
                 kept_ids.add(checkbox.getAttribute("data-list-id"));
             });
             found_lists.forEach((list_info, list_id) => {
-                if(!kept_ids.has(list_id)) found_lists.delete(list_id);
+                if(!kept_ids.has(list_id)){
+                    found_lists.delete(list_id);
+                    return;
+                }
+                //残したエントリは今回の列挙結果と混ざらないよう専用のセクションにまとめる
+                found_lists.set(list_id, {id: list_info.id, path: list_info.path, name: list_info.name, section: i18n_message("ui_list_picker_kept_section")});
             });
             probe_found_ids.clear();
             is_probe_loading = true;
@@ -1941,6 +1974,7 @@ function run(settings){
             probe_started_at = Date.now();
             probe_stable_elapsed = 0;
             probe_last_state = "";
+            probe_expected_path = `/${screen_name}/lists`.toLowerCase();
             render_results();
             status_area.textContent = i18n_message("ui_list_picker_loading");
             navigate_probe_frame(`https://x.com/${screen_name}/lists`);
@@ -1970,6 +2004,8 @@ function run(settings){
                 }
                 //読み込み前の about:blank と本文が無い状態は判定材料にならないので次回に回す
                 if(!probe_document || probe_document.location.href === "about:blank" || !probe_document.body) return;
+                //取得をやり直した直後は前回のページが残っていることがあるため、対象のパスを表示するまで採取しない
+                if(probe_document.location.pathname.toLowerCase() !== probe_expected_path) return;
                 has_probe_document = true;
 
                 const before_size = found_lists.size;
@@ -2008,6 +2044,8 @@ function run(settings){
             stop_probe();
             document.removeEventListener("keydown", on_dialog_keydown);
             window.removeEventListener("blur", on_window_blur);
+            probe_frame.removeEventListener("load", on_probe_frame_load);
+            overlay_observer.disconnect();
             inert_applied_elements.forEach((element) => element.removeAttribute("inert"));
             overlay.remove();
             opener_element?.focus?.();
@@ -2015,6 +2053,22 @@ function run(settings){
         //列挙用の iframe にフォーカスが吸われた場合はダイアログの入力欄へ戻す
         function on_window_blur(){
             if(document.activeElement === probe_frame) user_input.focus();
+        }
+        //読み込みが終わっても中身を読めない(エラーページなど)場合は、制限時間を待たずにエラーとして終了する
+        function on_probe_frame_load(){
+            if(!is_probe_loading) return;
+            let probe_document = null;
+            try{
+                probe_document = probe_frame.contentDocument;
+            }catch(e){
+                //クロスオリジンで中身を読めない場合も読み込み失敗として扱う
+                probe_document = null;
+            }
+            //中身を読める場合は about:blank でも列挙の継続に任せる
+            if(probe_document !== null) return;
+            stop_probe();
+            render_results();
+            status_area.textContent = i18n_message("ui_list_picker_error");
         }
         //Esc で閉じ、Tab はダイアログ内のフォーカス可能要素を循環させる
         function on_dialog_keydown(event){
@@ -2060,10 +2114,12 @@ function run(settings){
             start_probe_from_input();
         });
         select_all_btn.addEventListener("click", function(){
+            is_select_all = true;
             results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = true;});
             update_count();
         });
         clear_all_btn.addEventListener("click", function(){
+            is_select_all = false;
             results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = false;});
             update_count();
         });
@@ -2079,6 +2135,7 @@ function run(settings){
         });
         document.addEventListener("keydown", on_dialog_keydown);
         window.addEventListener("blur", on_window_blur);
+        probe_frame.addEventListener("load", on_probe_frame_load);
 
         render_results();
         user_input.focus();
@@ -2120,6 +2177,7 @@ function run(settings){
     });
     //ボタンとして振る舞わせるため、Enter と Space でもダイアログを開く
     document.getElementById("add_list_multi").addEventListener("keydown", function(event){
+        if(event.repeat) return;
         if(event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         open_list_picker_dialog(is_shift_pressed, this);
@@ -2658,9 +2716,9 @@ function extract_list_id_from_href(href, base_url){
 //リスト一覧ページの Document から、そのページに並んでいるリストを列挙する
 //doc: リスト一覧ページの Document
 //戻り値: {id: リストID, path: "/i/lists/<id>", name: リスト名(取得できない場合は空文字), section: 直前の h2 見出し文(見出しが無い場合は空文字)} の配列
-//走査範囲は [data-testid="primaryColumn"] があればその配下、無ければ doc.body とする。同一 id は最初に見つかった1件のみ含める
+//走査範囲は [data-testid="primaryColumn"] の配下のみとし、それが無い文書(リスト一覧ページ以外や描画前)は空配列を返す。同一 id は最初に見つかった1件のみ含める
 function collect_lists_from_document(doc){
-    const root = doc.querySelector('[data-testid="primaryColumn"]') ?? doc.body;
+    const root = doc.querySelector('[data-testid="primaryColumn"]');
     if(!root) return [];
     const found_lists = new Map();
     let current_section = "";

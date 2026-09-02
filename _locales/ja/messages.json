@@ -227,6 +227,12 @@
   "ui_list_picker_list_fallback_name": {
     "message": "リスト $1"
   },
+  "ui_list_picker_invalid_count": {
+    "message": "解釈できない行: $1"
+  },
+  "ui_list_picker_kept_section": {
+    "message": "選択済み"
+  },
   "msg_list_picker_nothing_selected": {
     "message": "追加するリストを選択するか入力してください"
   },

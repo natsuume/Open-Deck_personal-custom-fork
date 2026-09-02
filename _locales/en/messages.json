@@ -227,6 +227,12 @@
   "ui_list_picker_list_fallback_name": {
     "message": "List $1"
   },
+  "ui_list_picker_invalid_count": {
+    "message": "Unrecognized lines: $1"
+  },
+  "ui_list_picker_kept_section": {
+    "message": "Selected"
+  },
   "msg_list_picker_nothing_selected": {
     "message": "Select or enter at least one list"
   },
