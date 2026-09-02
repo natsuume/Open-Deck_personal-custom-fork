@@ -37,6 +37,7 @@ const ui_icon_define = {
     add_notification_column:"icon/notice_column.svg",
     add_explore_column:"icon/exp_column.svg",
     add_list_column:"icon/list_column.svg",
+    add_list_multi_column:"icon/list_column_multi.svg",
     column_single_rack:"icon/single_view.svg",
     column_second_rack:"icon/second_view.svg",
     profile_save:"icon/profile_save.svg",
@@ -376,6 +377,14 @@ function run(settings){
         height: 69%;
         width: 69%;
     }
+    .dsp_btn_add_list_multi_img{
+        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_list_multi_column)});
+        height: 69%;
+        width: 69%;
+    }
     .dsp_btn_second_rack_img{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
         background-size: cover;
@@ -607,6 +616,62 @@ function run(settings){
         justify-content: center;
         margin: 0 0.5rem 0.5rem 0;
     }
+    /*リストカラム複数追加ダイアログ*/
+    .opd_list_picker_overlay{
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.5);
+    }
+    .opd_list_picker_probe{
+        position: absolute;
+        width: 30rem;
+        height: 30rem;
+        opacity: 0;
+        pointer-events: none;
+        border: 0;
+    }
+    .opd_list_picker_dialog{
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        width: 40rem;
+        max-width: 90%;
+        max-height: 90%;
+        overflow-y: auto;
+        padding: 1rem;
+        background: #efefefeb;
+        border: 1px solid #a9a9a9eb;
+        color: black;
+    }
+    .opd_list_picker_status{
+        min-height: 1.5rem;
+        font-size: 0.9rem;
+    }
+    .opd_list_picker_results{
+        max-height: 20rem;
+        overflow-y: auto;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 5px;
+    }
+    .opd_list_picker_group{
+        margin-bottom: 0.5rem;
+    }
+    .opd_list_picker_manual{
+        width: 100%;
+        min-height: 5rem;
+        box-sizing: border-box;
+    }
+    .opd_list_picker_actions{
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
     .opd_ui_icon_color{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
     }
@@ -647,6 +712,7 @@ function run(settings){
         & .dsp_btn_add_ntfc_img,
         & .dsp_btn_add_explr_img,
         & .dsp_btn_add_list_img,
+        & .dsp_btn_add_list_multi_img,
         & .dsp_btn_second_rack_img,
         & .dsp_btn_profile_add_img,
         & .dsp_btn_profile_delete_img,
@@ -694,6 +760,16 @@ function run(settings){
 
         & #main_bar_empty_column, div[opd_column_type="empty_column"], div[opd_column_type="second_empty_column"] {
             filter: brightness(0.7);
+        }
+
+        & .opd_list_picker_dialog {
+            background: #2e2e2e;
+            border: 1px solid #5d5d5d;
+            color: white;
+        }
+
+        & .opd_list_picker_results {
+            background: #474747;
         }
     }
 
@@ -798,7 +874,7 @@ function run(settings){
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;background: white;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="add_post" title="${i18n_message("ui_add_post_column_title")}"><div class="dsp_btn_add_post_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_toggle_second_rack_title")}" id="second_rack"><div class="dsp_btn_second_rack_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
+    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="add_post" title="${i18n_message("ui_add_post_column_title")}"><div class="dsp_btn_add_post_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_toggle_second_rack_title")}" id="second_rack"><div class="dsp_btn_second_rack_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
     //let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 100px;text-align: center;background-color: white;"><div><p style="margin-top:0;padding-top:1em;">Open-Deck<br>Prototype<br>v${manifest.version}</p><hr><p>Debug<br><input type="button" id="init_settings" value="init settings"/><br><input type="button" id="profile_load_save" value="Profile Load"/><br><input type="button" id="dnr_reload" value="dNR_Reload"/><br><input type="button" id="ext_reload" value="Ext_Reload"/></p><hr><p><input type="button" id="add_timeline" value="Add TimeLine"/> <div class="dsp_btn_parent"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_explr_img"></div></div> </p><p><input type="button" id="add_notify" value="Add Notification"/></p><p><input type="button" id="add_explore" value="Add Explore"/><hr><input type="button" id="second_rack" value="Second Rack"/><hr><input type="button" id="profile_save" value="Profile_Save"/><br><input type="button" id="profile_delete" value="Profile_Delete"/><br>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 110px;"></div></section>`;
     let main_column_html = ``;
     let second_column_html = ``;
@@ -1616,31 +1692,57 @@ function run(settings){
     });
     //Explore系カラム追加(Explore本体・リストカラムの共通処理)。insert_first が真なら末尾ではなく先頭に追加する
     function add_explore_column(initial_path, insert_first = is_shift_pressed){
+        add_explore_columns([initial_path], insert_first);
+    }
+    //Explore系カラムをパス配列からまとめて追加する
+    //initial_paths: 各カラムが初期表示するパスの配列(配列の順序どおりに並ぶ)、insert_first: 真なら末尾ではなく先頭に追加する
+    //全カラムのHTMLを1回のinsertAdjacentHTMLで挿入し、挿入後の後処理(iframeへのCSS適用・ドラッグ登録・閉じるボタン登録・設定保存)は追加件数に依らずそれぞれ1回だけ実行する
+    //initial_paths が空の場合は何もしない
+    function add_explore_columns(initial_paths, insert_first = is_shift_pressed){
+        if(initial_paths.length === 0) return;
         const empty_column = document.querySelector(".dsp_column_emptycolumn");
         const first_column = empty_column?.closest('div')?.querySelector('section[draggable="true"]');
         const add_target_column = (insert_first && first_column) ? first_column : empty_column;
         
-        const new_column = fill_column_template(default_element["explore"]["html"], {
-            column_num: create_random_id(),
-            column_banner_ch: "",
-            column_top_bar_ch: "checked",
-            column_tw_view_mode: "0",
-            column_pinned_ch: "",
-            column_pinned_save_path: "",
-            column_save_title: "",
-            column_width_num: "30",
-            column_auto_reload_ch: "",
-            column_auto_reload_time: "10000",
-            column_title: get_explore_column_title(initial_path),
-            column_save_path: initial_path,
-        });
-        add_target_column.insertAdjacentHTML("beforebegin", new_column);
+        let new_columns = "";
+        for (let index = 0; index < initial_paths.length; index++) {
+            new_columns += fill_column_template(default_element["explore"]["html"], {
+                column_num: create_random_id(),
+                column_banner_ch: "",
+                column_top_bar_ch: "checked",
+                column_tw_view_mode: "0",
+                column_pinned_ch: "",
+                column_pinned_save_path: "",
+                column_save_title: "",
+                column_width_num: "30",
+                column_auto_reload_ch: "",
+                column_auto_reload_time: "10000",
+                column_title: get_explore_column_title(initial_paths[index]),
+                column_save_path: initial_paths[index],
+            });
+        }
+        add_target_column.insertAdjacentHTML("beforebegin", new_columns);
         add_target_column.scrollIntoView({behavior: "smooth",inline: "end"});
         const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview]');
         append_object_css("add_column", all_webview);
         column_dd();
         column_close();
         column_settings_save("", last_load_profile);
+    }
+    //リストカラム複数追加の選択ダイアログを開く
+    //insert_first: 追加するカラムを末尾ではなく先頭に入れる場合は true、opener_element: ダイアログを閉じたときにフォーカスを戻す要素
+    //#opd_main_element の直下にオーバーレイ #opd_list_picker_overlay を1つだけ生成する(既に開いている場合は生成しない)。オーバーレイは次の要素を持つ:
+    //  ・role="dialog" aria-modal="true" のダイアログ本体
+    //  ・リスト列挙用の非表示 iframe(リストが描画されるだけの画面内サイズを持ち、opacity 0・pointer-events none で操作対象から外す)
+    //  ・リスト一覧を取得するユーザー名の入力欄と取得ボタン
+    //  ・取得状態の表示(loading / partial / not_detected / error)
+    //  ・検出したリストのチェックボックス一覧と、全て選択・選択解除のボタン
+    //  ・追加するリストの URL か ID を1行1件で入力する textarea
+    //  ・追加するカラム件数の表示と、追加ボタン・キャンセルボタン
+    //Esc キー・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe を破棄して opener_element にフォーカスを戻す
+    //追加時はチェックしたリストのパスと手動入力から解釈したパスを結合し、重複を除去して add_explore_columns に渡す
+    //ダイアログ内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない(カラムを一括走査するセレクタに拾われるため)
+    function open_list_picker_dialog(insert_first, opener_element){
     }
     //Explore(ユニバーサル)カラム追加
     document.getElementById("add_explore").addEventListener("click", function(){
@@ -1664,6 +1766,10 @@ function run(settings){
             }
         }
         add_explore_column(list_path, insert_first);
+    });
+    //リストカラム複数追加(選択ダイアログを開く)。ダイアログ表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
+    document.getElementById("add_list_multi").addEventListener("click", function(){
+        open_list_picker_dialog(is_shift_pressed, this);
     });
     //プロファイル保存ボタン
     document.getElementById("profile_save").addEventListener("click", function(){
@@ -2177,6 +2283,26 @@ function resolve_list_column_path(input){
     const screen_name_match = value.match(/^@?([A-Za-z0-9_]{1,15})$/);
     if(screen_name_match && is_valid_screen_name(screen_name_match[1])) return `/${screen_name_match[1]}/lists`;
     return null;
+}
+//リスト一覧ページの anchor の href からリスト ID を取り出す
+//href: anchor の href 文字列(相対・絶対どちらでもよい)、base_url: 相対 href を解決する基準 URL
+//解決したパスが /i/lists/<id> (以降にサブパスが続いてもよい) の場合はその <id> を文字列で返し、それ以外・URL として解決できない場合は null を返す
+function extract_list_id_from_href(href, base_url){
+    return null;
+}
+//リスト一覧ページの Document から、そのページに並んでいるリストを列挙する
+//doc: リスト一覧ページの Document
+//戻り値: {id: リストID, path: "/i/lists/<id>", name: リスト名(取得できない場合は空文字), section: 直前の h2 見出し文(見出しが無い場合は空文字)} の配列
+//走査範囲は [data-testid="primaryColumn"] があればその配下、無ければ doc.body とする。同一 id は最初に見つかった1件のみ含める
+function collect_lists_from_document(doc){
+    return [];
+}
+//手動入力欄の文字列を1行1件として解釈し、リストカラムのパスに変換する
+//text: textarea の文字列
+//戻り値: {paths: 解決できたパスの配列(重複除去済み。入力順を保つ), invalid: 解決できなかった入力行の配列}
+//空行は無視し、各行は resolve_list_column_path で解決する
+function parse_manual_list_entries(text){
+    return {paths: [], invalid: []};
 }
 //Cookieからカラーモードを取得する
 function get_cookie_color_mode() {
