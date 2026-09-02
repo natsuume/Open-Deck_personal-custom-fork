@@ -2001,6 +2001,7 @@ function run(settings){
         //読み込み完了かつ今回の検出件数・未解決の listCell 数・文書高が一定時間変化しなければ完了、制限時間の経過で打ち切り、中身を読めない場合はエラーとして終了する
         //完了・打ち切りの判定には今回の列挙で検出した件数と未解決の listCell 数を使い、選択を保つために残した前回のエントリは判定に含めない
         //今回の列挙で1件も検出していないあいだは安定しても完了せず、制限時間の経過で打ち切る
+        //ヘルパー(data-opd-list-picker-helper 属性)の状態が ready か failed に定まるまでは、スクロール・未解決セルの累積・安定時間の加算を行わない
         function start_probe(screen_name){
             stop_probe();
             //取得し直してもチェック済みのリストは選択を保てるよう残す
@@ -2113,9 +2114,9 @@ function run(settings){
                 //未解決のセルはヘルパーの走査で減っていくため、安定状態の判定材料に含める
                 const unresolved_count = probe_unresolved_keys.size;
                 const probe_state = `${probe_found_ids.size}:${unresolved_count}:${scrolling_element?.scrollHeight}`;
-                //ヘルパーの状態が定まるまではスクロールも走査もしていないため、状態が変わらなくても安定とはみなさない
+                //ヘルパーの状態が定まるまではスクロールも走査もしていないため、状態が変わらなくても安定とはみなさず、比較用の前回状態も持ち越さない
                 probe_stable_elapsed = (is_helper_settled && probe_state === probe_last_state) ? probe_stable_elapsed + probe_interval_ms : 0;
-                probe_last_state = probe_state;
+                probe_last_state = is_helper_settled ? probe_state : "";
 
                 if(probe_document.readyState === "complete" && probe_found_ids.size > 0 && probe_stable_elapsed >= probe_stable_ms){
                     stop_probe();
@@ -2842,40 +2843,43 @@ function first_non_empty_span_text(element){
 //listCell からリスト ID とリスト名を取り出す
 //cell: [data-testid="listCell"] の要素、base_url: href を絶対 URL に解決するための基準 URL
 //戻り値: {id: リストID, name: リスト名(取得できない場合は空文字)}。ID を決められない場合は null
-//ID は配下に /i/lists/<id> へ解決できる a[href] があればその ID を優先し、配下に無ければセルを包む祖先の a[href] も見る
+//ID は配下に /i/lists/<id> へ解決できる a[href] があればその ID を優先し、配下に無ければセル自身またはセルを包む祖先の a[href] も見る
 //どちらのリンクからも取れなければ有効な data-opd-list-id を使う
-//名前は、ID がリンク由来で data-opd-list-id も同じ ID を指している場合と ID が属性由来の場合に data-opd-list-name(trim 後非空)を使う
-//それ以外(ID がリンク由来で、属性が無い・属性名が空・属性が別のリストを指している場合)は、そのリンク配下の最初の非空 span テキスト、無ければリンク自体のテキスト、無ければセル内の最初の非空 span テキストの順に使う
+//名前は、data-opd-list-id が採用した ID と同じものを指し data-opd-list-name が trim 後非空ならその属性名を使う
+//そうでない場合、ID が配下リンク由来ならそのリンク配下の最初の非空 span テキスト、無ければリンク自体のテキスト、無ければセル内の最初の非空 span テキストの順に使う
+//ID が祖先リンク由来の場合はリンクがセルの外側の文言も含むためセル内の最初の非空 span テキストを使い、ID が属性由来の場合も同じくセル内の最初の非空 span テキストを使う
 function resolve_list_cell_info(cell, base_url){
-    let link_element = null;
-    let link_list_id = null;
+    let descendant_link = null;
+    let descendant_list_id = null;
     const cell_links = cell.querySelectorAll("a[href]");
     for (let index = 0; index < cell_links.length; index++) {
         const found_list_id = extract_list_id_from_href(cell_links[index].getAttribute("href"), base_url);
         if(found_list_id !== null){
-            link_element = cell_links[index];
-            link_list_id = found_list_id;
+            descendant_link = cell_links[index];
+            descendant_list_id = found_list_id;
             break;
         }
     }
-    if(link_list_id === null){
-        //セル全体がリンクで包まれている描画もあるため、配下に無ければ最も近い祖先のリンクを見る
+    let ancestor_list_id = null;
+    if(descendant_list_id === null){
+        //セル全体がリンクで包まれている描画もあるため、配下に無ければセル自身から祖先方向の最も近いリンクを見る
         const ancestor_link = cell.closest("a[href]");
-        const ancestor_list_id = ancestor_link === null ? null : extract_list_id_from_href(ancestor_link.getAttribute("href"), base_url);
-        if(ancestor_list_id !== null){
-            link_element = ancestor_link;
-            link_list_id = ancestor_list_id;
-        }
+        ancestor_list_id = ancestor_link === null ? null : extract_list_id_from_href(ancestor_link.getAttribute("href"), base_url);
     }
     const attribute_list_id = cell.getAttribute("data-opd-list-id");
     const attribute_list_name = (cell.getAttribute("data-opd-list-name") ?? "").trim();
-    if(link_list_id !== null){
+    if(descendant_list_id !== null){
         //属性が同じリストを指しているときだけ、ヘルパーが取り出したリスト名をリンクの表示名より優先する
-        if(attribute_list_id === link_list_id && attribute_list_name !== "") return {id: link_list_id, name: attribute_list_name};
-        const link_span_name = first_non_empty_span_text(link_element);
-        if(link_span_name !== "") return {id: link_list_id, name: link_span_name};
-        const link_text_name = link_element.textContent.trim();
-        return {id: link_list_id, name: link_text_name !== "" ? link_text_name : first_non_empty_span_text(cell)};
+        if(attribute_list_id === descendant_list_id && attribute_list_name !== "") return {id: descendant_list_id, name: attribute_list_name};
+        const link_span_name = first_non_empty_span_text(descendant_link);
+        if(link_span_name !== "") return {id: descendant_list_id, name: link_span_name};
+        const link_text_name = descendant_link.textContent.trim();
+        return {id: descendant_list_id, name: link_text_name !== "" ? link_text_name : first_non_empty_span_text(cell)};
+    }
+    if(ancestor_list_id !== null){
+        //祖先リンクはセルの外側の文言も含むため、名前はセル側から取る
+        if(attribute_list_id === ancestor_list_id && attribute_list_name !== "") return {id: ancestor_list_id, name: attribute_list_name};
+        return {id: ancestor_list_id, name: first_non_empty_span_text(cell)};
     }
     if(!is_valid_list_id(attribute_list_id)) return null;
     return {id: attribute_list_id, name: attribute_list_name !== "" ? attribute_list_name : first_non_empty_span_text(cell)};
