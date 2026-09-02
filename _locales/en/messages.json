@@ -182,6 +182,72 @@
   "msg_list_column_path_prompt": {
     "message": "Could not detect your username.\nEnter a username (with or without @) to open its lists, or a list URL / ID"
   },
+  "ui_add_list_multi_column_title": {
+    "message": "Add multiple list columns"
+  },
+  "ui_list_picker_header": {
+    "message": "Add multiple list columns"
+  },
+  "ui_list_picker_user_label": {
+    "message": "User whose lists to fetch"
+  },
+  "ui_list_picker_fetch_button": {
+    "message": "Fetch"
+  },
+  "ui_list_picker_loading": {
+    "message": "Fetching lists..."
+  },
+  "ui_list_picker_partial": {
+    "message": "Fetching timed out. Showing partial results"
+  },
+  "ui_list_picker_not_detected": {
+    "message": "Could not detect lists automatically. Enter list URLs or IDs below"
+  },
+  "ui_list_picker_error": {
+    "message": "Could not load the lists page. Enter list URLs or IDs below"
+  },
+  "ui_list_picker_select_all": {
+    "message": "Select all"
+  },
+  "ui_list_picker_clear_all": {
+    "message": "Clear selection"
+  },
+  "ui_list_picker_manual_label": {
+    "message": "List URLs or IDs to add (one per line)"
+  },
+  "ui_list_picker_selected_count": {
+    "message": "Columns to add: $1"
+  },
+  "ui_list_picker_add_button": {
+    "message": "Add columns"
+  },
+  "ui_list_picker_cancel_button": {
+    "message": "Cancel"
+  },
+  "ui_list_picker_list_fallback_name": {
+    "message": "List $1"
+  },
+  "ui_list_picker_invalid_count": {
+    "message": "Unrecognized lines: $1"
+  },
+  "ui_list_picker_kept_section": {
+    "message": "Selected"
+  },
+  "ui_list_picker_login_required": {
+    "message": "Cannot fetch lists because you are not logged in to X. Enter list URLs or IDs below"
+  },
+  "msg_list_picker_nothing_selected": {
+    "message": "Select or enter at least one list"
+  },
+  "msg_list_picker_invalid_manual": {
+    "message": "Could not interpret these entries:\n$1"
+  },
+  "msg_list_picker_many_columns_confirm": {
+    "message": "Add $1 columns? Many columns consume memory and network. Continue?"
+  },
+  "msg_list_picker_user_required": {
+    "message": "Enter a username or a lists page URL. Put list URLs or IDs in the text area below"
+  },
   "msg_auto_reload_set": {
     "message": "Auto-load interval set to $1 seconds."
   },

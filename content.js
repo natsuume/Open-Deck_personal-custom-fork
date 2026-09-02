@@ -37,6 +37,7 @@ const ui_icon_define = {
     add_notification_column:"icon/notice_column.svg",
     add_explore_column:"icon/exp_column.svg",
     add_list_column:"icon/list_column.svg",
+    add_list_multi_column:"icon/list_column_multi.svg",
     column_single_rack:"icon/single_view.svg",
     column_second_rack:"icon/second_view.svg",
     profile_save:"icon/profile_save.svg",
@@ -336,6 +337,10 @@ function run(settings){
         background: #d5d5d5;
         cursor: pointer;
     }
+    .dsp_btn_parent:focus-visible{
+        outline: 2px solid currentColor;
+        outline-offset: -2px;
+    }
     .dsp_btn_add_post_img{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
         background-size: cover;
@@ -373,6 +378,14 @@ function run(settings){
         background-size: cover;
         background-repeat: no-repeat;
         background-image: url(${chrome.runtime.getURL(ui_icon_define.add_list_column)});
+        height: 69%;
+        width: 69%;
+    }
+    .dsp_btn_add_list_multi_img{
+        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_list_multi_column)});
         height: 69%;
         width: 69%;
     }
@@ -607,6 +620,81 @@ function run(settings){
         justify-content: center;
         margin: 0 0.5rem 0.5rem 0;
     }
+    /*リストカラム複数追加ダイアログ*/
+    .opd_list_picker_overlay{
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.5);
+    }
+    .opd_list_picker_probe{
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 40rem;
+        max-width: 100%;
+        height: 100%;
+        opacity: 0;
+        pointer-events: none;
+        border: 0;
+    }
+    .opd_list_picker_dialog{
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        width: 40rem;
+        max-width: 90%;
+        max-height: 90%;
+        overflow-y: auto;
+        padding: 1rem;
+        background: #efefefeb;
+        border: 1px solid #a9a9a9eb;
+        color: black;
+    }
+    .opd_list_picker_status{
+        min-height: 1.5rem;
+        font-size: 0.9rem;
+    }
+    .opd_list_picker_results{
+        min-height: 10rem;
+        height: 20rem;
+        overflow-y: auto;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 5px;
+    }
+    .opd_list_picker_results label{
+        display: block;
+        overflow-wrap: anywhere;
+    }
+    .opd_list_picker_skeleton{
+        height: 1.2rem;
+        margin: 0.4rem 0;
+        border-radius: 4px;
+        background: #bdbdbd;
+    }
+    .opd_list_picker_group{
+        margin-bottom: 0.5rem;
+    }
+    .opd_list_picker_manual{
+        width: 100%;
+        min-height: 5rem;
+        box-sizing: border-box;
+    }
+    .opd_list_picker_count{
+        min-height: 2.6rem;
+    }
+    .opd_list_picker_actions{
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
     .opd_ui_icon_color{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
     }
@@ -647,6 +735,7 @@ function run(settings){
         & .dsp_btn_add_ntfc_img,
         & .dsp_btn_add_explr_img,
         & .dsp_btn_add_list_img,
+        & .dsp_btn_add_list_multi_img,
         & .dsp_btn_second_rack_img,
         & .dsp_btn_profile_add_img,
         & .dsp_btn_profile_delete_img,
@@ -694,6 +783,20 @@ function run(settings){
 
         & #main_bar_empty_column, div[opd_column_type="empty_column"], div[opd_column_type="second_empty_column"] {
             filter: brightness(0.7);
+        }
+
+        & .opd_list_picker_dialog {
+            background: #2e2e2e;
+            border: 1px solid #5d5d5d;
+            color: white;
+        }
+
+        & .opd_list_picker_results {
+            background: #474747;
+        }
+
+        & .opd_list_picker_skeleton {
+            background: #7a7a7a;
         }
     }
 
@@ -798,7 +901,7 @@ function run(settings){
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;background: white;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="add_post" title="${i18n_message("ui_add_post_column_title")}"><div class="dsp_btn_add_post_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_toggle_second_rack_title")}" id="second_rack"><div class="dsp_btn_second_rack_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
+    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="add_post" title="${i18n_message("ui_add_post_column_title")}"><div class="dsp_btn_add_post_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_toggle_second_rack_title")}" id="second_rack"><div class="dsp_btn_second_rack_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
     //let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 100px;text-align: center;background-color: white;"><div><p style="margin-top:0;padding-top:1em;">Open-Deck<br>Prototype<br>v${manifest.version}</p><hr><p>Debug<br><input type="button" id="init_settings" value="init settings"/><br><input type="button" id="profile_load_save" value="Profile Load"/><br><input type="button" id="dnr_reload" value="dNR_Reload"/><br><input type="button" id="ext_reload" value="Ext_Reload"/></p><hr><p><input type="button" id="add_timeline" value="Add TimeLine"/> <div class="dsp_btn_parent"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_explr_img"></div></div> </p><p><input type="button" id="add_notify" value="Add Notification"/></p><p><input type="button" id="add_explore" value="Add Explore"/><hr><input type="button" id="second_rack" value="Second Rack"/><hr><input type="button" id="profile_save" value="Profile_Save"/><br><input type="button" id="profile_delete" value="Profile_Delete"/><br>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 110px;"></div></section>`;
     let main_column_html = ``;
     let second_column_html = ``;
@@ -1616,31 +1719,467 @@ function run(settings){
     });
     //Explore系カラム追加(Explore本体・リストカラムの共通処理)。insert_first が真なら末尾ではなく先頭に追加する
     function add_explore_column(initial_path, insert_first = is_shift_pressed){
+        add_explore_columns([initial_path], insert_first);
+    }
+    //Explore系カラムをパス配列からまとめて追加する
+    //initial_paths: 各カラムが初期表示するパスの配列(配列の順序どおりに並ぶ)、insert_first: 真なら末尾ではなく先頭に追加する
+    //全カラムのHTMLを1回のinsertAdjacentHTMLで挿入し、挿入後の後処理(iframeへのCSS適用・ドラッグ登録・閉じるボタン登録・設定保存)は追加件数に依らずそれぞれ1回だけ実行する
+    //initial_paths が空の場合は何もしない
+    function add_explore_columns(initial_paths, insert_first = is_shift_pressed){
+        if(initial_paths.length === 0) return;
         const empty_column = document.querySelector(".dsp_column_emptycolumn");
         const first_column = empty_column?.closest('div')?.querySelector('section[draggable="true"]');
         const add_target_column = (insert_first && first_column) ? first_column : empty_column;
         
-        const new_column = fill_column_template(default_element["explore"]["html"], {
-            column_num: create_random_id(),
-            column_banner_ch: "",
-            column_top_bar_ch: "checked",
-            column_tw_view_mode: "0",
-            column_pinned_ch: "",
-            column_pinned_save_path: "",
-            column_save_title: "",
-            column_width_num: "30",
-            column_auto_reload_ch: "",
-            column_auto_reload_time: "10000",
-            column_title: get_explore_column_title(initial_path),
-            column_save_path: initial_path,
-        });
-        add_target_column.insertAdjacentHTML("beforebegin", new_column);
+        let new_columns = "";
+        for (let index = 0; index < initial_paths.length; index++) {
+            new_columns += fill_column_template(default_element["explore"]["html"], {
+                column_num: create_random_id(),
+                column_banner_ch: "",
+                column_top_bar_ch: "checked",
+                column_tw_view_mode: "0",
+                column_pinned_ch: "",
+                column_pinned_save_path: "",
+                column_save_title: "",
+                column_width_num: "30",
+                column_auto_reload_ch: "",
+                column_auto_reload_time: "10000",
+                column_title: get_explore_column_title(initial_paths[index]),
+                column_save_path: initial_paths[index],
+            });
+        }
+        add_target_column.insertAdjacentHTML("beforebegin", new_columns);
         add_target_column.scrollIntoView({behavior: "smooth",inline: "end"});
         const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview]');
         append_object_css("add_column", all_webview);
         column_dd();
         column_close();
         column_settings_save("", last_load_profile);
+    }
+    //リストカラム複数追加の選択ダイアログを開く
+    //insert_first: 追加するカラムを末尾ではなく先頭に入れる場合は true、opener_element: ダイアログを閉じたときにフォーカスを戻す要素
+    //#opd_main_element の直下にオーバーレイ #opd_list_picker_overlay を1つだけ生成する(既に開いている場合は生成しない)。オーバーレイは次の要素を持つ:
+    //  ・role="dialog" aria-modal="true" のダイアログ本体
+    //  ・リスト列挙用の非表示 iframe(リストが描画されるだけの画面内サイズを持ち、opacity 0・pointer-events none で操作対象から外す)
+    //  ・リスト一覧を取得するユーザー名の入力欄と取得ボタン
+    //  ・取得状態の表示(loading / partial / not_detected / error / login_required)
+    //  ・検出したリストのチェックボックス一覧と、全て選択・選択解除のボタン
+    //  ・追加するリストの URL か ID を1行1件で入力する textarea
+    //  ・追加するカラム件数の表示と、追加ボタン・キャンセルボタン
+    //Esc キー・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe を破棄して opener_element にフォーカスを戻す
+    //開いているあいだは overlay 以外の #opd_main_element の子要素を inert にして背景を操作対象から外し、閉じるときに解除する(元から inert が付いていた要素は触らない)
+    //取得をやり直したときはチェック済みのエントリを「選択済み」セクションとして残し、完了・打ち切りの判定には今回の列挙で検出した件数だけを使う
+    //追加時はチェックしたリストのパスと手動入力から解釈したパスを結合し、重複を除去して add_explore_columns に渡す
+    //ダイアログ内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない(カラムを一括走査するセレクタに拾われるため)
+    function open_list_picker_dialog(insert_first, opener_element){
+        const main_element = document.getElementById("opd_main_element");
+        if(main_element === null) return;
+        //ダイアログ内でフォーカスを受け取れる要素(非表示・disabled のものを除く)を文書順で返す
+        function get_focusable_elements(dialog_element){
+            const focus_candidates = dialog_element.querySelectorAll('input, textarea, button, [tabindex]:not([tabindex="-1"])');
+            return Array.from(focus_candidates).filter((element) => !element.disabled && element.offsetParent !== null);
+        }
+        //既に開いている場合は二重に生成せず、開いているダイアログへフォーカスを移す
+        const opened_overlay = document.getElementById("opd_list_picker_overlay");
+        if(opened_overlay !== null){
+            const opened_dialog = opened_overlay.querySelector(".opd_list_picker_dialog");
+            if(opened_dialog !== null) get_focusable_elements(opened_dialog)[0]?.focus();
+            return;
+        }
+
+        //選択のために残したエントリに付けるセクション名
+        const kept_section_name = i18n_message("ui_list_picker_kept_section");
+        const probe_interval_ms = 400;
+        const probe_stable_ms = 2000;
+        const probe_limit_ms = 15000;
+        const many_columns_threshold = 10;
+
+        const overlay = document.createElement("div");
+        overlay.id = "opd_list_picker_overlay";
+        overlay.className = "opd_list_picker_overlay";
+        //骨格は拡張が持つ静的な文字列だけで組み立てる(X 由来の文字列は生成後に textContent などで入れる)
+        overlay.innerHTML = `<iframe class="opd_list_picker_probe" aria-hidden="true" tabindex="-1" title=""></iframe>
+        <div class="opd_list_picker_dialog" role="dialog" aria-modal="true" aria-labelledby="opd_list_picker_title">
+        <h2 id="opd_list_picker_title">${i18n_message("ui_list_picker_header")}</h2>
+        <div><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label> <input class="opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"> <input class="opd_list_picker_fetch_btn" type="button" value="${i18n_message("ui_list_picker_fetch_button")}"></div>
+        <div class="opd_list_picker_status" role="status" aria-live="polite"></div>
+        <div class="opd_list_picker_results"></div>
+        <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"> <input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
+        <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><textarea class="opd_list_picker_manual" id="opd_list_picker_manual_input" rows="4"></textarea></div>
+        <div class="opd_list_picker_count" id="opd_list_picker_count"></div>
+        <div class="opd_list_picker_actions"><input class="opd_list_picker_add_btn" type="button" aria-describedby="opd_list_picker_count" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
+        </div>`;
+        main_element.appendChild(overlay);
+        //ダイアログを開いているあいだは背景を操作対象から外す(元から inert のものは対象にしない)
+        const inert_applied_elements = [];
+        Array.from(main_element.children).forEach((child) => {
+            if(child === overlay || child.hasAttribute("inert")) return;
+            child.setAttribute("inert", "");
+            inert_applied_elements.push(child);
+        });
+        //オーバーレイが close_dialog を経由せず外された場合でも、閉じるときの後始末を必ず通す
+        const overlay_observer = new MutationObserver(function(){
+            if(overlay.isConnected) return;
+            close_dialog();
+        });
+        overlay_observer.observe(main_element, {childList: true});
+
+        const dialog = overlay.querySelector(".opd_list_picker_dialog");
+        const probe_frame = overlay.querySelector(".opd_list_picker_probe");
+        const user_input = overlay.querySelector(".opd_list_picker_user_input");
+        const fetch_btn = overlay.querySelector(".opd_list_picker_fetch_btn");
+        const status_area = overlay.querySelector(".opd_list_picker_status");
+        const results_area = overlay.querySelector(".opd_list_picker_results");
+        const select_all_btn = overlay.querySelector(".opd_list_picker_select_all");
+        const clear_all_btn = overlay.querySelector(".opd_list_picker_clear_all");
+        const manual_textarea = overlay.querySelector(".opd_list_picker_manual");
+        const count_area = overlay.querySelector(".opd_list_picker_count");
+        const add_btn = overlay.querySelector(".opd_list_picker_add_btn");
+        const cancel_btn = overlay.querySelector(".opd_list_picker_cancel_btn");
+
+        //列挙で見つかったリスト(キーはリストID)。再描画してもチェック状態はIDで引き継ぐ
+        const found_lists = new Map();
+        //今回の列挙で検出したリストID。前回の取得から選択のために残したエントリと区別し、完了・打ち切りの判定に使う
+        const probe_found_ids = new Set();
+        let probe_interval = null;
+        let probe_started_at = 0;
+        let probe_stable_elapsed = 0;
+        let probe_last_state = "";
+        let is_probe_loading = false;
+        //本文のある document を一度でも読めたか(打ち切り時に未検出とエラーを区別する)
+        let has_probe_document = false;
+        //背景クリック判定用。押下と離上の両方が背景で起きたときだけ閉じる
+        let is_overlay_mousedown = false;
+        let is_overlay_mouseup = false;
+        //ダイアログ内で最後にフォーカスを受けた要素。列挙用 iframe にフォーカスを奪われたときの戻り先に使う
+        let last_focused_element = null;
+        //今回の取得対象のパス(小文字)。iframe がこのパスを表示するまでは採取しない
+        let probe_expected_path = "";
+
+        //チェックしたリストと手動入力を結合し、重複を除いた追加対象のパスと、解釈できなかった入力行を返す
+        function collect_add_paths(){
+            const manual_entries = parse_manual_list_entries(manual_textarea.value);
+            //チェックボックスの値も手動入力と同じ解決関数を通し、リストのパスとして解釈できるものだけを使う
+            const checked_paths = Array.from(results_area.querySelectorAll('input[type="checkbox"]:checked')).map((checkbox) => resolve_list_column_path(checkbox.value)).filter((list_path) => list_path !== null);
+            const paths = [];
+            checked_paths.concat(manual_entries.paths).forEach((list_path) => {
+                if(!paths.includes(list_path)) paths.push(list_path);
+            });
+            return {paths: paths, invalid: manual_entries.invalid};
+        }
+        //実際に追加されるカラム件数を表示する。解釈できない入力行があればその件数も添える
+        function update_count(){
+            const add_targets = collect_add_paths();
+            let count_text = i18n_message("ui_list_picker_selected_count", [String(add_targets.paths.length)]);
+            if(add_targets.invalid.length > 0) count_text += ` ${i18n_message("ui_list_picker_invalid_count", [String(add_targets.invalid.length)])}`;
+            count_area.textContent = count_text;
+        }
+        //見つかったリストをセクションごとにまとめて結果領域へ描画する。読み込み中で0件のあいだは skeleton を表示する
+        function render_results(){
+            const saved_scroll_top = results_area.scrollTop;
+            const active_element = document.activeElement;
+            const active_checkbox_id = (active_element !== null && results_area.contains(active_element) && active_element.type === "checkbox")
+                ? active_element.getAttribute("data-list-id") : null;
+            const checked_ids = new Set();
+            results_area.querySelectorAll('input[type="checkbox"]:checked').forEach((checkbox) => {
+                checked_ids.add(checkbox.getAttribute("data-list-id"));
+            });
+            results_area.textContent = "";
+            if(found_lists.size === 0){
+                if(is_probe_loading){
+                    for (let index = 0; index < 5; index++) {
+                        const skeleton = document.createElement("div");
+                        skeleton.className = "opd_list_picker_skeleton";
+                        results_area.appendChild(skeleton);
+                    }
+                }
+                update_count();
+                return;
+            }
+            const sections = new Map();
+            found_lists.forEach((list_info) => {
+                if(!sections.has(list_info.section)) sections.set(list_info.section, []);
+                sections.get(list_info.section).push(list_info);
+            });
+            sections.forEach((section_lists, section_name) => {
+                const group = document.createElement("div");
+                group.className = "opd_list_picker_group";
+                if(section_name !== ""){
+                    const section_heading = document.createElement("h3");
+                    section_heading.textContent = section_name;
+                    group.appendChild(section_heading);
+                }
+                section_lists.forEach((list_info) => {
+                    const item_label = document.createElement("label");
+                    const checkbox = document.createElement("input");
+                    checkbox.type = "checkbox";
+                    checkbox.value = list_info.path;
+                    checkbox.setAttribute("data-list-id", list_info.id);
+                    checkbox.checked = checked_ids.has(list_info.id);
+                    checkbox.addEventListener("change", update_count);
+                    const name_text = document.createElement("span");
+                    name_text.textContent = list_info.name !== "" ? list_info.name : i18n_message("ui_list_picker_list_fallback_name", [list_info.id]);
+                    item_label.appendChild(checkbox);
+                    item_label.appendChild(name_text);
+                    group.appendChild(item_label);
+                });
+                results_area.appendChild(group);
+            });
+            results_area.scrollTop = saved_scroll_top;
+            if(active_checkbox_id !== null){
+                results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+                    if(checkbox.getAttribute("data-list-id") === active_checkbox_id) checkbox.focus();
+                });
+            }
+            update_count();
+        }
+        //probe iframe の表示先を差し替える。同一オリジンで操作できる場合は履歴を残さない replace を使う
+        function navigate_probe_frame(url){
+            try{
+                probe_frame.contentWindow.location.replace(url);
+            }catch(e){
+                //contentWindow を操作できない場合は src の差し替えにフォールバックする
+                probe_frame.src = url;
+            }
+        }
+        //列挙用のタイマーを止め、iframe が読み込んだページを解放する
+        function stop_probe(){
+            if(probe_interval !== null){
+                clearInterval(probe_interval);
+                probe_interval = null;
+            }
+            is_probe_loading = false;
+            navigate_probe_frame("about:blank");
+        }
+        //指定ユーザーのリスト一覧ページを非表示 iframe に読み込み、描画されたリストを定期的に拾い集める
+        //読み込み完了かつ今回の検出件数と文書高が一定時間変化しなければ完了、制限時間の経過で打ち切り、中身を読めない場合はエラーとして終了する
+        //完了・打ち切りの判定には今回の列挙で検出した件数だけを使い、選択を保つために残した前回のエントリは判定に含めない
+        function start_probe(screen_name){
+            stop_probe();
+            //取得し直してもチェック済みのリストは選択を保てるよう残す
+            const kept_ids = new Set();
+            results_area.querySelectorAll('input[type="checkbox"]:checked').forEach((checkbox) => {
+                kept_ids.add(checkbox.getAttribute("data-list-id"));
+            });
+            found_lists.forEach((list_info, list_id) => {
+                if(!kept_ids.has(list_id)){
+                    found_lists.delete(list_id);
+                    return;
+                }
+                //残したエントリは今回の列挙結果と混ざらないよう専用のセクションにまとめる
+                found_lists.set(list_id, {id: list_info.id, path: list_info.path, name: list_info.name, section: kept_section_name, is_kept: true});
+            });
+            probe_found_ids.clear();
+            is_probe_loading = true;
+            has_probe_document = false;
+            probe_started_at = Date.now();
+            probe_stable_elapsed = 0;
+            probe_last_state = "";
+            probe_expected_path = `/${screen_name}/lists`.toLowerCase();
+            render_results();
+            status_area.textContent = i18n_message("ui_list_picker_loading");
+            navigate_probe_frame(`https://x.com/${screen_name}/lists`);
+
+            probe_interval = setInterval(function(){
+                let probe_document = null;
+                try{
+                    probe_document = probe_frame.contentDocument;
+                }catch(e){
+                    //クロスオリジンなどで中身を読めない場合は列挙を諦める
+                    stop_probe();
+                    render_results();
+                    status_area.textContent = i18n_message("ui_list_picker_error");
+                    return;
+                }
+                //制限時間を過ぎたら、iframe を読めているかどうかに関わらずそこまでの結果で打ち切る
+                if(Date.now() - probe_started_at >= probe_limit_ms){
+                    stop_probe();
+                    render_results();
+                    if(probe_found_ids.size > 0){
+                        status_area.textContent = i18n_message("ui_list_picker_partial");
+                    }else{
+                        //本文を一度も読めていない場合は読み込み自体に失敗している
+                        status_area.textContent = has_probe_document ? i18n_message("ui_list_picker_not_detected") : i18n_message("ui_list_picker_error");
+                    }
+                    return;
+                }
+                //読み込み前の about:blank と本文が無い状態は判定材料にならないので次回に回す
+                if(!probe_document || probe_document.location.href === "about:blank" || !probe_document.body) return;
+                has_probe_document = true;
+                //取得をやり直した直後は前回のページが残っていることがあるため、対象のパスを表示するまで採取しない
+                const probe_path_lower = probe_document.location.pathname.toLowerCase();
+                if(probe_path_lower.replace(/\/+$/, "") !== probe_expected_path){
+                    //ログイン画面へ飛ばされた場合は待っても取得できないため終了する
+                    if(probe_path_lower === "/login" || probe_path_lower.startsWith("/login/") || probe_path_lower.startsWith("/i/flow/login")){
+                        stop_probe();
+                        render_results();
+                        status_area.textContent = i18n_message("ui_list_picker_login_required");
+                    }
+                    return;
+                }
+
+                const before_size = found_lists.size;
+                let is_kept_entry_replaced = false;
+                collect_lists_from_document(probe_document).forEach((list_info) => {
+                    probe_found_ids.add(list_info.id);
+                    const known_list = found_lists.get(list_info.id);
+                    if(known_list === undefined){
+                        found_lists.set(list_info.id, list_info);
+                        return;
+                    }
+                    //選択のために残していたエントリは今回の情報(セクション・リスト名)で置き換える。チェック状態は id で引き継がれる
+                    if(known_list.is_kept !== true) return;
+                    found_lists.set(list_info.id, list_info);
+                    is_kept_entry_replaced = true;
+                });
+                if(found_lists.size !== before_size || is_kept_entry_replaced) render_results();
+
+                //段階的に読み込まれるリストを引き出すため最下部までスクロールする
+                const scrolling_element = probe_document.scrollingElement;
+                if(scrolling_element) scrolling_element.scrollTop = scrolling_element.scrollHeight;
+
+                const probe_state = `${probe_found_ids.size}:${scrolling_element?.scrollHeight}`;
+                probe_stable_elapsed = (probe_state === probe_last_state) ? probe_stable_elapsed + probe_interval_ms : 0;
+                probe_last_state = probe_state;
+
+                if(probe_document.readyState === "complete" && probe_found_ids.size > 0 && probe_stable_elapsed >= probe_stable_ms){
+                    stop_probe();
+                    status_area.textContent = "";
+                }
+            }, probe_interval_ms);
+        }
+        //ユーザー名入力欄の値から列挙を開始する。リスト一覧ページのパスに解決できない入力は受け付けない
+        function start_probe_from_input(){
+            const resolved_path = resolve_list_column_path(user_input.value);
+            const user_lists_match = (resolved_path ?? "").match(/^\/([A-Za-z0-9_]{1,15})\/lists$/);
+            if(!user_lists_match){
+                alert(i18n_message("msg_list_picker_user_required"));
+                return;
+            }
+            start_probe(user_lists_match[1]);
+        }
+        //ダイアログを閉じ、タイマーと iframe を解放してフォーカスを開いた要素へ戻す
+        function close_dialog(){
+            stop_probe();
+            document.removeEventListener("keydown", on_dialog_keydown);
+            window.removeEventListener("blur", on_window_blur);
+            probe_frame.removeEventListener("load", on_probe_frame_load);
+            overlay_observer.disconnect();
+            inert_applied_elements.forEach((element) => element.removeAttribute("inert"));
+            overlay.remove();
+            opener_element?.focus?.();
+        }
+        //列挙用の iframe にフォーカスが吸われた場合は、直前にフォーカスしていたダイアログ内の要素へ戻す(残っていなければ入力欄へ)
+        function on_window_blur(){
+            if(document.activeElement !== probe_frame) return;
+            if(last_focused_element !== null && dialog.contains(last_focused_element) && last_focused_element.isConnected){
+                last_focused_element.focus();
+                return;
+            }
+            user_input.focus();
+        }
+        //読み込みが終わっても中身を読めない(エラーページなど)場合は、制限時間を待たずにエラーとして終了する
+        function on_probe_frame_load(){
+            if(!is_probe_loading) return;
+            let probe_document = null;
+            try{
+                probe_document = probe_frame.contentDocument;
+            }catch(e){
+                //クロスオリジンで中身を読めない場合も読み込み失敗として扱う
+                probe_document = null;
+            }
+            //中身を読める場合は about:blank でも列挙の継続に任せる
+            if(probe_document !== null) return;
+            stop_probe();
+            render_results();
+            status_area.textContent = i18n_message("ui_list_picker_error");
+        }
+        //Esc で閉じ、Tab はダイアログ内のフォーカス可能要素を循環させる
+        function on_dialog_keydown(event){
+            if(event.key === "Escape"){
+                event.preventDefault();
+                close_dialog();
+                return;
+            }
+            if(event.key !== "Tab") return;
+            const focusable_elements = get_focusable_elements(dialog);
+            if(focusable_elements.length === 0) return;
+            const active_index = focusable_elements.indexOf(document.activeElement);
+            if(event.shiftKey){
+                if(active_index > 0) return;
+                event.preventDefault();
+                focusable_elements[focusable_elements.length - 1].focus();
+                return;
+            }
+            if(active_index !== -1 && active_index < focusable_elements.length - 1) return;
+            event.preventDefault();
+            focusable_elements[0].focus();
+        }
+        //チェックしたリストと手動入力を合わせて重複を除き、カラムをまとめて追加する
+        function add_selected_columns(){
+            const add_targets = collect_add_paths();
+            if(add_targets.invalid.length > 0){
+                alert(i18n_message("msg_list_picker_invalid_manual", [add_targets.invalid.join("\n")]));
+                return;
+            }
+            if(add_targets.paths.length === 0){
+                alert(i18n_message("msg_list_picker_nothing_selected"));
+                return;
+            }
+            if(add_targets.paths.length > many_columns_threshold && !confirm(i18n_message("msg_list_picker_many_columns_confirm", [String(add_targets.paths.length)]))) return;
+            close_dialog();
+            add_explore_columns(add_targets.paths, insert_first);
+        }
+
+        fetch_btn.addEventListener("click", start_probe_from_input);
+        user_input.addEventListener("keydown", function(event){
+            if(event.key !== "Enter") return;
+            event.preventDefault();
+            start_probe_from_input();
+        });
+        //どちらも押した時点で描画されているチェックボックスだけを対象にする
+        select_all_btn.addEventListener("click", function(){
+            results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = true;});
+            update_count();
+        });
+        clear_all_btn.addEventListener("click", function(){
+            results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = false;});
+            update_count();
+        });
+        manual_textarea.addEventListener("input", update_count);
+        add_btn.addEventListener("click", add_selected_columns);
+        cancel_btn.addEventListener("click", close_dialog);
+        //背景(オーバーレイ自身)の上で押して離してクリックされたときだけ閉じる
+        overlay.addEventListener("mousedown", function(event){
+            is_overlay_mousedown = event.target === overlay;
+        });
+        overlay.addEventListener("mouseup", function(event){
+            is_overlay_mouseup = event.target === overlay;
+        });
+        overlay.addEventListener("click", function(event){
+            const is_background_click = is_overlay_mousedown && is_overlay_mouseup && event.target === overlay;
+            is_overlay_mousedown = false;
+            is_overlay_mouseup = false;
+            if(is_background_click) close_dialog();
+        });
+        //ダイアログ内の最後のフォーカス位置を控える(オーバーレイごと除去されるため個別の解除は不要)
+        dialog.addEventListener("focusin", function(event){
+            last_focused_element = event.target;
+        });
+        document.addEventListener("keydown", on_dialog_keydown);
+        window.addEventListener("blur", on_window_blur);
+        probe_frame.addEventListener("load", on_probe_frame_load);
+
+        render_results();
+        user_input.focus();
+        //ログイン中のユーザーが分かればそのままリスト一覧の列挙を始める
+        const login_screen_name = get_login_screen_name();
+        if(login_screen_name !== null){
+            user_input.value = login_screen_name;
+            start_probe(login_screen_name);
+        }else{
+            status_area.textContent = i18n_message("ui_list_picker_not_detected");
+        }
     }
     //Explore(ユニバーサル)カラム追加
     document.getElementById("add_explore").addEventListener("click", function(){
@@ -1664,6 +2203,17 @@ function run(settings){
             }
         }
         add_explore_column(list_path, insert_first);
+    });
+    //リストカラム複数追加(選択ダイアログを開く)。ダイアログ表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
+    document.getElementById("add_list_multi").addEventListener("click", function(){
+        open_list_picker_dialog(is_shift_pressed, this);
+    });
+    //ボタンとして振る舞わせるため、Enter と Space でもダイアログを開く
+    document.getElementById("add_list_multi").addEventListener("keydown", function(event){
+        if(event.repeat) return;
+        if(event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        open_list_picker_dialog(is_shift_pressed, this);
     });
     //プロファイル保存ボタン
     document.getElementById("profile_save").addEventListener("click", function(){
@@ -2177,6 +2727,78 @@ function resolve_list_column_path(input){
     const screen_name_match = value.match(/^@?([A-Za-z0-9_]{1,15})$/);
     if(screen_name_match && is_valid_screen_name(screen_name_match[1])) return `/${screen_name_match[1]}/lists`;
     return null;
+}
+//リスト一覧ページの anchor の href からリスト ID を取り出す
+//href: anchor の href 文字列(相対・絶対どちらでもよい)、base_url: 相対 href を解決する基準 URL
+//解決した URL のホストが x.com / twitter.com (またはそのサブドメイン) で、かつパスが /i/lists/<id> (以降にサブパスが続いてもよい) の場合に
+//その <id> を文字列で返す。ホストが異なる場合・パスが一致しない場合・URL として解決できない場合は null を返す
+function extract_list_id_from_href(href, base_url){
+    let list_url = null;
+    try{
+        list_url = new URL(href, base_url);
+    }catch(e){
+        //URL として解決できない href はリストの候補にしない
+        return null;
+    }
+    const hostname = list_url.hostname.toLowerCase();
+    const is_x_host = ["x.com", "twitter.com"].some((host) => hostname === host || hostname.endsWith(`.${host}`));
+    if(!is_x_host) return null;
+    const list_id_match = list_url.pathname.match(/^\/i\/lists\/(\d+)(?:\/|$)/);
+    return list_id_match ? list_id_match[1] : null;
+}
+//リスト一覧ページの Document から、そのページに並んでいるリストを列挙する
+//doc: リスト一覧ページの Document
+//戻り値: {id: リストID, path: "/i/lists/<id>", name: リスト名(取得できない場合は空文字), section: 直前の h2 見出し文(見出しが無い場合は空文字)} の配列
+//走査範囲は [data-testid="primaryColumn"] の配下のみとし、それが無い文書(リスト一覧ページ以外や描画前)は空配列を返す。同一 id は最初に見つかった1件のみ含める
+function collect_lists_from_document(doc){
+    const root = doc.querySelector('[data-testid="primaryColumn"]');
+    if(!root) return [];
+    const found_lists = new Map();
+    let current_section = "";
+    //見出しとリンクを文書順に走査し、直前に現れた見出しをそのリンクのセクション名として扱う
+    const scan_targets = root.querySelectorAll('h2, a[href]');
+    for (let index = 0; index < scan_targets.length; index++) {
+        const scan_target = scan_targets[index];
+        if(scan_target.tagName === "H2"){
+            current_section = scan_target.textContent.trim();
+            continue;
+        }
+        const list_id = extract_list_id_from_href(scan_target.getAttribute("href"), doc.location.href);
+        if(list_id === null || found_lists.has(list_id)) continue;
+        //リンク配下の span のうち最初に現れる非空のテキストをリスト名として使う
+        let list_name = "";
+        const name_candidates = scan_target.querySelectorAll("span");
+        for (let name_index = 0; name_index < name_candidates.length; name_index++) {
+            const name_text = name_candidates[name_index].textContent.trim();
+            if(name_text !== ""){
+                list_name = name_text;
+                break;
+            }
+        }
+        if(list_name === "") list_name = scan_target.textContent.trim();
+        found_lists.set(list_id, {id: list_id, path: `/i/lists/${list_id}`, name: list_name, section: current_section});
+    }
+    return Array.from(found_lists.values());
+}
+//手動入力欄の文字列を1行1件として解釈し、リストカラムのパスに変換する
+//text: textarea の文字列
+//戻り値: {paths: 解決できたパスの配列(重複除去済み。入力順を保つ), invalid: 解決できなかった入力行の配列}
+//空行は無視し、各行は resolve_list_column_path で解決する
+function parse_manual_list_entries(text){
+    const paths = [];
+    const invalid = [];
+    const lines = (text ?? "").split(/\r?\n/);
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index].trim();
+        if(line === "") continue;
+        const list_path = resolve_list_column_path(line);
+        if(list_path === null){
+            invalid.push(line);
+            continue;
+        }
+        if(!paths.includes(list_path)) paths.push(list_path);
+    }
+    return {paths: paths, invalid: invalid};
 }
 //Cookieからカラーモードを取得する
 function get_cookie_color_mode() {
