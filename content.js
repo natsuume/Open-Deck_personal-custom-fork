@@ -1762,7 +1762,7 @@ function run(settings){
     //  ・role="dialog" aria-modal="true" のダイアログ本体
     //  ・リスト列挙用の非表示 iframe(リストが描画されるだけの画面内サイズを持ち、opacity 0・pointer-events none で操作対象から外す)
     //  ・リスト一覧を取得するユーザー名の入力欄と取得ボタン
-    //  ・取得状態の表示(loading / partial / not_detected / error)
+    //  ・取得状態の表示(loading / partial / not_detected / error / login_required)
     //  ・検出したリストのチェックボックス一覧と、全て選択・選択解除のボタン
     //  ・追加するリストの URL か ID を1行1件で入力する textarea
     //  ・追加するカラム件数の表示と、追加ボタン・キャンセルボタン
@@ -1787,7 +1787,7 @@ function run(settings){
             return;
         }
 
-        //選択のために残したエントリに付けるセクション名。今回の列挙結果で置き換える判定にも使う
+        //選択のために残したエントリに付けるセクション名
         const kept_section_name = i18n_message("ui_list_picker_kept_section");
         const probe_interval_ms = 400;
         const probe_stable_ms = 2000;
@@ -1804,7 +1804,7 @@ function run(settings){
         <div><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label> <input class="opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"> <input class="opd_list_picker_fetch_btn" type="button" value="${i18n_message("ui_list_picker_fetch_button")}"></div>
         <div class="opd_list_picker_status" role="status" aria-live="polite"></div>
         <div class="opd_list_picker_results"></div>
-        <div><input class="opd_list_picker_select_all" type="button" aria-pressed="false" value="${i18n_message("ui_list_picker_select_all")}"> <input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
+        <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"> <input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
         <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><textarea class="opd_list_picker_manual" id="opd_list_picker_manual_input" rows="4"></textarea></div>
         <div class="opd_list_picker_count" id="opd_list_picker_count"></div>
         <div class="opd_list_picker_actions"><input class="opd_list_picker_add_btn" type="button" aria-describedby="opd_list_picker_count" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
@@ -1848,14 +1848,16 @@ function run(settings){
         let is_probe_loading = false;
         //本文のある document を一度でも読めたか(打ち切り時に未検出とエラーを区別する)
         let has_probe_document = false;
-        //背景クリック判定用。ダイアログ内で押してオーバーレイ上で離した操作で閉じないようにする
+        //背景クリック判定用。押下と離上の両方が背景で起きたときだけ閉じる
         let is_overlay_mousedown = false;
+        let is_overlay_mouseup = false;
+        //ダイアログ内で最後にフォーカスを受けた要素。列挙用 iframe にフォーカスを奪われたときの戻り先に使う
+        let last_focused_element = null;
         //「全て選択」の状態。真のあいだは列挙の途中で追加された項目もチェック済みで描画する
         let is_select_all = false;
-        //「全て選択」の状態を切り替え、ボタンの押下状態表示も合わせる
+        //「全て選択」の状態を切り替える
         function set_select_all(is_active){
             is_select_all = is_active;
-            select_all_btn.setAttribute("aria-pressed", String(is_active));
         }
         //今回の取得対象のパス(小文字)。iframe がこのパスを表示するまでは採取しない
         let probe_expected_path = "";
@@ -1976,7 +1978,7 @@ function run(settings){
                     return;
                 }
                 //残したエントリは今回の列挙結果と混ざらないよう専用のセクションにまとめる
-                found_lists.set(list_id, {id: list_info.id, path: list_info.path, name: list_info.name, section: kept_section_name});
+                found_lists.set(list_id, {id: list_info.id, path: list_info.path, name: list_info.name, section: kept_section_name, is_kept: true});
             });
             probe_found_ids.clear();
             is_probe_loading = true;
@@ -2018,7 +2020,7 @@ function run(settings){
                 const probe_path_lower = probe_document.location.pathname.toLowerCase();
                 if(probe_path_lower.replace(/\/+$/, "") !== probe_expected_path){
                     //ログイン画面へ飛ばされた場合は待っても取得できないため終了する
-                    if(probe_path_lower.startsWith("/login") || probe_path_lower.startsWith("/i/flow/")){
+                    if(probe_path_lower === "/login" || probe_path_lower.startsWith("/login/") || probe_path_lower.startsWith("/i/flow/login")){
                         stop_probe();
                         render_results();
                         status_area.textContent = i18n_message("ui_list_picker_login_required");
@@ -2037,7 +2039,7 @@ function run(settings){
                         return;
                     }
                     //選択のために残していたエントリは今回の情報(セクション・リスト名)で置き換える。チェック状態は id で引き継がれる
-                    if(known_list.section !== kept_section_name) return;
+                    if(known_list.is_kept !== true) return;
                     found_lists.set(list_info.id, list_info);
                     is_kept_entry_replaced = true;
                 });
@@ -2078,9 +2080,14 @@ function run(settings){
             overlay.remove();
             opener_element?.focus?.();
         }
-        //列挙用の iframe にフォーカスが吸われた場合はダイアログの入力欄へ戻す
+        //列挙用の iframe にフォーカスが吸われた場合は、直前にフォーカスしていたダイアログ内の要素へ戻す(残っていなければ入力欄へ)
         function on_window_blur(){
-            if(document.activeElement === probe_frame) user_input.focus();
+            if(document.activeElement !== probe_frame) return;
+            if(last_focused_element !== null && dialog.contains(last_focused_element) && last_focused_element.isConnected){
+                last_focused_element.focus();
+                return;
+            }
+            user_input.focus();
         }
         //読み込みが終わっても中身を読めない(エラーページなど)場合は、制限時間を待たずにエラーとして終了する
         function on_probe_frame_load(){
@@ -2154,12 +2161,22 @@ function run(settings){
         manual_textarea.addEventListener("input", update_count);
         add_btn.addEventListener("click", add_selected_columns);
         cancel_btn.addEventListener("click", close_dialog);
-        //背景(オーバーレイ自身)を押して離したときだけ閉じる
+        //背景(オーバーレイ自身)の上で押して離してクリックされたときだけ閉じる
         overlay.addEventListener("mousedown", function(event){
             is_overlay_mousedown = event.target === overlay;
         });
+        overlay.addEventListener("mouseup", function(event){
+            is_overlay_mouseup = event.target === overlay;
+        });
         overlay.addEventListener("click", function(event){
-            if(is_overlay_mousedown && event.target === overlay) close_dialog();
+            const is_background_click = is_overlay_mousedown && is_overlay_mouseup && event.target === overlay;
+            is_overlay_mousedown = false;
+            is_overlay_mouseup = false;
+            if(is_background_click) close_dialog();
+        });
+        //ダイアログ内の最後のフォーカス位置を控える(オーバーレイごと除去されるため個別の解除は不要)
+        dialog.addEventListener("focusin", function(event){
+            last_focused_element = event.target;
         });
         document.addEventListener("keydown", on_dialog_keydown);
         window.addEventListener("blur", on_window_blur);
