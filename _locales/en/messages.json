@@ -233,6 +233,9 @@
   "ui_list_picker_kept_section": {
     "message": "Selected"
   },
+  "ui_list_picker_login_required": {
+    "message": "Cannot fetch lists because you are not logged in to X. Enter list URLs or IDs below"
+  },
   "msg_list_picker_nothing_selected": {
     "message": "Select or enter at least one list"
   },

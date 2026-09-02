@@ -686,6 +686,9 @@ function run(settings){
         min-height: 5rem;
         box-sizing: border-box;
     }
+    .opd_list_picker_count{
+        min-height: 2.6rem;
+    }
     .opd_list_picker_actions{
         display: flex;
         flex-direction: row;
@@ -1784,6 +1787,8 @@ function run(settings){
             return;
         }
 
+        //選択のために残したエントリに付けるセクション名。今回の列挙結果で置き換える判定にも使う
+        const kept_section_name = i18n_message("ui_list_picker_kept_section");
         const probe_interval_ms = 400;
         const probe_stable_ms = 2000;
         const probe_limit_ms = 15000;
@@ -1799,7 +1804,7 @@ function run(settings){
         <div><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label> <input class="opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"> <input class="opd_list_picker_fetch_btn" type="button" value="${i18n_message("ui_list_picker_fetch_button")}"></div>
         <div class="opd_list_picker_status" role="status" aria-live="polite"></div>
         <div class="opd_list_picker_results"></div>
-        <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"> <input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
+        <div><input class="opd_list_picker_select_all" type="button" aria-pressed="false" value="${i18n_message("ui_list_picker_select_all")}"> <input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
         <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><textarea class="opd_list_picker_manual" id="opd_list_picker_manual_input" rows="4"></textarea></div>
         <div class="opd_list_picker_count" id="opd_list_picker_count"></div>
         <div class="opd_list_picker_actions"><input class="opd_list_picker_add_btn" type="button" aria-describedby="opd_list_picker_count" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
@@ -1812,11 +1817,10 @@ function run(settings){
             child.setAttribute("inert", "");
             inert_applied_elements.push(child);
         });
-        //オーバーレイが close_dialog を経由せず外された場合でも背景の inert を必ず解除する
+        //オーバーレイが close_dialog を経由せず外された場合でも、閉じるときの後始末を必ず通す
         const overlay_observer = new MutationObserver(function(){
             if(overlay.isConnected) return;
-            inert_applied_elements.forEach((element) => element.removeAttribute("inert"));
-            overlay_observer.disconnect();
+            close_dialog();
         });
         overlay_observer.observe(main_element, {childList: true});
 
@@ -1848,6 +1852,11 @@ function run(settings){
         let is_overlay_mousedown = false;
         //「全て選択」の状態。真のあいだは列挙の途中で追加された項目もチェック済みで描画する
         let is_select_all = false;
+        //「全て選択」の状態を切り替え、ボタンの押下状態表示も合わせる
+        function set_select_all(is_active){
+            is_select_all = is_active;
+            select_all_btn.setAttribute("aria-pressed", String(is_active));
+        }
         //今回の取得対象のパス(小文字)。iframe がこのパスを表示するまでは採取しない
         let probe_expected_path = "";
 
@@ -1870,7 +1879,7 @@ function run(settings){
         }
         //個別にチェックを外したら「全て選択」の追従をやめる
         function on_checkbox_change(event){
-            if(!event.target.checked) is_select_all = false;
+            if(!event.target.checked) set_select_all(false);
             update_count();
         }
         //見つかったリストをセクションごとにまとめて結果領域へ描画する。読み込み中で0件のあいだは skeleton を表示する
@@ -1955,6 +1964,7 @@ function run(settings){
         //完了・打ち切りの判定には今回の列挙で検出した件数だけを使い、選択を保つために残した前回のエントリは判定に含めない
         function start_probe(screen_name){
             stop_probe();
+            set_select_all(false);
             //取得し直してもチェック済みのリストは選択を保てるよう残す
             const kept_ids = new Set();
             results_area.querySelectorAll('input[type="checkbox"]:checked').forEach((checkbox) => {
@@ -1966,7 +1976,7 @@ function run(settings){
                     return;
                 }
                 //残したエントリは今回の列挙結果と混ざらないよう専用のセクションにまとめる
-                found_lists.set(list_id, {id: list_info.id, path: list_info.path, name: list_info.name, section: i18n_message("ui_list_picker_kept_section")});
+                found_lists.set(list_id, {id: list_info.id, path: list_info.path, name: list_info.name, section: kept_section_name});
             });
             probe_found_ids.clear();
             is_probe_loading = true;
@@ -2005,15 +2015,33 @@ function run(settings){
                 //読み込み前の about:blank と本文が無い状態は判定材料にならないので次回に回す
                 if(!probe_document || probe_document.location.href === "about:blank" || !probe_document.body) return;
                 //取得をやり直した直後は前回のページが残っていることがあるため、対象のパスを表示するまで採取しない
-                if(probe_document.location.pathname.toLowerCase() !== probe_expected_path) return;
+                const probe_path_lower = probe_document.location.pathname.toLowerCase();
+                if(probe_path_lower.replace(/\/+$/, "") !== probe_expected_path){
+                    //ログイン画面へ飛ばされた場合は待っても取得できないため終了する
+                    if(probe_path_lower.startsWith("/login") || probe_path_lower.startsWith("/i/flow/")){
+                        stop_probe();
+                        render_results();
+                        status_area.textContent = i18n_message("ui_list_picker_login_required");
+                    }
+                    return;
+                }
                 has_probe_document = true;
 
                 const before_size = found_lists.size;
+                let is_kept_entry_replaced = false;
                 collect_lists_from_document(probe_document).forEach((list_info) => {
                     probe_found_ids.add(list_info.id);
-                    if(!found_lists.has(list_info.id)) found_lists.set(list_info.id, list_info);
+                    const known_list = found_lists.get(list_info.id);
+                    if(known_list === undefined){
+                        found_lists.set(list_info.id, list_info);
+                        return;
+                    }
+                    //選択のために残していたエントリは今回の情報(セクション・リスト名)で置き換える。チェック状態は id で引き継がれる
+                    if(known_list.section !== kept_section_name) return;
+                    found_lists.set(list_info.id, list_info);
+                    is_kept_entry_replaced = true;
                 });
-                if(found_lists.size !== before_size) render_results();
+                if(found_lists.size !== before_size || is_kept_entry_replaced) render_results();
 
                 //段階的に読み込まれるリストを引き出すため最下部までスクロールする
                 const scrolling_element = probe_document.scrollingElement;
@@ -2114,12 +2142,12 @@ function run(settings){
             start_probe_from_input();
         });
         select_all_btn.addEventListener("click", function(){
-            is_select_all = true;
+            set_select_all(true);
             results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = true;});
             update_count();
         });
         clear_all_btn.addEventListener("click", function(){
-            is_select_all = false;
+            set_select_all(false);
             results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = false;});
             update_count();
         });

@@ -233,6 +233,9 @@
   "ui_list_picker_kept_section": {
     "message": "選択済み"
   },
+  "ui_list_picker_login_required": {
+    "message": "X にログインしていないためリスト一覧を取得できません。下の入力欄に URL か ID を入力してください"
+  },
   "msg_list_picker_nothing_selected": {
     "message": "追加するリストを選択するか入力してください"
   },
