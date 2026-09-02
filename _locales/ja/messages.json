@@ -200,6 +200,9 @@
   "ui_list_picker_partial": {
     "message": "取得を打ち切りました。途中までの結果を表示しています"
   },
+  "ui_list_picker_some_unresolved": {
+    "message": "一部のリストの ID を取得できませんでした。取得できなかったリストは URL か ID を手動で入力してください"
+  },
   "ui_list_picker_not_detected": {
     "message": "リストを自動検出できませんでした。下の入力欄に URL か ID を入力してください"
   },
