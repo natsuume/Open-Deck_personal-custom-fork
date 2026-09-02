@@ -1792,6 +1792,7 @@ function run(settings){
         const probe_interval_ms = 400;
         const probe_stable_ms = 2000;
         const probe_limit_ms = 15000;
+        const helper_inject_retry_limit = 3;
         const many_columns_threshold = 10;
 
         const overlay = document.createElement("div");
@@ -1841,6 +1842,10 @@ function run(settings){
         const found_lists = new Map();
         //今回の列挙で検出したリストID。前回の取得から選択のために残したエントリと区別し、完了・打ち切りの判定に使う
         const probe_found_ids = new Set();
+        //今回の取得で未解決のまま見えた listCell の識別キー。仮想リストで画面外に出たセルも数え続けるために累積する
+        const probe_unresolved_keys = new Set();
+        //probe document ごとのヘルパー注入の失敗回数。上限を超えたら注入をやり直さない
+        const helper_inject_failures = new WeakMap();
         let probe_interval = null;
         let probe_started_at = 0;
         let probe_stable_elapsed = 0;
@@ -1946,8 +1951,9 @@ function run(settings){
         //probe_document: リスト一覧ページを読み込んでいる iframe の Document
         //documentElement の data-opd-list-picker-helper 属性が既にある document には注入しない(Document ごとに1回)
         //head が無い場合は何もしない(次回のポーリングで再試行する)
-        //注入時は属性を "loading" にし、script の error で属性を削除して再試行できるようにする。ヘルパー自身が読み込み完了時に属性を "ready" へ更新する
-        //script の load 後も属性が "ready" でなければ "failed" にして再注入せず、走査依頼も送らない
+        //注入時は属性を "loading" にし、ヘルパー自身が読み込み完了時に属性を "ready" へ更新する
+        //script の error は属性を削除して3回まで再試行し、それ以降は属性を "failed" にする
+        //script の load 後も属性が "ready" でなければ "failed" にする。"failed" の document には再注入せず、走査依頼も送らない
         function inject_list_picker_helper(probe_document){
             try{
                 if(probe_document.documentElement.hasAttribute("data-opd-list-picker-helper")) return;
@@ -1955,8 +1961,14 @@ function run(settings){
                 const helper_script = probe_document.createElement("script");
                 helper_script.src = chrome.runtime.getURL("extensions/list_picker_helper.js");
                 helper_script.addEventListener("error", function(){
-                    //読み込みに失敗した document は属性を消して、次回のポーリングで注入し直せるようにする
-                    probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
+                    //読み込みに失敗した document は属性を消して次回のポーリングで注入し直すが、繰り返し失敗する document は打ち切る
+                    const failure_count = (helper_inject_failures.get(probe_document) ?? 0) + 1;
+                    helper_inject_failures.set(probe_document, failure_count);
+                    if(failure_count < helper_inject_retry_limit){
+                        probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
+                        return;
+                    }
+                    probe_document.documentElement?.setAttribute("data-opd-list-picker-helper", "failed");
                 });
                 helper_script.addEventListener("load", function(){
                     //読み込めてもヘルパーが ready にできなかった document は、入れ直しても同じ結果になるため打ち切る
@@ -1998,6 +2010,7 @@ function run(settings){
                 found_lists.set(list_id, {id: list_info.id, path: list_info.path, name: list_info.name, section: kept_section_name, is_kept: true});
             });
             probe_found_ids.clear();
+            probe_unresolved_keys.clear();
             is_probe_loading = true;
             has_probe_document = false;
             probe_started_at = Date.now();
@@ -2024,7 +2037,9 @@ function run(settings){
                     stop_probe();
                     render_results();
                     if(probe_found_ids.size > 0){
-                        status_area.textContent = i18n_message("ui_list_picker_partial");
+                        //リスト ID を解決できなかった listCell があれば、そのリストは手動で入力してもらう必要がある
+                        const partial_message = i18n_message("ui_list_picker_partial");
+                        status_area.textContent = probe_unresolved_keys.size > 0 ? `${partial_message} ${i18n_message("ui_list_picker_some_unresolved")}` : partial_message;
                     }else{
                         //本文を一度も読めていない場合は読み込み自体に失敗している
                         status_area.textContent = has_probe_document ? i18n_message("ui_list_picker_not_detected") : i18n_message("ui_list_picker_error");
@@ -2073,8 +2088,16 @@ function run(settings){
                 const scrolling_element = probe_document.scrollingElement;
                 if(scrolling_element) scrolling_element.scrollTop = scrolling_element.scrollHeight;
 
-                //リスト ID を解決できていない listCell はヘルパーの走査で減っていくため、安定状態の判定材料に含める
-                const unresolved_count = count_unresolved_list_cells(probe_document);
+                //仮想リストで画面外に出たセルも数え続けるため、未解決のセルはキーで累積し、解決できたキーだけを取り下げる
+                collect_list_cell_states(probe_document).forEach((cell_state) => {
+                    if(cell_state.is_resolved){
+                        probe_unresolved_keys.delete(cell_state.key);
+                        return;
+                    }
+                    if(cell_state.key !== "") probe_unresolved_keys.add(cell_state.key);
+                });
+                //未解決のセルはヘルパーの走査で減っていくため、安定状態の判定材料に含める
+                const unresolved_count = probe_unresolved_keys.size;
                 const probe_state = `${probe_found_ids.size}:${unresolved_count}:${scrolling_element?.scrollHeight}`;
                 probe_stable_elapsed = (probe_state === probe_last_state) ? probe_stable_elapsed + probe_interval_ms : 0;
                 probe_last_state = probe_state;
@@ -2806,7 +2829,7 @@ function first_non_empty_span_text(element){
 //戻り値: {id: リストID, name: リスト名(取得できない場合は空文字)}。ID を決められない場合は null
 //ID は配下に /i/lists/<id> へ解決できる a[href] があればその ID を優先し、無ければ有効な data-opd-list-id を使う
 //名前は、ID がリンク由来で data-opd-list-id も同じ ID を指している場合と ID が属性由来の場合に data-opd-list-name(trim 後非空)を使う
-//それ以外(ID がリンク由来で属性が別のリストを指している場合)はそのリンク配下の最初の非空 span テキストを使い、名前が得られなければセル内の最初の非空 span テキストにフォールバックする
+//それ以外(ID がリンク由来で、属性が無い・属性名が空・属性が別のリストを指している場合)は、そのリンク配下の最初の非空 span テキスト、無ければリンク自体のテキスト、無ければセル内の最初の非空 span テキストの順に使う
 function resolve_list_cell_info(cell, base_url){
     let link_element = null;
     let link_list_id = null;
@@ -2824,8 +2847,10 @@ function resolve_list_cell_info(cell, base_url){
     if(link_list_id !== null){
         //属性が同じリストを指しているときだけ、ヘルパーが取り出したリスト名をリンクの表示名より優先する
         if(attribute_list_id === link_list_id && attribute_list_name !== "") return {id: link_list_id, name: attribute_list_name};
-        const link_name = first_non_empty_span_text(link_element);
-        return {id: link_list_id, name: link_name !== "" ? link_name : first_non_empty_span_text(cell)};
+        const link_span_name = first_non_empty_span_text(link_element);
+        if(link_span_name !== "") return {id: link_list_id, name: link_span_name};
+        const link_text_name = link_element.textContent.trim();
+        return {id: link_list_id, name: link_text_name !== "" ? link_text_name : first_non_empty_span_text(cell)};
     }
     if(!is_valid_list_id(attribute_list_id)) return null;
     return {id: attribute_list_id, name: attribute_list_name !== "" ? attribute_list_name : first_non_empty_span_text(cell)};
@@ -2874,18 +2899,20 @@ function collect_lists_from_document(doc){
     }
     return Array.from(found_lists.values());
 }
-//リスト一覧ページの Document から、リスト ID を解決できていない listCell の数を数える
+//リスト一覧ページの Document から、並んでいる listCell の識別キーと解決状態を列挙する
 //doc: リスト一覧ページの Document
-//戻り値: [data-testid="primaryColumn"] 配下の [data-testid="listCell"] のうち、有効な data-opd-list-id を持たず、かつ配下に /i/lists/<id> へ解決できる a[href] も持たないセルの数。primaryColumn が無い場合は 0
-function count_unresolved_list_cells(doc){
+//戻り値: {key: セル内の最初の非空 span テキスト(無い場合は空文字), is_resolved: resolve_list_cell_info でリスト ID を決められたか} の配列
+//走査範囲は [data-testid="primaryColumn"] 配下の [data-testid="listCell"] のみで、文書順に並べる。primaryColumn が無い場合は空配列を返す
+function collect_list_cell_states(doc){
     const root = doc.querySelector('[data-testid="primaryColumn"]');
-    if(!root) return 0;
-    let unresolved_count = 0;
+    if(!root) return [];
+    const cell_states = [];
     const cells = root.querySelectorAll('[data-testid="listCell"]');
     for (let index = 0; index < cells.length; index++) {
-        if(resolve_list_cell_info(cells[index], doc.location.href) === null) unresolved_count++;
+        const cell = cells[index];
+        cell_states.push({key: first_non_empty_span_text(cell), is_resolved: resolve_list_cell_info(cell, doc.location.href) !== null});
     }
-    return unresolved_count;
+    return cell_states;
 }
 //手動入力欄の文字列を1行1件として解釈し、リストカラムのパスに変換する
 //text: textarea の文字列

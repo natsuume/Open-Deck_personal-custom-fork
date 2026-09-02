@@ -201,7 +201,7 @@
     "message": "Fetching timed out. Showing partial results"
   },
   "ui_list_picker_some_unresolved": {
-    "message": "Some lists could not be identified. Enter the URL or ID of the missing lists manually."
+    "message": "Some lists could not be identified. Enter the URL or ID of the missing lists manually"
   },
   "ui_list_picker_not_detected": {
     "message": "Could not detect lists automatically. Enter list URLs or IDs below"
