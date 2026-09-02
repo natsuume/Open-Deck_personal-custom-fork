@@ -2076,6 +2076,8 @@ function get_explore_column_title(path){
     if(list_path_pattern.test(path ?? "")) return i18n_message("ui_column_list_title");
     return i18n_message("ui_column_explore_title");
 }
+//Xのscreen_nameとして妥当な文字種・長さ
+const screen_name_pattern = /^[A-Za-z0-9_]{1,15}$/;
 //ログイン中ユーザーのscreen_nameをXのナビゲーションにあるプロフィールリンクから取得する(取得できない場合はnull)
 function get_login_screen_name(){
     const profile_link_selector = 'a[data-testid="AppTabBar_Profile_Link"]';
@@ -2090,7 +2092,7 @@ function get_login_screen_name(){
     for (let index = 0; index < documents.length; index++) {
         const href = documents[index].querySelector(profile_link_selector)?.getAttribute("href");
         const screen_name = href?.split("/").filter((segment) => segment !== "")[0];
-        if(screen_name) return screen_name;
+        if(screen_name && screen_name_pattern.test(screen_name)) return screen_name;
     }
     return null;
 }
@@ -2103,6 +2105,9 @@ function resolve_list_column_path(input){
     //リストURLまたはパス
     const list_id_match = value.match(/(?:^|\/)i\/lists\/(\d+)/);
     if(list_id_match) return `/i/lists/${list_id_match[1]}`;
+    //ユーザーのリスト一覧URLまたはパス(/<screen_name>/lists)
+    const user_lists_match = value.match(/(?:^|\/)@?([A-Za-z0-9_]{1,15})\/lists(?:[\/?#]|$)/);
+    if(user_lists_match && user_lists_match[1] !== "i") return `/${user_lists_match[1]}/lists`;
     //ユーザー名(@は省略可)
     const screen_name_match = value.match(/^@?([A-Za-z0-9_]{1,15})$/);
     if(screen_name_match) return `/${screen_name_match[1]}/lists`;
