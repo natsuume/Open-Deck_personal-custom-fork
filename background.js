@@ -61,15 +61,18 @@ let access_limit = {
     list_management:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null}
 };
 //service worker は待機中に停止して起動し直すたびにメモリが初期化されるため、前回保存した値を復元してから更新する。
-//復元前に届いたレスポンスの更新はこの Promise の後に順序付ける
-const access_limit_restored = chrome.storage.local.get("api_access_limit").then((stored) => {
-    const stored_limit = stored.api_access_limit;
-    if(stored_limit == undefined) return;
-    for(const category of Object.keys(access_limit)){
-        if(stored_limit[category] != undefined) access_limit[category] = stored_limit[category];
-    }
-}).catch((e) => {
-    console.error("api_access_limit restore failed->", e);
+//復元前に届いたレスポンスの更新はこの Promise の後に順序付ける。
+//storage API は Firefox 向けに callback 形式で呼び、Promise に包む
+const access_limit_restored = new Promise((resolve) => {
+    chrome.storage.local.get("api_access_limit", (stored) => {
+        const stored_limit = stored?.api_access_limit;
+        if(stored_limit != undefined){
+            for(const category of Object.keys(access_limit)){
+                if(stored_limit[category] != undefined) access_limit[category] = stored_limit[category];
+            }
+        }
+        resolve();
+    });
 });
 function send_content_script(value){
     //chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });//firefoxではsession.setAccessLevel()が未対応なのでsessionは一旦お預け
@@ -137,7 +140,10 @@ chrome.webRequest.onHeadersReceived.addListener(function (resp) {
 
     access_limit_restored.then(() => {
         Object.assign(access_limit[category], category_limit);
-        access_limit[category].expires_unix_time = calc_expires_unix_time(access_limit[category].reset_unix_time, server_unix_time, received_unix_time);
+        //期限はリセット時刻とサーバー時刻が同じレスポンス由来のときだけ算出し、リセット時刻が無いレスポンスでは前回の期限を保持する
+        if(category_limit.reset_unix_time != undefined){
+            access_limit[category].expires_unix_time = calc_expires_unix_time(category_limit.reset_unix_time, server_unix_time, received_unix_time);
+        }
         send_content_script(access_limit);
     });
 }, { urls: Object.keys(API_CATEGORY_BY_OPERATION).map(operation => `*://x.com/i/api/graphql/*/${operation}*`) }, ['responseHeaders']);

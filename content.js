@@ -122,8 +122,10 @@ function render_api_limit_status(){
     //一度も値を観測していない場合はバッジの表示を変えない
     api_linit_status_btn.title = `${i18n_message("msg_api_limit_status_title", [api_limit_description])}`;
     if(earliest_expires_unix_time != null){
-        //期限ちょうどの再描画で判定が now と同値になっても期限切れ側に倒れるよう、1 秒余裕を持たせる
-        api_limit_rerender_timer = setTimeout(render_api_limit_status, (earliest_expires_unix_time - now_unix_time + 1) * 1000);
+        //期限ちょうどの再描画で判定が now と同値になっても期限切れ側に倒れるよう、1 秒余裕を持たせる。
+        //setTimeout の遅延上限 (2^31-1 ms) を超えると即時発火して再描画を繰り返すため、上限で打ち切って次回の描画で残りを待つ
+        const delay_ms = Math.min((earliest_expires_unix_time - now_unix_time + 1) * 1000, 2147483647);
+        api_limit_rerender_timer = setTimeout(render_api_limit_status, delay_ms);
     }
 }
 chrome.storage.onChanged.addListener((changes, namespace) => {
