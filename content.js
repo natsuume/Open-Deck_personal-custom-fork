@@ -2796,14 +2796,15 @@ function run(settings){
     }
     //===== 全体設定: run() スコープの処理 (column_settings_save / last_load_profile / profile_store を参照する) =====
     //現在のプロファイルの全体設定。run() の開始時に settings.global_settings から clone_global_settings で取り込む
+    //run() の呼び出し元 (init 内の 2 箇所とプロファイル切替) は {column_settings, global_settings} の形で、読み込むプロファイルの global_settings を必ず渡す
     //let global_settings = clone_global_settings(settings.global_settings);
     //
-    //カラム設定パネルの HTML を種別に応じて組み立てる
-    //  options.auto_reload: 自動更新 (select .opd_a_reload_mode: inherit/true/false) と間隔 (checkbox .opd_a_reload_time_inherit + number .opd_a_reload_time_setting、秒単位) の行を含めるか
-    //  options.banner_top: バナー表示 (select .opd_banner_mode) とトップ表示 (select .opd_top_visible_mode) の行を含めるか
-    //  options.pinned:     ピン止め (select .opd_pinned_mode) の行を含めるか
-    //共通行: 表示モード (select .opd_tw_view_mode: inherit/0/1/2)、カラム幅 (select .opd_column_size_preset: inherit/0/1/2/3 と カスタムボタン .column_width_btn)
-    //post: {auto_reload:false, banner_top:false, pinned:false}、notification: {false, true, false}、home: {true, true, false}、explore: {true, true, true}
+    //カラム設定パネルの HTML を種別に応じて組み立てる (適用表に無い項目の行はそのカラム種別には出さない)
+    //  options.iframe_styles: バナー表示 (select .opd_banner_mode)・トップ表示 (select .opd_top_visible_mode)・表示モード (select .opd_tw_view_mode: inherit/0/1/2) の行を含めるか
+    //  options.auto_reload:   自動更新 (select .opd_a_reload_mode: inherit/true/false) と間隔 (checkbox .opd_a_reload_time_inherit + number .opd_a_reload_time_setting、秒単位) の行を含めるか
+    //  options.pinned:        ピン止め (select .opd_pinned_mode) の行を含めるか
+    //共通行: カラム幅 (select .opd_column_size_preset: inherit/0/1/2/3 と カスタムボタン .column_width_btn)
+    //post: {iframe_styles:false, auto_reload:false, pinned:false}、notification: {true, false, false}、home: {true, true, false}、explore: {true, true, true}
     //各 select の inherit 選択肢は value="inherit" で、表示文字列は i18n の ui_settings_inherit_option に現在の全体値の表示名を渡したもの
     function build_column_settings_panel(options){
         return "";
@@ -2859,7 +2860,7 @@ function run(settings){
     }
     //カラム構成保存
     //各カラムの継承可能 7 項目は read_column_setting で属性から読み (inherit は null)、column_pinned_override は opd_setting_pinned 属性のみから決める
-    //save_object には global_settings も含める
+    //save_object には global_settings と settings_schema_version (= SETTINGS_SCHEMA_VERSION) も含める。プロファイル保存ボタンで新規追加する save_object も同じ 2 つを含める
     function column_settings_save(mode, profile_num){
         let settings_array = {
             column_settings:[],
@@ -3221,8 +3222,13 @@ function normalize_profile_store(store){
     return false;
 }
 //global_settings の複製を返す (新規プロファイル保存時・欠損補完時に使う)
+//GLOBAL_SETTINGS_DEFAULT の各キーについて、入力が null / undefined なら既定値で埋める (型・範囲の補正は normalize_profile_store が担う)
 function clone_global_settings(global_settings){
-    return Object.assign({}, GLOBAL_SETTINGS_DEFAULT, global_settings ?? {});
+    const cloned = {};
+    for (const key of Object.keys(GLOBAL_SETTINGS_DEFAULT)) {
+        cloned[key] = global_settings?.[key] ?? GLOBAL_SETTINGS_DEFAULT[key];
+    }
+    return cloned;
 }
 //カラム div の属性から項目 key の個別値を読む。"inherit" なら null、それ以外は保存形式と同じ型に変換する
 function read_column_setting(column_div, key){
@@ -3467,8 +3473,10 @@ function watch_load_column(column_frames, max_retries = 5){
     setTimeout(() => cleanups.forEach(fn => fn()), max_retries * 500 + 1000);
 }
 //設定初期化
+//初期設定の構築。既定プロファイルは settings_schema_version (= SETTINGS_SCHEMA_VERSION) と global_settings (= clone_global_settings()) を持ち、
+//各カラムの継承可能 7 項目と column_pinned_override は null (全体設定に従う) にする
 function settings_init(){
-    const profile_store_default = [{type:"main_bar_empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"home", banner:true, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"notification", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", auto_reload:false, auto_reload_time:10000, column_pinned_path:"", column_save_title:"", column_width:null}, {type:"explore", banner:false, top_visible:true, tw_view_mode:"0", exp_type:"", column_save_path:"/explore", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}];
+    const profile_store_default =[{type:"main_bar_empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"home", banner:true, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"notification", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", auto_reload:false, auto_reload_time:10000, column_pinned_path:"", column_save_title:"", column_width:null}, {type:"explore", banner:false, top_visible:true, tw_view_mode:"0", exp_type:"", column_save_path:"/explore", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}];
     const settings = {
         last_load_profile:0,
         //column_settings:[{type:"main_bar_empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_pinned_path:"", column_width:null}, {type:"home", banner:true, top_visible:true, tw_view_mode:"0", column_save_path:"", column_pinned_path:"", column_width:null}, {type:"notification", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_pinned_path:"", column_width:null}, {type:"explore", banner:false, top_visible:true, tw_view_mode:"0", exp_type:"", column_save_path:"/explore", column_pinned_path:"", column_width:null}, {type:"empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_pinned_path:"", column_width:null}],
