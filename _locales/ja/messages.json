@@ -29,9 +29,6 @@
   "ui_sidebar_logo_title": {
     "message": "Open-Deck\nv$1"
   },
-  "ui_add_post_column_title": {
-    "message": "ポストカラム追加"
-  },
   "ui_add_timeline_column_title": {
     "message": "タイムラインカラム追加"
   },
@@ -295,9 +292,6 @@
   },
   "msg_initial_setup_completed": {
     "message": "初期設定構築が完了しました！\nようこそ！Open-Deckへ！"
-  },
-  "msg_profile_desc_post_column": {
-    "message": "$1-ポストカラム"
   },
   "msg_profile_desc_timeline_column": {
     "message": "$1-タイムラインカラム"

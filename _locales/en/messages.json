@@ -29,9 +29,6 @@
   "ui_sidebar_logo_title": {
     "message": "Open-Deck\nv$1"
   },
-  "ui_add_post_column_title": {
-    "message": "Add post column"
-  },
   "ui_add_timeline_column_title": {
     "message": "Add timeline column"
   },
@@ -295,9 +292,6 @@
   },
   "msg_initial_setup_completed": {
     "message": "Initial setup has completed!\nWelcome to Open-Deck!"
-  },
-  "msg_profile_desc_post_column": {
-    "message": "$1-Post column"
   },
   "msg_profile_desc_timeline_column": {
     "message": "$1-Timeline column"

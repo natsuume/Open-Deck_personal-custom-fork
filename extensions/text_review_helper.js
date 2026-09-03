@@ -66,9 +66,26 @@
                 instance = fiber.stateNode;
 
                 //クローズ処理を再びツイート画面へ遷移するように上書きする
+                //3 段階は個別に try/catch し、前段が失敗しても後段を止めない
                 instance._handleCloseComposer = () => {
-                    saveHashtags();
-                    push("/compose/post");
+                    try{
+                        saveHashtags();
+                    }catch(err){
+                        console.warn('saveHashtags threw->', err);
+                    }
+                    try{
+                        push("/compose/post");
+                    }catch(err){
+                        console.warn('push threw->', err);
+                    }
+                    try{
+                        //composer が閉じたことを親 (Open-Deck 本体) に知らせる。親はこれでポストフォームのポップオーバーを閉じる
+                        //token は親が document に付けたもので、親側で送信元の照合に使う。Firefox 対応のため detail は JSON 文字列にする
+                        const token = document.documentElement.getAttribute("data-opd-post-form-token");
+                        window.parent.dispatchEvent(new CustomEvent("opd_post_composer_closed", {detail: JSON.stringify({token: token})}));
+                    }catch(err){
+                        console.warn('opd_post_composer_closed dispatch threw->', err);
+                    }
                 };
                 return;
             }
