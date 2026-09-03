@@ -2579,12 +2579,14 @@ function run(settings){
         window.removeEventListener("resize", on_post_form_window_resize);
         window.removeEventListener("opd_post_composer_closed", on_post_form_composer_closed);
     }
-    //プロファイル切替などでポップオーバーが親ごと外された場合は、リスナーとタイマーを外して以降の処理を止める
+    //プロファイル切替などでポップオーバーが親ごと外された場合は、リスナー・タイマー・読み込み失敗監視を外して以降の処理を止める
     function is_post_form_popover_detached(){
         if(post_form_popover !== null && post_form_popover.isConnected) return false;
         remove_post_form_popover_listeners();
         clearTimeout(post_form_skeleton_timer);
         post_form_skeleton_timer = null;
+        post_form_load_watch_cleanup?.();
+        post_form_load_watch_cleanup = null;
         return true;
     }
     //本体 UI にフォーカスがあるときの Esc で閉じる。他のモーダルが Esc を受け持つあいだ (モーダルダイアログの inert が乗っている / メディアビューワーの dialog が showModal で開いている) は何もしない
@@ -2693,14 +2695,16 @@ function run(settings){
             console.warn("post form: OpdExtTextReview を初期化できませんでした->", e);
         }
     }
-    //iframe がポストフォーム (intent/tweet か、投稿後に開き直される compose/post 配下) を表示しているか
+    //iframe がポストフォームを表示しているか。パスが intent/tweet か投稿後に開き直される compose/post 配下なら表示中、それ以外のパスでも composer の入力欄が画面にあれば表示中とみなす (下書きを消さない側に倒す)
     //読み込み開始から上限時間内の about:blank は読み込み中とみなして表示中扱いにし、上限を過ぎても about:blank のままなら遷移が成立しなかったとみなす。中身を読めない場合は表示していないとみなす
     function is_post_form_frame_on_composer(frame){
         try{
-            const frame_location = frame.contentWindow?.location;
+            const frame_window = frame.contentWindow;
+            const frame_location = frame_window?.location;
             if(frame_location == null) return false;
             if(frame_location.href === "about:blank") return Date.now() - post_form_load_started_at < post_form_skeleton_limit_ms;
-            return frame_location.pathname.startsWith("/intent/tweet") || frame_location.pathname.startsWith("/compose/post");
+            if(frame_location.pathname.startsWith("/intent/tweet") || frame_location.pathname.startsWith("/compose/post")) return true;
+            return frame_window.document.querySelector('div[contenteditable="true"][data-testid*="tweetTextarea"]') !== null;
         }catch(e){
             return false;
         }
@@ -4151,12 +4155,13 @@ function get_cookie_color_mode() {
 //カラム読み込み失敗検出
 function watch_load_column(column_frames, max_retries = 5){
     const cleanups = [];
+    const retry_timers = [];
     column_frames.forEach(column => {
         let count = 0;
 
         const reLoad = () => {
             if (++count >= max_retries) return;
-            setTimeout(() => { column.src = column.src }, 500);
+            retry_timers.push(setTimeout(() => { column.src = column.src }, 500));
         };
 
         const onLoad = () => {
@@ -4175,10 +4180,14 @@ function watch_load_column(column_frames, max_retries = 5){
         });
     });
 
-    const stop_watching = () => cleanups.forEach(fn => fn());
-    setTimeout(stop_watching, max_retries * 500 + 1000);
-    //監視を途中で外すための関数を返す (同じ iframe を読み込み直すときに前の監視を解除するのに使う)
-    return stop_watching;
+    const stop_listening = () => cleanups.forEach(fn => fn());
+    setTimeout(stop_listening, max_retries * 500 + 1000);
+    //監視を途中で外すための関数を返す (同じ iframe を読み込み直すときに前の監視を解除するのに使う)。予約済みの再読み込みも取り消す
+    return () => {
+        stop_listening();
+        retry_timers.forEach(timer => clearTimeout(timer));
+        retry_timers.length = 0;
+    };
 }
 //設定初期化
 //初期設定の構築。既定プロファイルは create_default_profile() で作る
