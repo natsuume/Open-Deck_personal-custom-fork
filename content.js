@@ -2528,7 +2528,7 @@ function run(settings){
     //ポストフォーム (https://x.com/intent/tweet の iframe) を、サイドバーの投稿ボタンの横に出す非モーダルの浮動パネル (ポップオーバー) で開閉する
     //#opd_main_element の末尾に #opd_post_form_popover (class "opd_post_form_popover" role="dialog" aria-labelledby) を 1 つだけ生成する。中身は見出しと閉じるボタンを並べたバーと、iframe に読み込み中の skeleton を重ねる枠
     //非モーダルなので開いているあいだも背景 (カラム・サイドバー) を操作でき、背景の inert もフォーカストラップも行わない
-    //閉じるときは iframe を破棄せず隠すだけなので、書きかけの下書きは開き直しても残り、2 回目以降は読み込み待ちが無い。保持されるのは開閉のあいだだけで、プロファイル切替 (#opd_main_element の作り直し) やページ再読み込みでは失われる
+    //閉じるときは iframe を破棄せず隠すだけなので、書きかけの下書きは開き直しても残り、2 回目以降は読み込み待ちが無い。保持されるのは開閉のあいだだけで、プロファイル切替 (#opd_main_element の作り直し) やページ再読み込みでは失われる。開き直したときに iframe が composer 以外の画面に移っていた場合だけ intent/tweet を読み込み直す
     //閉じる経路は 閉じるボタン / Esc / 開閉ボタンの再押下 / X の composer が閉じたことの検知 の 4 つ
     //Esc はポップオーバーの iframe 内と本体 UI (document) の 2 か所で受け取るため、他のカラムの iframe 内で押した Esc は届かない。X が Esc を処理した (preventDefault した) 場合はそちらを優先する
     //モーダルダイアログ (#opd_main_element 直下の .opd_dialog_overlay) が開いているあいだは新たに開かず、モーダルが背景に付けた inert がポップオーバーに乗っているあいだと、メディアビューワーの dialog が showModal で開いているあいだは Esc を無視しフォーカスも奪わない
@@ -2665,6 +2665,17 @@ function run(settings){
             console.warn("post form: OpdExtTextReview を初期化できませんでした->", e);
         }
     }
+    //iframe がポストフォーム (intent/tweet か、投稿後に開き直される compose/post 配下) を表示しているか。読み込み中 (about:blank) は表示中とみなし、中身を読めない場合は表示していないとみなす
+    function is_post_form_frame_on_composer(frame){
+        try{
+            const frame_location = frame.contentWindow?.location;
+            if(frame_location == null) return false;
+            if(frame_location.href === "about:blank") return true;
+            return frame_location.pathname.startsWith("/intent/tweet") || frame_location.pathname.startsWith("/compose/post");
+        }catch(e){
+            return false;
+        }
+    }
     //ポストフォームのポップオーバーを開く。opener_element: 開いた要素 (位置合わせの基準とフォーカスの戻し先)
     function open_post_form_popover(opener_element){
         const main_element = document.getElementById("opd_main_element");
@@ -2705,6 +2716,13 @@ function run(settings){
             watch_load_column([new_frame]);
             new_frame.src = "https://x.com/intent/tweet";
             popover.querySelector(".opd_post_form_frame_skeleton").hidden = false;
+        }else{
+            //使い回す iframe が composer 以外の画面 (ホーム等) に移っていたらポストフォームを読み込み直す
+            const frame = post_form_popover.querySelector(".opd_post_form_frame");
+            if(!is_post_form_frame_on_composer(frame)){
+                post_form_popover.querySelector(".opd_post_form_frame_skeleton").hidden = false;
+                frame.src = "https://x.com/intent/tweet";
+            }
         }
         post_form_popover.hidden = false;
         post_form_opener = opener_element ?? null;
@@ -2716,12 +2734,15 @@ function run(settings){
         post_form_popover.querySelector(".opd_post_form_frame")?.focus?.();
     }
     //ポップオーバーを閉じる。iframe は破棄せず隠すだけなので書きかけの下書きは残る
+    //フォーカスの戻しとテキストフォーカスの解除は、フォーカスがポップオーバーの中にあるときだけ行う (非モーダルなので、composer 閉通知が届いたときに別のカラムの入力欄を使っている場合があり、そのフォーカスと停止フラグには触れない)
     //フォーカスを戻すのを先にするのは、隠した後では iframe 内の focusout (テキストフォーカス解除の通知) が発火しないことがあるため。モーダルダイアログの inert が乗っているあいだはモーダルからフォーカスを奪わない
     //テキストフォーカスの解除は通知に頼らず明示的に行い、自動更新の停止フラグが残らないようにする
     function close_post_form_popover(){
         if(!is_post_form_popover_open()) return;
-        if(!is_post_form_popover_blocked_by_modal()) post_form_opener?.focus?.();
-        set_text_focus_state(false);
+        if(post_form_popover.contains(document.activeElement)){
+            if(!is_post_form_popover_blocked_by_modal()) post_form_opener?.focus?.();
+            set_text_focus_state(false);
+        }
         post_form_popover.hidden = true;
         post_form_opener?.setAttribute?.("aria-expanded", "false");
         remove_post_form_popover_listeners();
