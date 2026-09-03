@@ -2760,7 +2760,9 @@ function run(settings){
             if(!is_post_form_frame_on_composer(frame)){
                 start_post_form_frame_load(frame);
             }else if(!post_form_popover.querySelector(".opd_post_form_frame_skeleton").hidden){
-                //閉じているあいだに止めた skeleton の上限時間を付け直す
+                //読み込み中に閉じていた場合は、閉じるときに外した読み込み失敗監視と skeleton の上限時間を付け直す
+                post_form_load_watch_cleanup?.();
+                post_form_load_watch_cleanup = watch_load_column([frame]);
                 set_post_form_skeleton_visible(true);
             }
         }
