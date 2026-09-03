@@ -1880,7 +1880,7 @@ function run(settings){
     //  ・URL か ID の入力欄(textarea)と追加ボタン。1 行 1 件として解釈し、解釈できた行を一覧の末尾へ追加する(既にある項目は追加しない)。解釈できない行は alert で知らせて入力欄に残し、入力欄へフォーカスを戻す。Enter で追加、Shift+Enter で改行
     //  ・追加するカラム件数の表示(一覧の件数に、入力欄に残っている解釈できる未追加の行数を足したもの)と選択解除ボタン
     //  操作ボタン: 追加ボタン・キャンセルボタン。追加時に入力欄へ未追加の文字列が残っていれば先に追加を試み、解釈できない行があれば追加を中止する
-    //Esc キー(iframe 内で押した場合を含む)・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe の内容を破棄して opener_element にフォーカスを戻す
+    //Esc キー(iframe 内で押した場合を含む。iframe が about:blank や対象外のページを表示しているときも同様)・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe の内容を破棄して opener_element にフォーカスを戻す
     //開いているあいだは overlay 以外の #opd_main_element の子要素を inert にして背景を操作対象から外し、閉じるときに解除する(元から inert が付いていた要素は触らない)
     //Tab はダイアログ内のフォーカス可能要素(iframe を含む)を循環させる。iframe 内では X の画面のフォーカス移動に任せる
     //追加時は一覧の並び順のままパスを add_explore_columns に渡す
@@ -1990,6 +1990,8 @@ function run(settings){
         let is_overlay_mouseup = false;
         //ドラッグ中の項目のパス
         let dragging_path = null;
+        //名前の補完で一覧を描き直す必要があるが、ドラッグ中のため見送っている
+        let is_selection_render_pending = false;
 
         //リストのパスから ID を取り出す(/i/lists/<id> の形のときだけ。それ以外は null)
         function list_id_of_path(list_path){
@@ -2040,6 +2042,7 @@ function run(settings){
             const active_path = active_item === null ? null : active_item.getAttribute("data-list-path");
             const is_active_remove_btn = active_element !== null && active_element.classList.contains("opd_list_picker_remove_btn");
             const saved_scroll_top = selected_wrap.scrollTop;
+            is_selection_render_pending = false;
             //項目を作り直すとドラッグ中の項目が外れて dragend が届かないため、先にドラッグ状態を戻す
             end_drag();
             selected_list.textContent = "";
@@ -2268,7 +2271,6 @@ function run(settings){
             if(!frame_document) return;
             const order_by_path = new Map();
             selected_entries.forEach((entry, index) => order_by_path.set(entry.path, index + 1));
-            let is_name_filled = false;
             frame_document.querySelectorAll(list_cell_selector).forEach((cell) => {
                 const cell_info = resolve_list_cell_info(cell, frame_document.location.href);
                 const order = cell_info === null ? undefined : order_by_path.get(`/i/lists/${cell_info.id}`);
@@ -2280,11 +2282,11 @@ function run(settings){
                 const entry = selected_entries[order - 1];
                 if(entry.name === "" && cell_info.name !== ""){
                     entry.name = cell_info.name;
-                    is_name_filled = true;
+                    is_selection_render_pending = true;
                 }
             });
-            //ドラッグ中に項目を作り直すとドラッグが途切れるため、名前の補完による描き直しは次回に回す
-            if(is_name_filled && dragging_path === null) render_selection();
+            //ドラッグ中に項目を作り直すとドラッグが途切れるため、名前の補完による描き直しはドラッグが終わった後の呼び出しまで持ち越す
+            if(is_selection_render_pending && dragging_path === null) render_selection();
         }
         function stop_frame_poll(){
             if(frame_poll_timer !== null){
@@ -2397,9 +2399,13 @@ function run(settings){
             start_frame(user_lists_match[1]);
         }
         //読み込んだ document の中身を読めない(別オリジンなど)場合は、読み込み中かどうかに関わらずエラーとして終了する
+        //読める document には、対象ページかどうかに関わらず(about:blank でも)Esc を受け取れるよう捕捉を登録する
         function on_frame_load(){
-            //中身を読める場合は about:blank でもポーリングの継続に任せる
-            if(get_frame_document() !== null) return;
+            const frame_document = get_frame_document();
+            if(frame_document !== null){
+                prepare_frame_document(frame_document);
+                return;
+            }
             finish_frame_loading(i18n_message("ui_list_picker_error"), true);
         }
         //ダイアログを閉じ、タイマーと iframe の内容を解放してフォーカスを開いた要素へ戻す
@@ -2573,6 +2579,9 @@ function run(settings){
         });
         document.addEventListener("keydown", on_dialog_keydown);
         frame.addEventListener("load", on_frame_load);
+        //初期状態の about:blank でも iframe にフォーカスしたときに Esc を受け取れるようにする
+        const initial_frame_document = get_frame_document();
+        if(initial_frame_document !== null) prepare_frame_document(initial_frame_document);
 
         set_frame_loading(false);
         render_selection();
