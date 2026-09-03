@@ -329,6 +329,12 @@
   "label_api_search": {
     "message": "Search:"
   },
+  "label_api_list_timeline": {
+    "message": "List:"
+  },
+  "label_api_list_index": {
+    "message": "Lists page:"
+  },
   "ui_global_settings_title": {
     "message": "Global settings"
   },

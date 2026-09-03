@@ -52,9 +52,12 @@ chrome.runtime.onMessage.addListener(
 )
 //
 let access_limit = {
-    search:{limit: null, remaining: null, reset_unix_time: null}, 
-    time_line:{limit: null, remaining: null, reset_unix_time: null}, 
-    recommend_timeline:{limit: null, remaining: null, reset_unix_time: null}
+    search:{limit: null, remaining: null, reset_unix_time: null},
+    time_line:{limit: null, remaining: null, reset_unix_time: null},
+    recommend_timeline:{limit: null, remaining: null, reset_unix_time: null},
+    list_timeline:{limit: null, remaining: null, reset_unix_time: null},
+    //CombinedLists・ListsManagementPageTimelineはどちらもリスト一覧ページのAPIで、Webクライアントの版により使われる方が変わるため同一カテゴリとして扱う
+    list_index:{limit: null, remaining: null, reset_unix_time: null}
 };
 function send_content_script(value){
     //chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });//firefoxではsession.setAccessLevel()が未対応なのでsessionは一旦お預け
@@ -67,14 +70,25 @@ function send_content_script(value){
       });*/
 }
 
+//GraphQL操作名→APIリミット監視カテゴリの対応表
+//注意: HomeTimelineはHomeLatestTimelineの部分文字列なので、resp.url.includes()による判定順序が
+//このオブジェクトの定義順(=走査順)に依存する。HomeLatestTimelineをHomeTimelineより前に置くこと。
+const API_CATEGORY_BY_OPERATION = {
+    SearchTimeline: "search",
+    HomeLatestTimeline: "time_line",
+    HomeTimeline: "recommend_timeline",
+    ListLatestTweetsTimeline: "list_timeline",
+    CombinedLists: "list_index",
+    ListsManagementPageTimeline: "list_index"
+};
+
 chrome.webRequest.onHeadersReceived.addListener(function (resp) {
     let category = null;
-    if(resp.url.includes("SearchTimeline")){
-        category = "search";
-    }else if(resp.url.includes("HomeLatestTimeline")){
-        category = "time_line";
-    }else if(resp.url.includes("HomeTimeline")){
-        category = "recommend_timeline";
+    for(const operation of Object.keys(API_CATEGORY_BY_OPERATION)){
+        if(resp.url.includes(operation)){
+            category = API_CATEGORY_BY_OPERATION[operation];
+            break;
+        }
     }
 
     if (!category) return;
@@ -94,11 +108,7 @@ chrome.webRequest.onHeadersReceived.addListener(function (resp) {
     }
 
     send_content_script(access_limit);
-}, { urls: [
-    '*://x.com/i/api/graphql/*/SearchTimeline*',
-    '*://x.com/i/api/graphql/*/HomeLatestTimeline*',
-    '*://x.com/i/api/graphql/*/HomeTimeline*'
-] }, ['responseHeaders']);
+}, { urls: Object.keys(API_CATEGORY_BY_OPERATION).map(operation => `*://x.com/i/api/graphql/*/${operation}*`) }, ['responseHeaders']);
 
 
 function update_dnr(){

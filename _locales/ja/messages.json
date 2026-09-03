@@ -329,6 +329,12 @@
   "label_api_search": {
     "message": "検索:"
   },
+  "label_api_list_timeline": {
+    "message": "リスト:"
+  },
+  "label_api_list_index": {
+    "message": "リスト一覧:"
+  },
   "ui_global_settings_title": {
     "message": "全体設定"
   },

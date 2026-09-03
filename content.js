@@ -66,36 +66,35 @@ window.addEventListener('blur', () => {
 });
 //ストレージの書き込み監視(主にAPIリミット監視に使う)
 let api_limit_obj = null;
-let api_limit_dsc_obj = {time_line:"", recommend_timeline:"", search:""};
+//APIリミット表示のカテゴリ定義(表示順)
+const API_LIMIT_CATEGORIES = [
+    {key: "time_line", label_key: "label_api_timeline"},
+    {key: "recommend_timeline", label_key: "label_api_recommend_timeline"},
+    {key: "search", label_key: "label_api_search"},
+    {key: "list_timeline", label_key: "label_api_list_timeline"},
+    {key: "list_index", label_key: "label_api_list_index"}
+];
+//title・alert共通で使うAPIリミットの説明文
+let api_limit_description = "";
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if(changes.api_access_limit != undefined){
         //console.log(changes)
         api_limit_obj = changes.api_access_limit.newValue;
         const api_linit_status_btn = document.querySelector("#api_limit_status");
         if(api_linit_status_btn != null){
-            let timeline_limit_percentage = 99999;
-            let recommend_timeline_limit_percentage = 99999;
-            let search_limit_percentage = 99999;
-            if(api_limit_obj.time_line.remaining != null){
-                timeline_limit_percentage = api_limit_obj.time_line.remaining / api_limit_obj.time_line.limit * 100;
-                api_limit_dsc_obj.time_line = `${i18n_message("label_api_timeline")}${api_limit_obj.time_line.remaining}/${api_limit_obj.time_line.limit}-${unix_time_mmss(api_limit_obj.time_line.reset_unix_time)}\r\n`;
-            }else{
-                //初期状態
+            const limit_percentages = [];
+            const description_lines = [];
+            for(const category of API_LIMIT_CATEGORIES){
+                const category_limit = api_limit_obj[category.key];
+                //古い保存値にはカテゴリ自体が存在しない場合があるため、その場合は無視する
+                if(category_limit == undefined || category_limit.remaining == null) continue;
+                limit_percentages.push(category_limit.remaining / category_limit.limit * 100);
+                description_lines.push(`${i18n_message(category.label_key)}${category_limit.remaining}/${category_limit.limit}-${unix_time_mmss(category_limit.reset_unix_time)}`);
             }
-            if(api_limit_obj.recommend_timeline.remaining != null){
-                recommend_timeline_limit_percentage = api_limit_obj.recommend_timeline.remaining / api_limit_obj.recommend_timeline.limit * 100;
-                api_limit_dsc_obj.recommend_timeline = `${i18n_message("label_api_recommend_timeline")}${api_limit_obj.recommend_timeline.remaining}/${api_limit_obj.recommend_timeline.limit}-${unix_time_mmss(api_limit_obj.recommend_timeline.reset_unix_time)}\r\n`;
-            }else{
-                //初期状態
-            }
-            if(api_limit_obj.search.remaining != null){
-                search_limit_percentage = api_limit_obj.search.remaining / api_limit_obj.search.limit * 100;
-                api_limit_dsc_obj.search = `${i18n_message("label_api_search")}${api_limit_obj.search.remaining}/${api_limit_obj.search.limit}-${unix_time_mmss(api_limit_obj.search.reset_unix_time)}`;
-            }else{
-                //初期状態
-            }
-            api_linit_status_btn.textContent = `${Math.floor(Math.min(timeline_limit_percentage, recommend_timeline_limit_percentage, search_limit_percentage))}%`;
-            api_linit_status_btn.title = `${i18n_message("msg_api_limit_status_title", [`${api_limit_dsc_obj.time_line}${api_limit_dsc_obj.recommend_timeline}${api_limit_dsc_obj.search}`])}`;
+            const min_limit_percentage = limit_percentages.length > 0 ? Math.min(...limit_percentages) : 99999;
+            api_limit_description = description_lines.join("\r\n");
+            api_linit_status_btn.textContent = `${Math.floor(min_limit_percentage)}%`;
+            api_linit_status_btn.title = `${i18n_message("msg_api_limit_status_title", [api_limit_description])}`;
         }
     }
   });
@@ -1176,7 +1175,7 @@ function run(settings){
     //APIリミット表示用
     document.querySelector("#api_limit_status").addEventListener("click", function(){
         if(api_limit_obj != null){
-            alert(i18n_message("msg_api_limit_status_alert", [`${api_limit_dsc_obj.time_line}${api_limit_dsc_obj.recommend_timeline}${api_limit_dsc_obj.search}`]))
+            alert(i18n_message("msg_api_limit_status_alert", [api_limit_description]))
         }
     });
     //Open-Deckについて表示
