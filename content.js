@@ -1321,6 +1321,7 @@ function run(settings){
         }
     }
     //URL, ページタイトル監視
+    //explore カラムの iframe 内のページ内遷移を MutationObserver で検知し、URL・タイトルの属性とカラムバーのタイトルを更新して保存する。表示パスに応じてトップ非表示の CSS が変わるため iframe 内 CSS も選び直す
     function mutate_url(element){
         let exp_object = element.querySelector("iframe");
         exp_object.addEventListener("load", function(){
@@ -1334,6 +1335,7 @@ function run(settings){
                             exp_old_url = exp_object.contentWindow.location.href;
                             element.setAttribute("opd_explore_title", exp_title);
                             set_explore_column_title(element, `${exp_url.pathname}${exp_url.search}`);
+                            apply_column_iframe_styles(element);
                             //console.log(exp_title);
                             column_settings_save("", last_load_profile);
                         }
@@ -2711,12 +2713,16 @@ function run(settings){
     //iframe 内 head に style 要素 (style[opd_banner_css] / style[opd_top_visible_css] / style[opd_tw_view_mode_css]) を用意し、実効値に応じて COLUMN_IFRAME_CSS の文字列を設定する
     //iframe の contentWindow.document.head が読めない (未生成・クロスオリジン) 場合は何もしない (次回 load で再適用される)
     //post カラムは設定に依らずバナーとトップを常に非表示 (banner_hidden / top_hidden) にし、表示モードは適用しない
+    //トップ非表示の CSS はカラム種別と iframe が現在表示しているパスで選ぶ: home カラムは top_hidden_home、explore カラムでリスト系ページを表示中は top_hidden_list (リスト名の見出しを残す)、それ以外は top_hidden
+    //explore カラムはページ内遷移で表示パスが変わるため、mutate_url の URL 変化検知からも呼ばれる
     function apply_column_iframe_styles(column_div){
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
         let frame_head = null;
+        let frame_path = null;
         try{
             frame_head = column_frame.contentWindow?.document?.head ?? null;
+            frame_path = column_frame.contentWindow?.location?.pathname ?? null;
         }catch(e){
             //別オリジンなどで中身を読めない場合は次回の load で適用し直す
             return;
@@ -2747,8 +2753,12 @@ function run(settings){
         banner_style.textContent = effective_column_setting(column_div, "banner", global_settings) === true ? `` : COLUMN_IFRAME_CSS.banner_hidden;
         if(effective_column_setting(column_div, "top_visible", global_settings) === true){
             top_visible_style.textContent = ``;
+        }else if(column_type === "home"){
+            top_visible_style.textContent = COLUMN_IFRAME_CSS.top_hidden_home;
+        }else if(column_type === "explore" && is_list_page_path(frame_path)){
+            top_visible_style.textContent = COLUMN_IFRAME_CSS.top_hidden_list;
         }else{
-            top_visible_style.textContent = column_type === "home" ? COLUMN_IFRAME_CSS.top_hidden_home : COLUMN_IFRAME_CSS.top_hidden;
+            top_visible_style.textContent = COLUMN_IFRAME_CSS.top_hidden;
         }
         switch (effective_column_setting(column_div, "tw_view_mode", global_settings)) {
             case "1":
@@ -3252,7 +3262,7 @@ function set_title_favicon(){
 //項目 × カラム種別の適用表 (○ = 適用対象、固定 = 設定行を出さず常に非表示の style を注入する。構造用カラム main_bar_empty_column / empty_column / second_empty_column / dsp_column は対象外):
 //  項目            post    home  notification  explore(リスト含む)
 //  バナー表示       固定    ○     ○             ○
-//  トップ表示       固定    ○     ○             ○
+//  トップ表示       固定    ○     ○             ○ (リスト系ページ表示中の非表示はリスト名の見出しと戻るボタンを残す)
 //  表示モード       -       ○     ○             ○
 //  カラム幅         ○     ○     ○             ○
 //  自動更新/間隔    -     ○     -             ○
@@ -3261,7 +3271,7 @@ function set_title_favicon(){
 //適用経路は 3 つに分ける:
 //  bind_column_events(column_div)        パネル・バーのイベント登録 (data-opd_settings_initialized で二重登録を防ぐ)
 //  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・バーのチェック状態・パネル表示・ピン止め reconcile・自動更新 interval)
-//  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード)。iframe の load ごとに実行し、head 未生成時は何もしない
+//  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード)。iframe の load ごとと explore カラムのページ内遷移ごとに実行し、head 未生成時は何もしない
 //起動時 (run() の初期化でプロファイルからカラムを組み立てたとき) とカラム追加時は、挿入直後に bind_column_events と apply_column_dom_state を同期で呼ぶ (追加時はその後 column_settings_save する)。
 //全体設定の変更時は、その項目が inherit の全カラムに対して apply_column_dom_state と apply_column_iframe_styles を呼び直す。
 const SETTINGS_SCHEMA_VERSION = 2;
@@ -3289,9 +3299,11 @@ const COLUMN_INHERITABLE_SETTINGS = Object.freeze({
     auto_reload_time: "opd_setting_auto_reload_time",
     pinned: "opd_setting_pinned",
 });
-//iframe 内へ注入する CSS の正本 (初回 load・再 load・設定変更のどの経路でも同じ文字列を使う)
+//iframe 内へ注入する CSS の正本 (初回 load・再 load・設定変更・ページ内遷移のどの経路でも同じ文字列を使う)
+//top_hidden_list はリスト系ページ向けで、トップヘッダーの領域と背景は残したまま中身を不可視にし、見出し (h2[role="heading"]: リスト名) と戻るボタンだけ見えるようにする
 const COLUMN_IFRAME_CSS = Object.freeze({
     banner_hidden: `header[role="banner"]{display:none}`,
+    top_hidden_list: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1)>*{visibility: hidden;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) :is(h2[role="heading"], [data-testid="app-bar-back"]){visibility: visible;}[data-testid="app-bar-back"]{filter: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     top_hidden: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     top_hidden_home: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;} div[role="progressbar"] + div{display:none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     tw_view_text_only: `div[data-testid="cellInnerDiv"]:has(div[aria-labelledby]){visibility: hidden; height: 0;}`,
@@ -3551,10 +3563,13 @@ function set_inert_except(container, overlay){
 function fill_column_template(template_html, values){
     return template_html.replace(/%([a-z_]+)%/g, (token, name) => Object.hasOwn(values, name) ? String(values[name]) : token);
 }
+//パスがリスト系ページ (/i/lists/<id> 配下、または /<screen_name>/lists 配下) を指すか
+function is_list_page_path(path){
+    return /^\/(?:i\/lists|[^\/?#]+\/lists)(?:[\/?#]|$)/.test(path ?? "");
+}
 //Explore系カラムのパスからカラムバーに表示するタイトルを決める
 function get_explore_column_title(path){
-    const list_path_pattern = /^\/(?:i\/lists|[^\/?#]+\/lists)(?:[\/?#]|$)/;
-    if(list_path_pattern.test(path ?? "")) return i18n_message("ui_column_list_title");
+    if(is_list_page_path(path)) return i18n_message("ui_column_list_title");
     return i18n_message("ui_column_explore_title");
 }
 //Explore系カラムのカラムバーのタイトル表示を、そのカラムが表示しているパスに合わせて更新する
