@@ -72,7 +72,8 @@ const API_LIMIT_CATEGORIES = [
     {key: "recommend_timeline", label_key: "label_api_recommend_timeline"},
     {key: "search", label_key: "label_api_search"},
     {key: "list_timeline", label_key: "label_api_list_timeline"},
-    {key: "list_index", label_key: "label_api_list_index"}
+    {key: "list_index", label_key: "label_api_list_index"},
+    {key: "list_management", label_key: "label_api_list_management"}
 ];
 //title・alert共通で使うAPIリミットの説明文
 let api_limit_description = "";

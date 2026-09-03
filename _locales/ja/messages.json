@@ -335,6 +335,9 @@
   "label_api_list_index": {
     "message": "リスト一覧:"
   },
+  "label_api_list_management": {
+    "message": "リスト一覧(管理):"
+  },
   "ui_global_settings_title": {
     "message": "全体設定"
   },

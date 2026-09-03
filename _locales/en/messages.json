@@ -335,6 +335,9 @@
   "label_api_list_index": {
     "message": "Lists page:"
   },
+  "label_api_list_management": {
+    "message": "Lists management:"
+  },
   "ui_global_settings_title": {
     "message": "Global settings"
   },

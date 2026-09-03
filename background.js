@@ -56,8 +56,9 @@ let access_limit = {
     time_line:{limit: null, remaining: null, reset_unix_time: null},
     recommend_timeline:{limit: null, remaining: null, reset_unix_time: null},
     list_timeline:{limit: null, remaining: null, reset_unix_time: null},
-    //CombinedLists・ListsManagementPageTimelineはどちらもリスト一覧ページのAPIで、Webクライアントの版により使われる方が変わるため同一カテゴリとして扱う
-    list_index:{limit: null, remaining: null, reset_unix_time: null}
+    //リスト一覧ページは操作名の異なる2つのAPIを使う。リミット枠が別なので、それぞれ独立したカテゴリで追跡する
+    list_index:{limit: null, remaining: null, reset_unix_time: null},
+    list_management:{limit: null, remaining: null, reset_unix_time: null}
 };
 function send_content_script(value){
     //chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });//firefoxではsession.setAccessLevel()が未対応なのでsessionは一旦お預け
@@ -79,7 +80,7 @@ const API_CATEGORY_BY_OPERATION = {
     HomeTimeline: "recommend_timeline",
     ListLatestTweetsTimeline: "list_timeline",
     CombinedLists: "list_index",
-    ListsManagementPageTimeline: "list_index"
+    ListsManagementPageTimeline: "list_management"
 };
 
 chrome.webRequest.onHeadersReceived.addListener(function (resp) {
