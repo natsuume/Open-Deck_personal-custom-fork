@@ -174,7 +174,7 @@
     "message": "Create a profile from the current layout?"
   },
   "msg_column_width_prompt": {
-    "message": "Enter the column width in rem (numbers only).\nGuide: Small:15 / Medium:20 / Large:30 / Default:30\nValues of 11 or less are not allowed."
+    "message": "Enter the column width in rem (numbers only).\nGuide: Small:15 / Medium:20 / Large:30 / Default:30\nEnter a value between 12 and 300."
   },
   "msg_invalid_value_alert": {
     "message": "Please enter a valid value."
@@ -348,7 +348,7 @@
     "message": "Show top bar"
   },
   "ui_global_settings_column_width_rem_label": {
-    "message": "Column width (rem, 12 or more)"
+    "message": "Column width (rem, 12 to 300)"
   },
   "ui_global_settings_apply_button": {
     "message": "Apply"

@@ -174,7 +174,7 @@
     "message": "現在の構成でプロファイルを作成します"
   },
   "msg_column_width_prompt": {
-    "message": "カラム横幅のremを半角数字で入力\n目安 小:15 中:20 大:30 初期値:30\n11以下は入力できません"
+    "message": "カラム横幅のremを半角数字で入力\n目安 小:15 中:20 大:30 初期値:30\n12以上300以下の値を入力してください"
   },
   "msg_invalid_value_alert": {
     "message": "正しい値を入力してください"
@@ -348,7 +348,7 @@
     "message": "トップ表示"
   },
   "ui_global_settings_column_width_rem_label": {
-    "message": "カラム幅 (rem、12以上)"
+    "message": "カラム幅 (rem、12〜300)"
   },
   "ui_global_settings_apply_button": {
     "message": "適用"
