@@ -1073,14 +1073,14 @@ function run(settings){
             if(settings.column_settings[index].type == Object.keys(default_element)[default_index]){
                 //console.log(default_element[Object.keys(default_element)[default_index]]["html"])
                 const column_setting = settings.column_settings[index];
-                //保存値 (null = 全体設定に従う) を属性値へ、実効値をチェック状態・幅・秒数へ変換する
-                const saved_banner = column_setting.banner ?? null;
-                const saved_top_visible = column_setting.top_visible ?? null;
-                const saved_tw_view_mode = column_setting.tw_view_mode ?? null;
-                const saved_column_width = column_setting.column_width ?? null;
-                const saved_auto_reload = column_setting.auto_reload ?? null;
-                const saved_auto_reload_time = column_setting.auto_reload_time ?? null;
-                const saved_pinned = column_setting.column_pinned_override ?? null;
+                //保存値を型・範囲の強制に通してから (null = 全体設定に従う)、属性値と実効値の両方を導く
+                const saved_banner = normalize_column_setting_value("banner", column_setting.banner);
+                const saved_top_visible = normalize_column_setting_value("top_visible", column_setting.top_visible);
+                const saved_tw_view_mode = normalize_column_setting_value("tw_view_mode", column_setting.tw_view_mode);
+                const saved_column_width = normalize_column_setting_value("column_width", column_setting.column_width);
+                const saved_auto_reload = normalize_column_setting_value("auto_reload", column_setting.auto_reload);
+                const saved_auto_reload_time = normalize_column_setting_value("auto_reload_time", column_setting.auto_reload_time);
+                const saved_pinned = normalize_column_setting_value("pinned", column_setting.column_pinned_override);
                 const effective_banner = saved_banner ?? global_settings.banner;
                 const effective_top_visible = saved_top_visible ?? global_settings.top_visible;
                 const effective_column_width = saved_column_width ?? global_settings.column_width;
@@ -1099,15 +1099,15 @@ function run(settings){
                     column_banner_ch: effective_banner ? "checked" : "",
                     column_top_bar_ch: effective_top_visible ? "checked" : "",
                     column_pinned_ch: effective_pinned ? "checked" : "",
-                    column_width_attr: column_setting_attr_value(saved_column_width),
+                    column_width_attr: column_setting_attr_value("column_width", saved_column_width),
                     column_width_num: effective_column_width,
                     column_auto_reload_time: effective_auto_reload_time / 1000,
-                    column_setting_banner: column_setting_attr_value(saved_banner),
-                    column_setting_top_visible: column_setting_attr_value(saved_top_visible),
-                    column_setting_tw_view_mode: column_setting_attr_value(saved_tw_view_mode),
-                    column_setting_auto_reload: column_setting_attr_value(saved_auto_reload),
-                    column_setting_auto_reload_time: column_setting_attr_value(saved_auto_reload_time),
-                    column_setting_pinned: column_setting_attr_value(saved_pinned),
+                    column_setting_banner: column_setting_attr_value("banner", saved_banner),
+                    column_setting_top_visible: column_setting_attr_value("top_visible", saved_top_visible),
+                    column_setting_tw_view_mode: column_setting_attr_value("tw_view_mode", saved_tw_view_mode),
+                    column_setting_auto_reload: column_setting_attr_value("auto_reload", saved_auto_reload),
+                    column_setting_auto_reload_time: column_setting_attr_value("auto_reload_time", saved_auto_reload_time),
+                    column_setting_pinned: column_setting_attr_value("pinned", saved_pinned),
                     column_title: get_explore_column_title(init_column_save_path),
                     column_save_title: init_column_save_title,
                     column_pinned_save_path: init_pinned_path,
@@ -2416,9 +2416,12 @@ function run(settings){
     function inherit_option_label(key){
         return i18n_message("ui_settings_inherit_option", [global_setting_display_name(key)]);
     }
-    //保存値 (null = 全体設定に従う) をカラム div の属性値へ変換する
-    function column_setting_attr_value(saved_value){
-        return (saved_value === null || saved_value === undefined) ? "inherit" : String(saved_value);
+    //項目 key の保存値をカラム div の属性値へ変換する。normalize_column_setting_value に通した結果が
+    //null (欠損・型不正・範囲外 = 全体設定に従う) なら "inherit"、それ以外はその値の文字列にする
+    //これにより属性値は "inherit" / "true" / "false" / "0"〜"2" / 範囲内の数値文字列のいずれかに限られる
+    function column_setting_attr_value(key, saved_value){
+        const normalized_value = normalize_column_setting_value(key, saved_value);
+        return normalized_value === null ? "inherit" : String(normalized_value);
     }
     //カラム追加時のテンプレート値。個別値はすべて "inherit" にし、チェック状態・幅・秒数は全体設定の値をそのまま使う
     function inherit_column_template_values(){
@@ -3268,42 +3271,66 @@ const COLUMN_IFRAME_CSS = Object.freeze({
     tw_view_text_only: `div[data-testid="cellInnerDiv"]:has(div[aria-labelledby]){visibility: hidden; height: 0;}`,
     tw_view_media_only: `div[data-testid="cellInnerDiv"]:not(:has(div[aria-labelledby])){visibility: hidden; height: 0;}`,
 });
+//保存値・属性値の型と範囲を強制する変換。期待した型・範囲でなければ null を返す
+function to_boolean_or_null(value){
+    return typeof value === "boolean" ? value : null;
+}
+function to_view_mode_or_null(value){
+    return (value === "0" || value === "1" || value === "2") ? value : null;
+}
+function to_number_or_null(value){
+    return (typeof value === "number" && Number.isFinite(value)) ? value : null;
+}
+//数値かつ min_value 以上 max_value 以下でなければ null に落とす
+function to_number_in_range_or_null(value, min_value, max_value){
+    const number_value = to_number_or_null(value);
+    if(number_value === null) return null;
+    return (number_value < min_value || number_value > max_value) ? null : number_value;
+}
+//カラム側の項目 key の値を保存形式へ正規化する。型不正・範囲外・未知の key は null (全体設定に従う) にする
+//プロファイルの保存値もカラム div の属性値も、利用する前にこれを通して型と範囲を確定させる
+function normalize_column_setting_value(key, value){
+    switch (key) {
+        case "banner":
+        case "top_visible":
+        case "auto_reload":
+        case "pinned":
+            return to_boolean_or_null(value);
+        case "tw_view_mode":
+            return to_view_mode_or_null(value);
+        case "column_width":
+            return to_number_in_range_or_null(value, COLUMN_WIDTH_MIN_REM, COLUMN_WIDTH_MAX_REM);
+        case "auto_reload_time":
+            return to_number_in_range_or_null(value, AUTO_RELOAD_TIME_MIN_MS, AUTO_RELOAD_TIME_MAX_MS);
+        default:
+            return null;
+    }
+}
+//全体設定を正規化した新しいオブジェクトを返す。GLOBAL_SETTINGS_DEFAULT の各キーについて、欠損・型不正・範囲外を既定値で埋める
+function normalize_global_settings(global_settings){
+    const normalized = {};
+    for (const key of Object.keys(GLOBAL_SETTINGS_DEFAULT)) {
+        normalized[key] = global_settings?.[key];
+    }
+    if(to_boolean_or_null(normalized.banner) === null) normalized.banner = GLOBAL_SETTINGS_DEFAULT.banner;
+    if(to_boolean_or_null(normalized.top_visible) === null) normalized.top_visible = GLOBAL_SETTINGS_DEFAULT.top_visible;
+    if(to_view_mode_or_null(normalized.tw_view_mode) === null) normalized.tw_view_mode = GLOBAL_SETTINGS_DEFAULT.tw_view_mode;
+    if(to_number_in_range_or_null(normalized.column_width, COLUMN_WIDTH_MIN_REM, COLUMN_WIDTH_MAX_REM) === null) normalized.column_width = GLOBAL_SETTINGS_DEFAULT.column_width;
+    if(to_boolean_or_null(normalized.auto_reload) === null) normalized.auto_reload = GLOBAL_SETTINGS_DEFAULT.auto_reload;
+    if(to_number_in_range_or_null(normalized.auto_reload_time, AUTO_RELOAD_TIME_MIN_MS, AUTO_RELOAD_TIME_MAX_MS) === null) normalized.auto_reload_time = GLOBAL_SETTINGS_DEFAULT.auto_reload_time;
+    if(to_boolean_or_null(normalized.pinned) === null) normalized.pinned = GLOBAL_SETTINGS_DEFAULT.pinned;
+    return normalized;
+}
 //プロファイル保存形式を現在のスキーマへ正規化する。変更があれば true を返す (呼び出し側が保存する)
 //  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 7 項目を null、column_pinned_path を "" にリセットし、version を更新する
-//  現在のスキーマ: global_settings の欠損・型不正は既定値で補い、範囲外 (column_width が COLUMN_WIDTH_MIN_REM 未満または COLUMN_WIDTH_MAX_REM 超過、auto_reload_time が AUTO_RELOAD_TIME_MIN_MS 未満または AUTO_RELOAD_TIME_MAX_MS 超過) も既定値へ戻す。
-//               カラム側の型不正 (数値でない幅・真偽でない真偽値・"0"〜"2" 以外の表示モード) と範囲外 (下限未満・上限超過) は null にする。
+//  現在のスキーマ: global_settings は normalize_global_settings で欠損・型不正・範囲外を既定値へ戻す。
+//               カラム側は normalize_column_setting_value で型不正・範囲外を null にする。
 //               column_pinned_override が false なのに column_pinned_path が非空の場合はパスを "" に戻す
 //起動時 (init 内、run の前) に全プロファイルへ適用し、プロファイルローダーが保存した任意の JSON もここで吸収する
+//store が配列でなければ何もせず false を返す。この場合を含め正規化を経なかった値は、利用点の
+//clone_global_settings (全体設定) と column_setting_attr_value (カラム属性) が改めて型と範囲を強制する
 function normalize_profile_store(store){
     if(!Array.isArray(store)) return false;
-    //カラム側の保存値。期待した型でなければ null (全体設定に従う) に落とす
-    function to_boolean_or_null(value){
-        return typeof value === "boolean" ? value : null;
-    }
-    function to_view_mode_or_null(value){
-        return (value === "0" || value === "1" || value === "2") ? value : null;
-    }
-    function to_number_or_null(value){
-        return (typeof value === "number" && Number.isFinite(value)) ? value : null;
-    }
-    //数値かつ範囲内でなければ null に落とす
-    function to_number_in_range_or_null(value, min_value, max_value){
-        const number_value = to_number_or_null(value);
-        if(number_value === null) return null;
-        return (number_value < min_value || number_value > max_value) ? null : number_value;
-    }
-    //全体設定。欠損・型不正は既定値で補い、範囲外の値も既定値へ戻す
-    function normalize_global_settings(global_settings){
-        const normalized = clone_global_settings(global_settings);
-        if(typeof normalized.banner !== "boolean") normalized.banner = GLOBAL_SETTINGS_DEFAULT.banner;
-        if(typeof normalized.top_visible !== "boolean") normalized.top_visible = GLOBAL_SETTINGS_DEFAULT.top_visible;
-        if(to_view_mode_or_null(normalized.tw_view_mode) === null) normalized.tw_view_mode = GLOBAL_SETTINGS_DEFAULT.tw_view_mode;
-        if(to_number_in_range_or_null(normalized.column_width, COLUMN_WIDTH_MIN_REM, COLUMN_WIDTH_MAX_REM) === null) normalized.column_width = GLOBAL_SETTINGS_DEFAULT.column_width;
-        if(typeof normalized.auto_reload !== "boolean") normalized.auto_reload = GLOBAL_SETTINGS_DEFAULT.auto_reload;
-        if(to_number_in_range_or_null(normalized.auto_reload_time, AUTO_RELOAD_TIME_MIN_MS, AUTO_RELOAD_TIME_MAX_MS) === null) normalized.auto_reload_time = GLOBAL_SETTINGS_DEFAULT.auto_reload_time;
-        if(typeof normalized.pinned !== "boolean") normalized.pinned = GLOBAL_SETTINGS_DEFAULT.pinned;
-        return normalized;
-    }
     let is_changed = false;
     for (let index = 0; index < store.length; index++) {
         const profile = store[index];
@@ -3340,18 +3367,20 @@ function normalize_profile_store(store){
         for (let column_index = 0; column_index < columns.length; column_index++) {
             const column = columns[column_index];
             if(column === null || typeof column !== "object") continue;
-            const normalized_column = {
-                banner: to_boolean_or_null(column.banner),
-                top_visible: to_boolean_or_null(column.top_visible),
-                tw_view_mode: to_view_mode_or_null(column.tw_view_mode),
-                column_width: to_number_in_range_or_null(column.column_width, COLUMN_WIDTH_MIN_REM, COLUMN_WIDTH_MAX_REM),
-                auto_reload: to_boolean_or_null(column.auto_reload),
-                auto_reload_time: to_number_in_range_or_null(column.auto_reload_time, AUTO_RELOAD_TIME_MIN_MS, AUTO_RELOAD_TIME_MAX_MS),
-                column_pinned_override: to_boolean_or_null(column.column_pinned_override),
+            //保存キー名と、その値の型・範囲を決める設定項目名の対応 (ピン止めだけ保存キーが異なる)
+            const column_save_keys = {
+                banner: "banner",
+                top_visible: "top_visible",
+                tw_view_mode: "tw_view_mode",
+                column_width: "column_width",
+                auto_reload: "auto_reload",
+                auto_reload_time: "auto_reload_time",
+                column_pinned_override: "pinned",
             };
-            for (const key of Object.keys(normalized_column)) {
-                if(column[key] === normalized_column[key]) continue;
-                column[key] = normalized_column[key];
+            for (const save_key of Object.keys(column_save_keys)) {
+                const normalized_value = normalize_column_setting_value(column_save_keys[save_key], column[save_key]);
+                if(column[save_key] === normalized_value) continue;
+                column[save_key] = normalized_value;
                 is_changed = true;
             }
             if(typeof column.column_pinned_path !== "string"){
@@ -3367,36 +3396,27 @@ function normalize_profile_store(store){
     }
     return is_changed;
 }
-//global_settings の複製を返す (新規プロファイル保存時・欠損補完時に使う)
-//GLOBAL_SETTINGS_DEFAULT の各キーについて、入力が null / undefined なら既定値で埋める (型・範囲の補正は normalize_profile_store が担う)
+//全体設定の複製を返す (run() への取り込み・新規プロファイル保存時・ダイアログの適用時に使う)
+//normalize_global_settings と同じ正規化を行い、欠損・型不正・範囲外を既定値で埋めた新しいオブジェクトを返すため、
+//正規化を経ていない保存値を渡しても、以降は GLOBAL_SETTINGS_DEFAULT と同じ型・範囲の値だけが出回る
 function clone_global_settings(global_settings){
-    const cloned = {};
-    for (const key of Object.keys(GLOBAL_SETTINGS_DEFAULT)) {
-        cloned[key] = global_settings?.[key] ?? GLOBAL_SETTINGS_DEFAULT[key];
-    }
-    return cloned;
+    return normalize_global_settings(global_settings);
 }
-//カラム div の属性から項目 key の個別値を読む。属性が無い・"inherit" なら null、それ以外は保存形式と同じ型に変換する
-//(真偽値は "true" のとき true、数値は Number()、表示モードは文字列のまま)
-//型不正 (NaN 等) と範囲外 (column_width が COLUMN_WIDTH_MIN_REM 未満 / COLUMN_WIDTH_MAX_REM 超過、auto_reload_time が AUTO_RELOAD_TIME_MIN_MS 未満 / AUTO_RELOAD_TIME_MAX_MS 超過) も null にし、全体設定へ委ねる
+//カラム div の属性から項目 key の個別値を読む。属性が無い・空・"inherit" なら null
+//それ以外は属性の文字列を保存形式の型へ直し (真偽値は "true"/"false"、数値は Number()、表示モードは文字列のまま)、
+//normalize_column_setting_value に通して型不正・範囲外を null にする (null = 全体設定に従う)
 function read_column_setting(column_div, key){
     const attribute_name = COLUMN_INHERITABLE_SETTINGS[key];
     if(attribute_name === undefined) return null;
     const raw_value = column_div?.getAttribute(attribute_name) ?? null;
     if(raw_value === null || raw_value === "" || raw_value === "inherit") return null;
-    if(key === "tw_view_mode"){
-        return (raw_value === "0" || raw_value === "1" || raw_value === "2") ? raw_value : null;
-    }
     if(key === "column_width" || key === "auto_reload_time"){
-        const number_value = Number(raw_value);
-        if(!Number.isFinite(number_value)) return null;
-        const min_value = key === "column_width" ? COLUMN_WIDTH_MIN_REM : AUTO_RELOAD_TIME_MIN_MS;
-        const max_value = key === "column_width" ? COLUMN_WIDTH_MAX_REM : AUTO_RELOAD_TIME_MAX_MS;
-        return (number_value < min_value || number_value > max_value) ? null : number_value;
+        return normalize_column_setting_value(key, Number(raw_value));
     }
-    if(raw_value === "true") return true;
-    if(raw_value === "false") return false;
-    return null;
+    if(key === "tw_view_mode"){
+        return normalize_column_setting_value(key, raw_value);
+    }
+    return normalize_column_setting_value(key, raw_value === "true" ? true : (raw_value === "false" ? false : null));
 }
 //項目 key の実効値 (カラムの個別値 ?? 全体設定) を返す
 function effective_column_setting(column_div, key, global_settings){
