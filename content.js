@@ -86,12 +86,15 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         const api_linit_status_btn = document.querySelector("#api_limit_status");
         if(api_linit_status_btn != null){
             const limit_percentages = [];
+            const now_unix_time = Date.now() / 1000;
             for(const category of API_LIMIT_CATEGORIES){
                 const category_limit = api_limit_obj[category.key];
                 //古い保存値にはカテゴリ自体が存在しない場合があるため、その場合は無視する
                 if(category_limit == undefined || category_limit.remaining == null) continue;
-                limit_percentages.push(category_limit.remaining / category_limit.limit * 100);
                 api_limit_description_by_key[category.key] = `${i18n_message(category.label_key)}${category_limit.remaining}/${category_limit.limit}-${unix_time_mmss(category_limit.reset_unix_time)}`;
+                //リセット時刻を過ぎた値は枠が回復済みなので、残存率の最小値計算には含めない (説明行にはリセット時刻付きで残す)
+                if(Number(category_limit.reset_unix_time) <= now_unix_time) continue;
+                limit_percentages.push(category_limit.remaining / category_limit.limit * 100);
             }
             const min_limit_percentage = limit_percentages.length > 0 ? Math.min(...limit_percentages) : 99999;
             api_limit_description = API_LIMIT_CATEGORIES
