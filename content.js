@@ -3262,7 +3262,7 @@ function set_title_favicon(){
 //項目 × カラム種別の適用表 (○ = 適用対象、固定 = 設定行を出さず常に非表示の style を注入する。構造用カラム main_bar_empty_column / empty_column / second_empty_column / dsp_column は対象外):
 //  項目            post    home  notification  explore(リスト含む)
 //  バナー表示       固定    ○     ○             ○
-//  トップ表示       固定    ○     ○             ○ (リスト系ページ表示中の非表示はリスト名の見出しと戻るボタンを残す)
+//  トップ表示       固定    ○     ○             ○ (リスト系ページ表示中の非表示はリスト名の見出しだけ残す)
 //  表示モード       -       ○     ○             ○
 //  カラム幅         ○     ○     ○             ○
 //  自動更新/間隔    -     ○     -             ○
@@ -3300,10 +3300,10 @@ const COLUMN_INHERITABLE_SETTINGS = Object.freeze({
     pinned: "opd_setting_pinned",
 });
 //iframe 内へ注入する CSS の正本 (初回 load・再 load・設定変更・ページ内遷移のどの経路でも同じ文字列を使う)
-//top_hidden_list はリスト系ページ向けで、トップヘッダーの領域と背景は残したまま中身を不可視にし、見出し (h2[role="heading"]: リスト名) と戻るボタンだけ見えるようにする
+//top_hidden_list はリスト系ページ向けで、トップヘッダーの領域と背景は残したまま中身 (戻るボタン・オーナー表示・共有・メニュー) を不可視にし、見出し (h2[role="heading"]: リスト名) だけ見えるようにする。見出し内のアイコン (非公開リストの鍵) は display:none で除く
 const COLUMN_IFRAME_CSS = Object.freeze({
     banner_hidden: `header[role="banner"]{display:none}`,
-    top_hidden_list: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1)>*{visibility: hidden;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) :is(h2[role="heading"], [data-testid="app-bar-back"]){visibility: visible;}[data-testid="app-bar-back"]{filter: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
+    top_hidden_list: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1)>*{visibility: hidden;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2[role="heading"]{visibility: visible;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2[role="heading"] svg{display: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     top_hidden: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     top_hidden_home: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;} div[role="progressbar"] + div{display:none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     tw_view_text_only: `div[data-testid="cellInnerDiv"]:has(div[aria-labelledby]){visibility: hidden; height: 0;}`,
