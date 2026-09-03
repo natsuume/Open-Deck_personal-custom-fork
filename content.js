@@ -145,9 +145,19 @@ if(location.href == "https://twitter.com/run-opdeck" || location.href == "https:
             chrome.storage.local.get("opd_profile_store", function(store_value){
                 //console.log(store_value)
                 //console.log(JSON.parse(store_value.opd_profile_store))
-                profile_store = JSON.parse(store_value.opd_profile_store);
+                //読み出せない・配列でない保存値は既定プロファイル 1 件へ差し替える (run() は配列であることを前提に読む)
+                let is_profile_store_repaired = false;
+                try{
+                    profile_store = JSON.parse(store_value.opd_profile_store);
+                }catch(e){
+                    profile_store = null;
+                }
+                if(!Array.isArray(profile_store)){
+                    profile_store = [create_default_profile()];
+                    is_profile_store_repaired = true;
+                }
                 //保存形式を現在のスキーマへ正規化する。補正した場合は保存し、run には正規化後の設定を渡す
-                if(normalize_profile_store(profile_store)){
+                if(normalize_profile_store(profile_store) || is_profile_store_repaired){
                     chrome.storage.local.set({'opd_profile_store': JSON.stringify(profile_store)});
                 }
                 //RUN
@@ -3334,21 +3344,79 @@ function normalize_global_settings(global_settings){
     if(to_boolean_or_null(normalized.pinned) === null) normalized.pinned = GLOBAL_SETTINGS_DEFAULT.pinned;
     return normalized;
 }
+//既定プロファイルのカラム配列を新しく作って返す (呼び出しごとに別の配列・別のカラムオブジェクトになる)
+//継承可能 7 項目と column_pinned_override は null (全体設定に従う)。ただし home カラムの banner だけは true の明示値にする (既定プロファイルの Home はバナー表示)
+function create_default_profile_columns(){
+    //カラム 1 件分の保存形式。overrides で既定から変える項目だけを指定する
+    function default_column(type, overrides){
+        return Object.assign({
+            type: type,
+            banner: null,
+            top_visible: null,
+            tw_view_mode: null,
+            column_save_path: "",
+            column_save_title: "",
+            column_pinned_path: "",
+            column_pinned_override: null,
+            auto_reload: null,
+            auto_reload_time: null,
+            column_width: null,
+        }, overrides);
+    }
+    return [
+        default_column("main_bar_empty_column", {}),
+        default_column("home", {banner: true}),
+        default_column("notification", {}),
+        default_column("explore", {exp_type: "", column_save_path: "/explore"}),
+        default_column("empty_column", {}),
+    ];
+}
+//既定プロファイルを新しく作って返す (初期設定の構築と、壊れたプロファイルの置き換えに使う)
+function create_default_profile(){
+    return {name:"default", profile: create_default_profile_columns(), settings_schema_version: SETTINGS_SCHEMA_VERSION, global_settings: clone_global_settings()};
+}
 //プロファイル保存形式を現在のスキーマへ正規化する。変更があれば true を返す (呼び出し側が保存する)
+//構造の復旧 (スキーマ版に依らず全プロファイルへ適用する。run() が profile.length や column.type を読める形を保証する):
+//  store が空配列: 既定プロファイルを 1 件置く
+//  プロファイル要素がオブジェクトでない (null・配列・プリミティブ): create_default_profile() で置き換える
+//  profile が配列でない: create_default_profile_columns() で置き換える
+//  profile 内の要素がオブジェクトでない / type が文字列でない: その要素を取り除く
+//値の正規化:
 //  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 7 項目を null、column_pinned_path を "" にリセットし、version を更新する
 //  現在のスキーマ: global_settings は normalize_global_settings で欠損・型不正・範囲外を既定値へ戻す。
 //               カラム側は normalize_column_setting_value で型不正・範囲外を null にする。
 //               column_pinned_override が false なのに column_pinned_path が非空の場合はパスを "" に戻す
 //起動時 (init 内、run の前) に全プロファイルへ適用し、プロファイルローダーが保存した任意の JSON もここで吸収する
-//store が配列でなければ何もせず false を返す。この場合を含め正規化を経なかった値は、利用点の
-//clone_global_settings (全体設定) と column_setting_attr_value (カラム属性) が改めて型と範囲を強制する
+//store 自体が配列でなければ何もせず false を返す (呼び出し側が既定プロファイル 1 件の配列へ差し替える)。
+//正規化を経なかった値は、利用点の clone_global_settings (全体設定) と column_setting_attr_value (カラム属性) が改めて型と範囲を強制する
 function normalize_profile_store(store){
     if(!Array.isArray(store)) return false;
     let is_changed = false;
+    //プロファイルが 1 件も無いと run() が読むカラムが無くなるため、既定プロファイルを 1 件置く
+    if(store.length === 0){
+        store.push(create_default_profile());
+        return true;
+    }
     for (let index = 0; index < store.length; index++) {
+        //オブジェクトでないプロファイル (null・配列・プリミティブ) は既定プロファイルへ置き換える
+        if(store[index] === null || typeof store[index] !== "object" || Array.isArray(store[index])){
+            store[index] = create_default_profile();
+            is_changed = true;
+            continue;
+        }
         const profile = store[index];
-        if(profile === null || typeof profile !== "object") continue;
-        const columns = Array.isArray(profile.profile) ? profile.profile : [];
+        //カラム配列が配列でなければ既定のカラム構成に戻し、オブジェクトでない要素と type が文字列でない要素は取り除く
+        if(!Array.isArray(profile.profile)){
+            profile.profile = create_default_profile_columns();
+            is_changed = true;
+        }else{
+            const valid_columns = profile.profile.filter((column) => column !== null && typeof column === "object" && !Array.isArray(column) && typeof column.type === "string");
+            if(valid_columns.length !== profile.profile.length){
+                profile.profile = valid_columns;
+                is_changed = true;
+            }
+        }
+        const columns = profile.profile;
         const schema_version = Number(profile.settings_schema_version);
         //旧形式のプロファイルは既定の全体設定を与え、各カラムを「全体設定に従う」へリセットする
         if(!Number.isFinite(schema_version) || schema_version < SETTINGS_SCHEMA_VERSION){
@@ -3356,7 +3424,6 @@ function normalize_profile_store(store){
             profile.global_settings = clone_global_settings();
             for (let column_index = 0; column_index < columns.length; column_index++) {
                 const column = columns[column_index];
-                if(column === null || typeof column !== "object") continue;
                 column.banner = null;
                 column.top_visible = null;
                 column.tw_view_mode = null;
@@ -3379,7 +3446,6 @@ function normalize_profile_store(store){
         }
         for (let column_index = 0; column_index < columns.length; column_index++) {
             const column = columns[column_index];
-            if(column === null || typeof column !== "object") continue;
             //保存キー名と、その値の型・範囲を決める設定項目名の対応 (ピン止めだけ保存キーが異なる)
             const column_save_keys = {
                 banner: "banner",
@@ -3697,16 +3763,14 @@ function watch_load_column(column_frames, max_retries = 5){
     setTimeout(() => cleanups.forEach(fn => fn()), max_retries * 500 + 1000);
 }
 //設定初期化
-//初期設定の構築。既定プロファイルは settings_schema_version (= SETTINGS_SCHEMA_VERSION) と global_settings (= clone_global_settings()) を持ち、
-//各カラムの継承可能 7 項目と column_pinned_override は null (全体設定に従う) にする。ただし home カラムの banner だけは true の明示値にする (既定プロファイルの Home はバナー表示)
+//初期設定の構築。既定プロファイルは create_default_profile() で作る
 function settings_init(){
-    const profile_store_default =[{type:"main_bar_empty_column", banner:null, top_visible:null, tw_view_mode:null, column_save_path:"", column_save_title:"", column_pinned_path:"", column_pinned_override:null, auto_reload:null, auto_reload_time:null, column_width:null}, {type:"home", banner:true, top_visible:null, tw_view_mode:null, column_save_path:"", column_save_title:"", column_pinned_path:"", column_pinned_override:null, auto_reload:null, auto_reload_time:null, column_width:null}, {type:"notification", banner:null, top_visible:null, tw_view_mode:null, column_save_path:"", auto_reload:null, auto_reload_time:null, column_pinned_path:"", column_pinned_override:null, column_save_title:"", column_width:null}, {type:"explore", banner:null, top_visible:null, tw_view_mode:null, exp_type:"", column_save_path:"/explore", column_save_title:"", column_pinned_path:"", column_pinned_override:null, auto_reload:null, auto_reload_time:null, column_width:null}, {type:"empty_column", banner:null, top_visible:null, tw_view_mode:null, column_save_path:"", column_save_title:"", column_pinned_path:"", column_pinned_override:null, auto_reload:null, auto_reload_time:null, column_width:null}];
     const settings = {
         last_load_profile:0,
         //column_settings:[{type:"main_bar_empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_pinned_path:"", column_width:null}, {type:"home", banner:true, top_visible:true, tw_view_mode:"0", column_save_path:"", column_pinned_path:"", column_width:null}, {type:"notification", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_pinned_path:"", column_width:null}, {type:"explore", banner:false, top_visible:true, tw_view_mode:"0", exp_type:"", column_save_path:"/explore", column_pinned_path:"", column_width:null}, {type:"empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_pinned_path:"", column_width:null}],
         version:manifest.version
     };
-    let profile = [{name:"default", profile: profile_store_default, settings_schema_version: SETTINGS_SCHEMA_VERSION, global_settings: clone_global_settings()}];
+    let profile = [create_default_profile()];
     //console.log(profile);
     chrome.storage.local.set({'opd_profile_store': JSON.stringify(profile)}, function () {
         chrome.storage.local.set({'opd_settings': JSON.stringify(settings)}, function () {
