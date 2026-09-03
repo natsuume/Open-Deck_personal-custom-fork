@@ -2547,14 +2547,12 @@ function run(settings){
     //skeleton を外す上限時間のタイマー。読み込みが終わらなくても skeleton で X の画面 (エラー表示を含む) を隠し続けないようにする
     let post_form_skeleton_timer = null;
     const post_form_skeleton_limit_ms = 15000;
-    //直近の読み込み開始時刻と、その読み込み失敗監視の解除関数
-    let post_form_load_started_at = 0;
+    //直近の読み込み失敗監視の解除関数
     let post_form_load_watch_cleanup = null;
     //iframe の読み込みを始めるときに呼ぶ。前回の読み込み失敗監視を外してから付け直し、skeleton を上限時間つきで表示する
     function start_post_form_frame_load(frame){
         post_form_load_watch_cleanup?.();
         post_form_load_watch_cleanup = watch_load_column([frame]);
-        post_form_load_started_at = Date.now();
         frame.src = "https://x.com/intent/tweet";
         set_post_form_skeleton_visible(true);
     }
@@ -2704,13 +2702,13 @@ function run(settings){
         }
     }
     //iframe がポストフォームを表示しているか。パスが intent/tweet か投稿後に開き直される compose/post 配下なら表示中、それ以外のパスでもダイアログとして開いた composer の入力欄が画面にあれば表示中とみなす (下書きを消さない側に倒す)。ホームタイムラインに埋め込まれた composer はダイアログではないため対象にならない
-    //読み込み開始から上限時間内の about:blank は読み込み中とみなして表示中扱いにし、上限を過ぎても about:blank のままなら遷移が成立しなかったとみなす。中身を読めない場合は表示していないとみなす
+    //遷移が確定していない about:blank (下書きは存在しない) と、中身を読めない場合は表示していないとみなす
     function is_post_form_frame_on_composer(frame){
         try{
             const frame_window = frame.contentWindow;
             const frame_location = frame_window?.location;
             if(frame_location == null) return false;
-            if(frame_location.href === "about:blank") return Date.now() - post_form_load_started_at < post_form_skeleton_limit_ms;
+            if(frame_location.href === "about:blank") return false;
             if(frame_location.pathname.startsWith("/intent/tweet") || frame_location.pathname.startsWith("/compose/post")) return true;
             return frame_window.document.querySelector('[role="dialog"] div[contenteditable="true"][data-testid*="tweetTextarea"]') !== null;
         }catch(e){
@@ -2755,12 +2753,12 @@ function run(settings){
             });
             start_post_form_frame_load(new_frame);
         }else{
-            //使い回す iframe が composer 以外の画面 (ホーム等) に移っていたらポストフォームを読み込み直す
+            //使い回す iframe が composer 以外の画面 (ホーム等) に移っていたり、遷移が確定していなかったらポストフォームを読み込み直す
             const frame = post_form_popover.querySelector(".opd_post_form_frame");
             if(!is_post_form_frame_on_composer(frame)){
                 start_post_form_frame_load(frame);
             }else if(!post_form_popover.querySelector(".opd_post_form_frame_skeleton").hidden){
-                //読み込み中に閉じていた場合は、閉じるときに外した読み込み失敗監視と skeleton の上限時間を付け直す
+                //遷移は確定したが load がまだ来ていないあいだに閉じていた場合は、閉じるときに外した読み込み失敗監視と skeleton の上限時間を付け直す
                 post_form_load_watch_cleanup?.();
                 post_form_load_watch_cleanup = watch_load_column([frame]);
                 set_post_form_skeleton_visible(true);
