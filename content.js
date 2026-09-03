@@ -2530,7 +2530,7 @@ function run(settings){
     //ポストフォーム (https://x.com/intent/tweet の iframe) を、サイドバーの投稿ボタンの横に出す非モーダルの浮動パネル (ポップオーバー) で開閉する
     //#opd_main_element の末尾に #opd_post_form_popover (class "opd_post_form_popover" role="dialog" aria-labelledby) を 1 つだけ生成する。中身は見出しと閉じるボタンを並べたバーと、iframe に読み込み中の skeleton を重ねる枠
     //非モーダルなので開いているあいだも背景 (カラム・サイドバー) を操作でき、背景の inert もフォーカストラップも行わない
-    //閉じるときは iframe を破棄せず隠すだけなので、書きかけの下書きは開き直しても残り、2 回目以降は読み込み待ちが無い。保持されるのは開閉のあいだだけで、プロファイル切替 (#opd_main_element の作り直し) やページ再読み込みでは失われる。開き直したときに iframe が composer 以外の画面に移っていた場合だけ intent/tweet を読み込み直す
+    //閉じるときは iframe を破棄せず隠すだけなので、書きかけの下書きは開き直しても残り、2 回目以降は読み込み待ちが無い。保持されるのは開閉のあいだだけで、プロファイル切替 (#opd_main_element の作り直し) やページ再読み込みでは失われる。開き直したときに iframe が composer 以外の画面に移っていた場合と、前回の読み込みが終わっていなかった場合だけ intent/tweet を読み込み直す
     //閉じる経路は 閉じるボタン / Esc / 開閉ボタンの再押下 / X の composer が閉じたことの検知 の 4 つ
     //Esc はポップオーバーの iframe 内と本体 UI (document) の 2 か所で受け取るため、他のカラムの iframe 内で押した Esc は届かない。X が Esc を処理した (preventDefault した) 場合はそちらを優先する
     //モーダルダイアログ (#opd_main_element 直下の .opd_dialog_overlay) が開いているあいだは新たに開かず、モーダルが背景に付けた inert がポップオーバーに乗っているあいだと、メディアビューワーの dialog が showModal で開いているあいだは Esc を無視しフォーカスも奪わない
@@ -2549,10 +2549,13 @@ function run(settings){
     const post_form_skeleton_limit_ms = 15000;
     //直近の読み込み失敗監視の解除関数
     let post_form_load_watch_cleanup = null;
+    //iframe の読み込みが始まってから Document の初期化が終わるまで true。skeleton の表示 (上限時間で外れる) とは別に持つ
+    let post_form_frame_loading = false;
     //iframe の読み込みを始めるときに呼ぶ。前回の読み込み失敗監視を外してから付け直し、skeleton を上限時間つきで表示する
     function start_post_form_frame_load(frame){
         post_form_load_watch_cleanup?.();
         post_form_load_watch_cleanup = watch_load_column([frame]);
+        post_form_frame_loading = true;
         frame.src = "https://x.com/intent/tweet";
         set_post_form_skeleton_visible(true);
     }
@@ -2660,6 +2663,7 @@ function run(settings){
         if(frame_document.location?.href === "about:blank") return;
         if(post_form_prepared_documents.has(frame_document)) return;
         post_form_prepared_documents.add(frame_document);
+        post_form_frame_loading = false;
         //読み込みが終わったので skeleton を外す
         try{
             set_post_form_skeleton_visible(false);
@@ -2753,16 +2757,9 @@ function run(settings){
             });
             start_post_form_frame_load(new_frame);
         }else{
-            //使い回す iframe が composer 以外の画面 (ホーム等) に移っていたり、遷移が確定していなかったらポストフォームを読み込み直す
+            //使い回す iframe が composer 以外の画面 (ホーム等) に移っていたり、遷移が確定していなかったり、前回の読み込みが終わらないまま閉じていたらポストフォームを読み込み直す (読み込みが終わっていない画面に下書きは無い)
             const frame = post_form_popover.querySelector(".opd_post_form_frame");
-            if(!is_post_form_frame_on_composer(frame)){
-                start_post_form_frame_load(frame);
-            }else if(!post_form_popover.querySelector(".opd_post_form_frame_skeleton").hidden){
-                //遷移は確定したが load がまだ来ていないあいだに閉じていた場合は、閉じるときに外した読み込み失敗監視と skeleton の上限時間を付け直す
-                post_form_load_watch_cleanup?.();
-                post_form_load_watch_cleanup = watch_load_column([frame]);
-                set_post_form_skeleton_visible(true);
-            }
+            if(post_form_frame_loading || !is_post_form_frame_on_composer(frame)) start_post_form_frame_load(frame);
         }
         post_form_popover.hidden = false;
         post_form_opener = opener_element ?? null;
