@@ -921,6 +921,7 @@ function run(settings){
         --opd-frame-skeleton: #bdbdbd;
         position: fixed;
         left: calc(60px + 0.5rem);
+        top: 8px;
         z-index: 999;
         display: flex;
         flex-direction: column;
@@ -2542,6 +2543,27 @@ function run(settings){
     let post_form_token = null;
     //初期化済みの iframe の Document
     const post_form_prepared_documents = new WeakSet();
+    //skeleton を外す上限時間のタイマー。読み込みが終わらなくても skeleton で X の画面 (エラー表示を含む) を隠し続けないようにする
+    let post_form_skeleton_timer = null;
+    const post_form_skeleton_limit_ms = 15000;
+    //iframe の読み込みを始めるときに呼ぶ。読み込み失敗の監視を付けて読み込み、skeleton を上限時間つきで表示する
+    function start_post_form_frame_load(frame){
+        watch_load_column([frame]);
+        frame.src = "https://x.com/intent/tweet";
+        set_post_form_skeleton_visible(true);
+    }
+    function set_post_form_skeleton_visible(is_visible){
+        clearTimeout(post_form_skeleton_timer);
+        post_form_skeleton_timer = null;
+        const frame_skeleton = post_form_popover?.querySelector(".opd_post_form_frame_skeleton") ?? null;
+        if(frame_skeleton === null) return;
+        frame_skeleton.hidden = !is_visible;
+        if(is_visible){
+            post_form_skeleton_timer = setTimeout(function(){
+                set_post_form_skeleton_visible(false);
+            }, post_form_skeleton_limit_ms);
+        }
+    }
     //ポップオーバーが表示されているか
     function is_post_form_popover_open(){
         return post_form_popover !== null && post_form_popover.isConnected && !post_form_popover.hidden;
@@ -2625,8 +2647,7 @@ function run(settings){
         post_form_prepared_documents.add(frame_document);
         //読み込みが終わったので skeleton を外す
         try{
-            const frame_skeleton = post_form_popover?.querySelector(".opd_post_form_frame_skeleton") ?? null;
-            if(frame_skeleton !== null) frame_skeleton.hidden = true;
+            set_post_form_skeleton_visible(false);
         }catch(e){
             console.warn("post form: skeleton を外せませんでした->", e);
         }
@@ -2712,17 +2733,11 @@ function run(settings){
             new_frame.addEventListener("load", function(){
                 prepare_post_form_frame_document(new_frame);
             });
-            //読み込みに失敗したときは読み込み直す
-            watch_load_column([new_frame]);
-            new_frame.src = "https://x.com/intent/tweet";
-            popover.querySelector(".opd_post_form_frame_skeleton").hidden = false;
+            start_post_form_frame_load(new_frame);
         }else{
             //使い回す iframe が composer 以外の画面 (ホーム等) に移っていたらポストフォームを読み込み直す
             const frame = post_form_popover.querySelector(".opd_post_form_frame");
-            if(!is_post_form_frame_on_composer(frame)){
-                post_form_popover.querySelector(".opd_post_form_frame_skeleton").hidden = false;
-                frame.src = "https://x.com/intent/tweet";
-            }
+            if(!is_post_form_frame_on_composer(frame)) start_post_form_frame_load(frame);
         }
         post_form_popover.hidden = false;
         post_form_opener = opener_element ?? null;
