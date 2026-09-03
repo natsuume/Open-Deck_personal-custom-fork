@@ -2785,10 +2785,8 @@ function run(settings){
         }
         post_form_popover.hidden = true;
         post_form_opener?.setAttribute?.("aria-expanded", "false");
-        remove_post_form_popover_listeners();
-        //閉じているあいだは skeleton の上限時間を進めない (開き直したときに付け直す)
-        clearTimeout(post_form_skeleton_timer);
-        post_form_skeleton_timer = null;
+        //閉じているあいだは skeleton の上限時間を進めず (開き直したときに付け直す)、読み込み失敗監視の再読み込みも走らせない (開き直したときに composer 以外なら読み込み直す)
+        teardown_post_form_popover();
     }
     //開閉ボタンの操作で表示と非表示を切り替える。opener_element: 開いた要素 (位置合わせの基準とフォーカスの戻し先)
     function toggle_post_form_popover(opener_element){
