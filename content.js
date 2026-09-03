@@ -2399,7 +2399,7 @@ function run(settings){
                 if(global_settings.tw_view_mode === "2") return i18n_message("ui_settings_view_mode_media_only");
                 return i18n_message("ui_settings_view_mode_all");
             case "column_width":
-                return `${global_settings.column_width}rem`;
+                return `${Number(global_settings.column_width)}rem`;
             case "banner":
                 return global_settings.banner ? i18n_message("ui_settings_visible") : i18n_message("ui_settings_hidden");
             case "top_visible":
