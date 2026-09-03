@@ -1868,16 +1868,17 @@ function run(settings){
     //  ・表示状態の表示(loading / not_detected / error / login_required / cell_unresolved)
     //  ・X のリスト一覧ページ(https://x.com/<screen_name>/lists)を表示する iframe。ページ内の左ナビ(header[role="banner"])は隠し、それ以外は X の画面のまま表示する
     //    [data-testid="primaryColumn"] 配下の listCell へのクリック(左・中・右)と Enter / Space はキャプチャ段階で止めてページ遷移させず、左クリックと Enter / Space はそのリストの選択を切り替える
+    //    iframe 内の Esc は、X の画面が処理しなかった(preventDefault されていない)場合にダイアログを閉じる
     //    リスト ID の解決は page world ヘルパー(extensions/list_picker_helper.js)が付ける属性と resolve_list_cell_info で行い、ID を決められないセルを選んだときは状態表示で手動入力を案内する
     //    選択中の listCell には data-opd-list-picker-order 属性(1 始まりの追加順)を付け、iframe に注入した style で枠と順番の数字を重ねる。X の仮想リストでセルが入れ替わるため、属性の付け直しは定期的(400ms)に行う
-    //    読み込み中は iframe の上に skeleton を重ね、listCell が描画されたら外す。制限時間(15秒)内に描画されなければ skeleton を外して not_detected を表示する
+    //    読み込み中は iframe の上に skeleton を重ね、listCell が描画されたら外す。制限時間(15秒)内に描画されなければ skeleton を外して not_detected を表示する(その後に listCell が描画されたら消す)
     //    対象ページを表示した後に別のパスへ遷移した場合は対象 URL を読み込み直す(2回を超えて繰り返す場合は error を表示して読み込みを止める)。ログイン画面へ飛ばされた場合は読み込みを止めて login_required を表示する
     //    中身を読めない(クロスオリジン等)と分かった iframe は表示したままにせず about:blank に戻し、error を表示する
     //  ・表示中のリストを全て選択するボタン(そのとき ID を決められている listCell を文書順に、未選択のものだけ選択の末尾へ追加する)
     //  選択領域:
     //  ・追加するカラムの順序付き一覧(ol)。項目は追加した順に並び、この並び順のままカラムを追加する。項目のドラッグ&ドロップ(項目の上半分に落とすとその前、下半分に落とすとその後ろ、項目以外の場所に落とすと末尾)と、項目にフォーカスした状態の Alt+↑ / Alt+↓ で1段ずつ並べ替え、各項目の除外ボタンで外せる。並べ替えの結果は選択領域の状態表示(role="status")で知らせる
     //  ・URL か ID の入力欄(textarea)と追加ボタン。1 行 1 件として解釈し、解釈できた行を一覧の末尾へ追加する(既にある項目は追加しない)。解釈できない行は alert で知らせて入力欄に残し、入力欄へフォーカスを戻す。Enter で追加、Shift+Enter で改行
-    //  ・追加するカラム件数の表示と選択解除ボタン
+    //  ・追加するカラム件数の表示(一覧の件数に、入力欄に残っている解釈できる未追加の行数を足したもの)と選択解除ボタン
     //  操作ボタン: 追加ボタン・キャンセルボタン。追加時に入力欄へ未追加の文字列が残っていれば先に追加を試み、解釈できない行があれば追加を中止する
     //Esc キー(iframe 内で押した場合を含む)・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe の内容を破棄して opener_element にフォーカスを戻す
     //開いているあいだは overlay 以外の #opd_main_element の子要素を inert にして背景を操作対象から外し、閉じるときに解除する(元から inert が付いていた要素は触らない)
@@ -2027,8 +2028,10 @@ function run(settings){
             selected_entries.splice(clamped_to, 0, moved);
             return true;
         }
+        //追加ボタンは入力欄に残った文字列も追加するため、件数には解釈できる未追加の行も含める
         function update_count(){
-            count_area.textContent = i18n_message("ui_list_picker_selected_count", [String(selected_entries.length)]);
+            const pending_paths = parse_manual_list_entries(manual_textarea.value).paths.filter((list_path) => entry_index_of(list_path) === -1);
+            count_area.textContent = i18n_message("ui_list_picker_selected_count", [String(selected_entries.length + pending_paths.length)]);
         }
         //選択領域の順序付き一覧を描き直す。フォーカスが一覧の中にあった場合は同じ項目(または同じ項目の除外ボタン)へ戻す
         function render_selection(){
@@ -2202,6 +2205,7 @@ function run(settings){
             frame_document.addEventListener("click", on_frame_click, true);
             frame_document.addEventListener("auxclick", on_frame_click, true);
             frame_document.addEventListener("keydown", on_frame_keydown, true);
+            frame_document.addEventListener("keydown", on_frame_escape);
         }
         //iframe 内のイベントの発生元から、それを含む listCell を返す(無ければ null)
         //iframe の要素は別 realm のため instanceof では判定できず、closest を持つかで要素かどうかを見る
@@ -2219,14 +2223,14 @@ function run(settings){
             if(event.type !== "click" || event.button !== 0) return;
             toggle_cell(cell);
         }
-        //iframe 内の Esc でもダイアログを閉じる。listCell 上の Enter / Space はページ遷移させず選択の切り替えにする
+        //iframe 内の Esc でもダイアログを閉じる。X の画面がオーバーレイを閉じるなどで Esc を処理した(preventDefault した)場合はそちらを優先する
+        function on_frame_escape(event){
+            if(event.key !== "Escape" || event.defaultPrevented) return;
+            event.preventDefault();
+            close_dialog();
+        }
+        //listCell 上の Enter / Space はページ遷移させず選択の切り替えにする
         function on_frame_keydown(event){
-            if(event.key === "Escape"){
-                event.preventDefault();
-                event.stopPropagation();
-                close_dialog();
-                return;
-            }
             if(event.key !== "Enter" && event.key !== " ") return;
             const cell = list_cell_of_event(event);
             if(cell === null) return;
@@ -2364,8 +2368,13 @@ function run(settings){
             inject_list_picker_helper(frame_document);
             request_helper_scan(frame_document);
             mark_frame_cells();
-            if(!is_frame_loading) return;
-            if(frame_document.querySelector(list_cell_selector) !== null){
+            const has_list_cell = frame_document.querySelector(list_cell_selector) !== null;
+            if(!is_frame_loading){
+                //制限時間内に描画されず not_detected を出した後にセルが現れた場合は、その案内を消す
+                if(has_list_cell && status_area.textContent === i18n_message("ui_list_picker_not_detected")) status_area.textContent = "";
+                return;
+            }
+            if(has_list_cell){
                 set_frame_loading(false);
                 status_area.textContent = "";
                 frame_recover_count = 0;
@@ -2460,12 +2469,15 @@ function run(settings){
             event.preventDefault();
             start_frame_from_input();
         });
-        //そのとき ID を決められている表示中のセルを文書順に、未選択のものだけ末尾へ追加する
+        //そのとき ID を決められている表示中の listCell を文書順に、未選択のものだけ末尾へ追加する(枠と順番を重ねられるセル由来のものに限る)
         select_all_btn.addEventListener("click", function(){
             const frame_document = get_frame_document();
             if(!frame_document) return;
             request_helper_scan(frame_document);
-            collect_lists_from_document(frame_document).forEach((list_info) => add_entry(list_info.path, list_info.name));
+            frame_document.querySelectorAll(list_cell_selector).forEach((cell) => {
+                const cell_info = resolve_list_cell_info(cell, frame_document.location.href);
+                if(cell_info !== null) add_entry(`/i/lists/${cell_info.id}`, cell_info.name);
+            });
             render_selection();
             mark_frame_cells();
         });
@@ -2475,6 +2487,7 @@ function run(settings){
             mark_frame_cells();
         });
         manual_add_btn.addEventListener("click", add_manual_entries);
+        manual_textarea.addEventListener("input", update_count);
         //Enter で追加、Shift+Enter は改行のまま
         manual_textarea.addEventListener("keydown", function(event){
             if(event.key !== "Enter" || event.shiftKey || event.isComposing) return;
@@ -2512,7 +2525,8 @@ function run(settings){
             if(item === null) return;
             dragging_path = item.getAttribute("data-list-path");
             event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", dragging_path);
+            //text/plain にすると入力欄へ落としたときに文字列が入るため、独自の type だけを持たせる(Firefox はデータが無いとドラッグを始めない)
+            event.dataTransfer.setData("application/x-opd-list-picker", dragging_path);
             item.classList.add("opd_list_picker_dragging");
         });
         selected_list.addEventListener("dragend", end_drag);
@@ -3197,44 +3211,6 @@ function resolve_list_cell_info(cell, base_url){
     }
     if(!is_valid_list_id(attribute_list_id)) return null;
     return {id: attribute_list_id, name: attribute_list_name !== "" ? attribute_list_name : first_non_empty_span_text(cell)};
-}
-//リスト一覧ページの Document から、そのページに並んでいるリストを列挙する
-//doc: リスト一覧ページの Document
-//戻り値: {id: リストID, path: "/i/lists/<id>", name: リスト名(取得できない場合は空文字), section: 直前の h2 見出し文(見出しが無い場合は空文字)} の配列
-//走査範囲は [data-testid="primaryColumn"] の配下のみとし、それが無い文書(リスト一覧ページ以外や描画前)は空配列を返す
-//h2, a[href], [data-testid="listCell"] を文書順に走査し、直前に現れた h2 の見出し文をそのリストのセクション名として扱う
-//a[href] は href から /i/lists/<id> の ID を取る。ただし listCell を含む a[href] は listCell 側で扱い、リンクとしては収集しない
-//listCell の ID とリスト名は resolve_list_cell_info で取り出し、ID を決められないセルは戻り値に含めない
-//同一 id は最初に見つかった1件のみ含める
-function collect_lists_from_document(doc){
-    const root = doc.querySelector('[data-testid="primaryColumn"]');
-    if(!root) return [];
-    const found_lists = new Map();
-    let current_section = "";
-    //見出し・リンク・listCell を文書順に走査し、直前に現れた見出しをそのリストのセクション名として扱う
-    const scan_targets = root.querySelectorAll('h2, a[href], [data-testid="listCell"]');
-    for (let index = 0; index < scan_targets.length; index++) {
-        const scan_target = scan_targets[index];
-        if(scan_target.tagName === "H2"){
-            current_section = scan_target.textContent.trim();
-            continue;
-        }
-        if(scan_target.getAttribute("data-testid") === "listCell"){
-            const cell_info = resolve_list_cell_info(scan_target, doc.location.href);
-            if(cell_info === null || found_lists.has(cell_info.id)) continue;
-            found_lists.set(cell_info.id, {id: cell_info.id, path: `/i/lists/${cell_info.id}`, name: cell_info.name, section: current_section});
-            continue;
-        }
-        //セルを包むリンクは listCell 側で解決させ、リスト名をセルの文言から取れるようにする
-        if(scan_target.querySelector('[data-testid="listCell"]') !== null) continue;
-        const list_id = extract_list_id_from_href(scan_target.getAttribute("href"), doc.location.href);
-        if(list_id === null || found_lists.has(list_id)) continue;
-        //リンク配下の span のうち最初に現れる非空のテキストをリスト名として使い、非空の span が無ければリンク自体のテキストを使う
-        let list_name = first_non_empty_span_text(scan_target);
-        if(list_name === "") list_name = scan_target.textContent.trim();
-        found_lists.set(list_id, {id: list_id, path: `/i/lists/${list_id}`, name: list_name, section: current_section});
-    }
-    return Array.from(found_lists.values());
 }
 //手動入力欄の文字列を1行1件として解釈し、リストカラムのパスに変換する
 //text: textarea の文字列
