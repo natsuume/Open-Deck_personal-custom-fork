@@ -1380,8 +1380,9 @@ function run(settings){
                 }
                 //console.log(preload_desc_array)
                 if(confirm(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\r\n")])}`)){
-                    //切り替え前のカラムの自動更新を止める
+                    //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
                     get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
+                    teardown_post_form_popover();
                     document.querySelector("#opd_main_element").remove();
                     last_load_profile = index;
                     chrome.storage.local.get("opd_settings", function(value){
@@ -2579,14 +2580,18 @@ function run(settings){
         window.removeEventListener("resize", on_post_form_window_resize);
         window.removeEventListener("opd_post_composer_closed", on_post_form_composer_closed);
     }
-    //プロファイル切替などでポップオーバーが親ごと外された場合は、リスナー・タイマー・読み込み失敗監視を外して以降の処理を止める
-    function is_post_form_popover_detached(){
-        if(post_form_popover !== null && post_form_popover.isConnected) return false;
+    //ポップオーバーが確保している資源 (開いているあいだのリスナー・skeleton のタイマー・読み込み失敗監視) をすべて解放する。#opd_main_element を作り直す前と、親ごと外れたことに気づいたときに呼ぶ
+    function teardown_post_form_popover(){
         remove_post_form_popover_listeners();
         clearTimeout(post_form_skeleton_timer);
         post_form_skeleton_timer = null;
         post_form_load_watch_cleanup?.();
         post_form_load_watch_cleanup = null;
+    }
+    //プロファイル切替などでポップオーバーが親ごと外された場合は、資源を解放して以降の処理を止める
+    function is_post_form_popover_detached(){
+        if(post_form_popover !== null && post_form_popover.isConnected) return false;
+        teardown_post_form_popover();
         return true;
     }
     //本体 UI にフォーカスがあるときの Esc で閉じる。他のモーダルが Esc を受け持つあいだ (モーダルダイアログの inert が乗っている / メディアビューワーの dialog が showModal で開いている) は何もしない
@@ -2620,12 +2625,15 @@ function run(settings){
         close_post_form_popover();
     }
     //ポップオーバーの iframe 内で押した Esc で閉じる。X の画面が Esc を処理した場合はそちらを優先するため、伝播が終わってから defaultPrevented を見る (この場では preventDefault しない)
+    //X が Esc に応えて確認 (下書きの破棄確認など) を出した場合も X の側に任せ、閉じない
     function on_post_form_frame_keydown(event){
         if(event.key !== "Escape") return;
+        const frame_document = event.currentTarget;
         setTimeout(function(){
             if(event.defaultPrevented) return;
             if(!is_post_form_popover_open()) return;
             if(is_post_form_popover_blocked_by_modal()) return;
+            if(frame_document?.querySelector?.('[data-testid="confirmationSheetDialog"], [role="alertdialog"]') !== null) return;
             close_post_form_popover();
         }, 0);
     }
