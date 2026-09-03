@@ -149,8 +149,9 @@ if(location.href == "https://twitter.com/run-opdeck" || location.href == "https:
             chrome.storage.local.get("opd_profile_store", function(store_value){
                 //console.log(store_value)
                 //console.log(JSON.parse(store_value.opd_profile_store))
-                //読み出せない・配列でない保存値は既定プロファイル 1 件へ差し替える (run() は配列であることを前提に読む)
-                let is_profile_store_repaired = false;
+                //読み出せない・配列でない保存値は、このセッションのメモリ上だけ既定プロファイル 1 件へ差し替える (run() は配列であることを前提に読む)
+                //保存値そのものは書き換えず、プロファイルローダーから元のデータを読み出して手で直せる余地を残す (次にカラム構成を保存した時点で上書きされる)
+                let is_profile_store_unreadable = false;
                 try{
                     profile_store = JSON.parse(store_value.opd_profile_store);
                 }catch(e){
@@ -158,10 +159,10 @@ if(location.href == "https://twitter.com/run-opdeck" || location.href == "https:
                 }
                 if(!Array.isArray(profile_store)){
                     profile_store = [create_default_profile()];
-                    is_profile_store_repaired = true;
+                    is_profile_store_unreadable = true;
                 }
-                //保存形式を現在のスキーマへ正規化する。補正した場合は保存し、run には正規化後の設定を渡す
-                if(normalize_profile_store(profile_store) || is_profile_store_repaired){
+                //保存形式を現在のスキーマへ正規化する。読める保存値を補正した場合は保存し、run には正規化後の設定を渡す
+                if(normalize_profile_store(profile_store) && !is_profile_store_unreadable){
                     chrome.storage.local.set({'opd_profile_store': JSON.stringify(profile_store)});
                 }
                 //RUN
