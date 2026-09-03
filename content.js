@@ -2573,14 +2573,14 @@ function run(settings){
             }
             save_column_setting(false);
         });
-        //自動更新間隔の入力欄。下限・上限を外れた値は既定の 10 秒へ戻す
+        //自動更新間隔の入力欄。下限・上限を外れた値は受け付けず、変更前の実効値へ戻す
         column_div.querySelector(".opd_a_reload_time_setting")?.addEventListener("change", function(){
             const input_time_ms = Number(this.value) * 1000;
             if(Number.isFinite(input_time_ms) && input_time_ms >= AUTO_RELOAD_TIME_MIN_MS && input_time_ms <= AUTO_RELOAD_TIME_MAX_MS){
                 alert(i18n_message("msg_auto_reload_set", [this.value]));
             }else{
-                alert(i18n_message("msg_auto_reload_minimum_alert"));
-                this.value = '10';
+                alert(i18n_message("msg_global_settings_invalid_interval"));
+                this.value = String(effective_column_setting(column_div, "auto_reload_time", global_settings) / 1000);
             }
             column_div.setAttribute("opd_setting_auto_reload_time", String(Number(this.value) * 1000));
             save_column_setting(false);
@@ -2901,17 +2901,18 @@ function run(settings){
         function apply_global_settings(){
             const column_width_value = Number(column_width_input.value);
             const is_width_invalid = column_width_input.value.trim() === "" || !Number.isFinite(column_width_value) || column_width_value < COLUMN_WIDTH_MIN_REM || column_width_value > COLUMN_WIDTH_MAX_REM;
+            const auto_reload_time_seconds = Number(auto_reload_time_input.value);
+            const auto_reload_time_ms = auto_reload_time_seconds * 1000;
+            const is_interval_invalid = auto_reload_time_input.value.trim() === "" || !Number.isFinite(auto_reload_time_seconds)
+                || auto_reload_time_ms < AUTO_RELOAD_TIME_MIN_MS || auto_reload_time_ms > AUTO_RELOAD_TIME_MAX_MS;
+            //status 領域は 1 つなので、印を付けるのは status に表示する欄 (先に見つかった不正な欄) だけにする
             mark_input_validity(column_width_input, is_width_invalid);
+            mark_input_validity(auto_reload_time_input, !is_width_invalid && is_interval_invalid);
             if(is_width_invalid){
                 status_area.textContent = i18n_message("msg_global_settings_invalid_width");
                 column_width_input.focus();
                 return;
             }
-            const auto_reload_time_seconds = Number(auto_reload_time_input.value);
-            const auto_reload_time_ms = auto_reload_time_seconds * 1000;
-            const is_interval_invalid = auto_reload_time_input.value.trim() === "" || !Number.isFinite(auto_reload_time_seconds)
-                || auto_reload_time_ms < AUTO_RELOAD_TIME_MIN_MS || auto_reload_time_ms > AUTO_RELOAD_TIME_MAX_MS;
-            mark_input_validity(auto_reload_time_input, is_interval_invalid);
             if(is_interval_invalid){
                 status_area.textContent = i18n_message("msg_global_settings_invalid_interval");
                 auto_reload_time_input.focus();
