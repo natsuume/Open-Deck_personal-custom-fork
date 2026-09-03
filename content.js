@@ -789,6 +789,10 @@ function run(settings){
         justify-content: flex-end;
         gap: 0.5rem;
     }
+    .opd_list_picker_frame_skeleton[hidden],
+    .opd_list_picker_empty[hidden]{
+        display: none;
+    }
     @media (max-width: 60rem){
         .opd_list_picker_body{
             flex-direction: column;
@@ -1884,7 +1888,7 @@ function run(settings){
         if(main_element === null) return;
         //ダイアログ内でフォーカスを受け取れる要素(非表示・disabled のものを除く)を文書順で返す
         function get_focusable_elements(dialog_element){
-            const focus_candidates = dialog_element.querySelectorAll('input, textarea, button, [tabindex]:not([tabindex="-1"])');
+            const focus_candidates = dialog_element.querySelectorAll('input, textarea, button, iframe, [tabindex]:not([tabindex="-1"])');
             return Array.from(focus_candidates).filter((element) => !element.disabled && element.offsetParent !== null);
         }
         //既に開いている場合は二重に生成せず、開いているダイアログへフォーカスを移す
@@ -1895,28 +1899,38 @@ function run(settings){
             return;
         }
 
-        //選択のために残したエントリに付けるセクション名
-        const kept_section_name = i18n_message("ui_list_picker_kept_section");
-        const probe_interval_ms = 400;
-        const probe_stable_ms = 2000;
-        const probe_limit_ms = 15000;
+        const frame_poll_interval_ms = 400;
+        const frame_load_limit_ms = 15000;
         const helper_inject_failure_limit = 3;
-        const helper_settle_limit_ms = 3000;
+        //対象ページを表示した後に別のパスへ遷移したときに読み込み直す回数の上限
+        const frame_recover_limit = 2;
         const many_columns_threshold = 10;
+        const list_cell_selector = '[data-testid="primaryColumn"] [data-testid="listCell"]';
+        const selected_item_selector = ".opd_list_picker_selected_item";
 
         const overlay = document.createElement("div");
         overlay.id = "opd_list_picker_overlay";
         overlay.className = "opd_list_picker_overlay";
         //骨格は拡張が持つ静的な文字列だけで組み立てる(X 由来の文字列は生成後に textContent などで入れる)
-        overlay.innerHTML = `<iframe class="opd_list_picker_probe" aria-hidden="true" tabindex="-1" title=""></iframe>
-        <div class="opd_list_picker_dialog" role="dialog" aria-modal="true" aria-labelledby="opd_list_picker_title">
+        overlay.innerHTML = `<div class="opd_list_picker_dialog" role="dialog" aria-modal="true" aria-labelledby="opd_list_picker_title">
         <h2 id="opd_list_picker_title">${i18n_message("ui_list_picker_header")}</h2>
-        <div><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label> <input class="opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"> <input class="opd_list_picker_fetch_btn" type="button" value="${i18n_message("ui_list_picker_fetch_button")}"></div>
+        <div class="opd_list_picker_body">
+        <div class="opd_list_picker_browse">
+        <div><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label> <input class="opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"> <input class="opd_list_picker_show_btn" type="button" value="${i18n_message("ui_list_picker_show_button")}"></div>
         <div class="opd_list_picker_status" role="status" aria-live="polite"></div>
-        <div class="opd_list_picker_results"></div>
-        <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"> <input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
-        <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><textarea class="opd_list_picker_manual" id="opd_list_picker_manual_input" rows="4"></textarea></div>
+        <div class="opd_list_picker_frame_wrap"><iframe class="opd_list_picker_frame" title="${i18n_message("ui_list_picker_frame_title")}"></iframe><div class="opd_list_picker_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div>
+        <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"></div>
+        </div>
+        <div class="opd_list_picker_selection">
+        <h3 id="opd_list_picker_selection_title">${i18n_message("ui_list_picker_selection_header")}</h3>
+        <p class="opd_list_picker_selection_hint" id="opd_list_picker_selection_hint">${i18n_message("ui_list_picker_selection_hint")}</p>
+        <div class="opd_list_picker_selected_wrap"><ol class="opd_list_picker_selected" aria-labelledby="opd_list_picker_selection_title" aria-describedby="opd_list_picker_selection_hint"></ol><p class="opd_list_picker_empty">${i18n_message("ui_list_picker_empty_selection")}</p></div>
+        <div class="opd_list_picker_selection_status" role="status" aria-live="polite"></div>
+        <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><div class="opd_list_picker_manual_row"><textarea class="opd_list_picker_manual" id="opd_list_picker_manual_input" rows="2"></textarea><input class="opd_list_picker_manual_add_btn" type="button" value="${i18n_message("ui_list_picker_manual_add_button")}"></div></div>
         <div class="opd_list_picker_count" id="opd_list_picker_count"></div>
+        <div><input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
+        </div>
+        </div>
         <div class="opd_list_picker_actions"><input class="opd_list_picker_add_btn" type="button" aria-describedby="opd_list_picker_count" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
         </div>`;
         main_element.appendChild(overlay);
@@ -1935,357 +1949,435 @@ function run(settings){
         overlay_observer.observe(main_element, {childList: true});
 
         const dialog = overlay.querySelector(".opd_list_picker_dialog");
-        const probe_frame = overlay.querySelector(".opd_list_picker_probe");
         const user_input = overlay.querySelector(".opd_list_picker_user_input");
-        const fetch_btn = overlay.querySelector(".opd_list_picker_fetch_btn");
+        const show_btn = overlay.querySelector(".opd_list_picker_show_btn");
         const status_area = overlay.querySelector(".opd_list_picker_status");
-        const results_area = overlay.querySelector(".opd_list_picker_results");
+        const frame = overlay.querySelector(".opd_list_picker_frame");
+        const frame_skeleton = overlay.querySelector(".opd_list_picker_frame_skeleton");
         const select_all_btn = overlay.querySelector(".opd_list_picker_select_all");
-        const clear_all_btn = overlay.querySelector(".opd_list_picker_clear_all");
+        const selected_list = overlay.querySelector(".opd_list_picker_selected");
+        const selected_wrap = overlay.querySelector(".opd_list_picker_selected_wrap");
+        const empty_message = overlay.querySelector(".opd_list_picker_empty");
+        const selection_status_area = overlay.querySelector(".opd_list_picker_selection_status");
         const manual_textarea = overlay.querySelector(".opd_list_picker_manual");
+        const manual_add_btn = overlay.querySelector(".opd_list_picker_manual_add_btn");
         const count_area = overlay.querySelector(".opd_list_picker_count");
+        const clear_all_btn = overlay.querySelector(".opd_list_picker_clear_all");
         const add_btn = overlay.querySelector(".opd_list_picker_add_btn");
         const cancel_btn = overlay.querySelector(".opd_list_picker_cancel_btn");
 
-        //列挙で見つかったリスト(キーはリストID)。再描画してもチェック状態はIDで引き継ぐ
-        const found_lists = new Map();
-        //今回の列挙で検出したリストID。前回の取得から選択のために残したエントリと区別し、完了・打ち切りの判定に使う
-        const probe_found_ids = new Set();
-        //今回の取得で未解決のまま見えた listCell の識別キー。仮想リストで画面外に出たセルも数え続けるために累積する
-        const probe_unresolved_keys = new Set();
-        //probe document ごとのヘルパー注入の失敗回数。上限を超えたら注入をやり直さない
+        //追加するカラムの並び。要素は {path: カラムの初期パス, name: 表示名(不明なら空文字)}。path で一意にし、配列の順序がそのままカラムの順序になる
+        const selected_entries = [];
+        //クリック・キー入力の捕捉を登録済みの iframe の Document
+        const frame_documents_prepared = new WeakSet();
+        //iframe の Document ごとのヘルパー注入の失敗回数。上限を超えたら注入をやり直さない
         const helper_inject_failures = new WeakMap();
-        let probe_interval = null;
-        let probe_started_at = 0;
-        let probe_stable_elapsed = 0;
-        let probe_last_state = "";
-        //ヘルパーの状態が ready にも failed にもならないまま待った時間。上限に達したらヘルパー無しとして進める
-        let helper_wait_elapsed = 0;
-        let is_probe_loading = false;
+        let frame_poll_timer = null;
+        let frame_load_started_at = 0;
+        let is_frame_loading = false;
         //本文のある document を一度でも読めたか(打ち切り時に未検出とエラーを区別する)
-        let has_probe_document = false;
+        let has_frame_document = false;
+        //今回の表示対象のパス(小文字)と、その URL
+        let frame_expected_path = "";
+        let frame_url = "";
+        //対象ページを一度表示したか。表示後に別のパスへ遷移したときの読み込み直しの判定に使う
+        let has_frame_reached_page = false;
+        let frame_recover_count = 0;
         //背景クリック判定用。押下と離上の両方が背景で起きたときだけ閉じる
         let is_overlay_mousedown = false;
         let is_overlay_mouseup = false;
-        //ダイアログ内で最後にフォーカスを受けた要素。列挙用 iframe にフォーカスを奪われたときの戻り先に使う
-        let last_focused_element = null;
-        //今回の取得対象のパス(小文字)。iframe がこのパスを表示するまでは採取しない
-        let probe_expected_path = "";
+        //ドラッグ中の項目のパス
+        let dragging_path = null;
 
-        //チェックしたリストと手動入力を結合し、重複を除いた追加対象のパスと、解釈できなかった入力行を返す
-        function collect_add_paths(){
-            const manual_entries = parse_manual_list_entries(manual_textarea.value);
-            //チェックボックスの値も手動入力と同じ解決関数を通し、リストのパスとして解釈できるものだけを使う
-            const checked_paths = Array.from(results_area.querySelectorAll('input[type="checkbox"]:checked')).map((checkbox) => resolve_list_column_path(checkbox.value)).filter((list_path) => list_path !== null);
-            const paths = [];
-            checked_paths.concat(manual_entries.paths).forEach((list_path) => {
-                if(!paths.includes(list_path)) paths.push(list_path);
-            });
-            return {paths: paths, invalid: manual_entries.invalid};
+        //リストのパスから ID を取り出す(/i/lists/<id> の形のときだけ。それ以外は null)
+        function list_id_of_path(list_path){
+            const match = list_path.match(/^\/i\/lists\/(\d+)$/);
+            return match ? match[1] : null;
         }
-        //実際に追加されるカラム件数を表示する。解釈できない入力行があればその件数も添える
-        function update_count(){
-            const add_targets = collect_add_paths();
-            let count_text = i18n_message("ui_list_picker_selected_count", [String(add_targets.paths.length)]);
-            if(add_targets.invalid.length > 0) count_text += ` ${i18n_message("ui_list_picker_invalid_count", [String(add_targets.invalid.length)])}`;
-            count_area.textContent = count_text;
+        //項目の表示名。名前が不明なら ID から補い、それも無ければパスをそのまま使う
+        function display_name_of(entry){
+            if(entry.name !== "") return entry.name;
+            const list_id = list_id_of_path(entry.path);
+            return list_id !== null ? i18n_message("ui_list_picker_list_fallback_name", [list_id]) : entry.path;
         }
-        //見つかったリストをセクションごとにまとめて結果領域へ描画する。読み込み中で0件のあいだは skeleton を表示する
-        function render_results(){
-            const saved_scroll_top = results_area.scrollTop;
-            const active_element = document.activeElement;
-            const active_checkbox_id = (active_element !== null && results_area.contains(active_element) && active_element.type === "checkbox")
-                ? active_element.getAttribute("data-list-id") : null;
-            const checked_ids = new Set();
-            results_area.querySelectorAll('input[type="checkbox"]:checked').forEach((checkbox) => {
-                checked_ids.add(checkbox.getAttribute("data-list-id"));
-            });
-            results_area.textContent = "";
-            if(found_lists.size === 0){
-                if(is_probe_loading){
-                    for (let index = 0; index < 5; index++) {
-                        const skeleton = document.createElement("div");
-                        skeleton.className = "opd_list_picker_skeleton";
-                        results_area.appendChild(skeleton);
-                    }
-                }
-                update_count();
+        function entry_index_of(list_path){
+            return selected_entries.findIndex((entry) => entry.path === list_path);
+        }
+        //末尾へ追加する。既にある場合は追加せず false を返す
+        function add_entry(list_path, list_name){
+            if(entry_index_of(list_path) !== -1) return false;
+            selected_entries.push({path: list_path, name: list_name});
+            return true;
+        }
+        function toggle_entry(list_path, list_name){
+            const index = entry_index_of(list_path);
+            if(index === -1){
+                selected_entries.push({path: list_path, name: list_name});
                 return;
             }
-            const sections = new Map();
-            found_lists.forEach((list_info) => {
-                if(!sections.has(list_info.section)) sections.set(list_info.section, []);
-                sections.get(list_info.section).push(list_info);
-            });
-            sections.forEach((section_lists, section_name) => {
-                const group = document.createElement("div");
-                group.className = "opd_list_picker_group";
-                if(section_name !== ""){
-                    const section_heading = document.createElement("h3");
-                    section_heading.textContent = section_name;
-                    group.appendChild(section_heading);
-                }
-                section_lists.forEach((list_info) => {
-                    const item_label = document.createElement("label");
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.value = list_info.path;
-                    checkbox.setAttribute("data-list-id", list_info.id);
-                    checkbox.checked = checked_ids.has(list_info.id);
-                    checkbox.addEventListener("change", update_count);
-                    const name_text = document.createElement("span");
-                    name_text.textContent = list_info.name !== "" ? list_info.name : i18n_message("ui_list_picker_list_fallback_name", [list_info.id]);
-                    item_label.appendChild(checkbox);
-                    item_label.appendChild(name_text);
-                    group.appendChild(item_label);
-                });
-                results_area.appendChild(group);
-            });
-            results_area.scrollTop = saved_scroll_top;
-            if(active_checkbox_id !== null){
-                results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
-                    if(checkbox.getAttribute("data-list-id") === active_checkbox_id) checkbox.focus();
-                });
-            }
-            update_count();
+            selected_entries.splice(index, 1);
         }
-        //probe iframe の表示先を差し替える。同一オリジンで操作できる場合は履歴を残さない replace を使う
-        function navigate_probe_frame(url){
+        //from_index の項目を取り除いてから to_index の位置に入れ直す。位置が変わらない場合は false を返す
+        function move_entry(from_index, to_index){
+            if(from_index < 0 || from_index >= selected_entries.length) return false;
+            const clamped_to = Math.max(0, Math.min(to_index, selected_entries.length - 1));
+            if(clamped_to === from_index) return false;
+            const [moved] = selected_entries.splice(from_index, 1);
+            selected_entries.splice(clamped_to, 0, moved);
+            return true;
+        }
+        function update_count(){
+            count_area.textContent = i18n_message("ui_list_picker_selected_count", [String(selected_entries.length)]);
+        }
+        //選択領域の順序付き一覧を描き直す。フォーカスが一覧の中にあった場合は同じ項目(または同じ項目の除外ボタン)へ戻す
+        function render_selection(){
+            const active_element = document.activeElement;
+            const active_item = (active_element !== null && selected_list.contains(active_element)) ? active_element.closest(selected_item_selector) : null;
+            const active_path = active_item === null ? null : active_item.getAttribute("data-list-path");
+            const is_active_remove_btn = active_element !== null && active_element.classList.contains("opd_list_picker_remove_btn");
+            const saved_scroll_top = selected_wrap.scrollTop;
+            selected_list.textContent = "";
+            selected_entries.forEach((entry, index) => {
+                const item = document.createElement("li");
+                item.className = "opd_list_picker_selected_item";
+                item.draggable = true;
+                item.tabIndex = 0;
+                item.setAttribute("data-list-path", entry.path);
+                const handle = document.createElement("span");
+                handle.className = "opd_list_picker_drag_handle";
+                handle.setAttribute("aria-hidden", "true");
+                handle.textContent = "⋮⋮";
+                const order = document.createElement("span");
+                order.className = "opd_list_picker_order";
+                order.textContent = `${index + 1}.`;
+                const name = document.createElement("span");
+                name.className = "opd_list_picker_selected_name";
+                name.textContent = display_name_of(entry);
+                const remove_btn = document.createElement("button");
+                remove_btn.type = "button";
+                remove_btn.className = "opd_list_picker_remove_btn";
+                remove_btn.textContent = "×";
+                remove_btn.setAttribute("aria-label", i18n_message("ui_list_picker_remove_button", [display_name_of(entry)]));
+                remove_btn.title = remove_btn.getAttribute("aria-label");
+                item.appendChild(handle);
+                item.appendChild(order);
+                item.appendChild(name);
+                item.appendChild(remove_btn);
+                selected_list.appendChild(item);
+            });
+            empty_message.hidden = selected_entries.length !== 0;
+            selected_wrap.scrollTop = saved_scroll_top;
+            update_count();
+            if(active_path === null) return;
+            //除外などで項目が無くなった場合のフォーカス先は呼び出し側で決める
+            const restored_item = find_selected_item(active_path);
+            if(restored_item === null) return;
+            (is_active_remove_btn ? restored_item.querySelector(".opd_list_picker_remove_btn") : restored_item).focus();
+        }
+        function find_selected_item(list_path){
+            const items = selected_list.querySelectorAll(selected_item_selector);
+            for (let index = 0; index < items.length; index++) {
+                if(items[index].getAttribute("data-list-path") === list_path) return items[index];
+            }
+            return null;
+        }
+        //項目を to_index へ動かし、動いた場合は描き直して結果を知らせる
+        function move_entry_and_render(list_path, to_index){
+            const from_index = entry_index_of(list_path);
+            if(from_index === -1 || !move_entry(from_index, to_index)) return;
+            render_selection();
+            mark_frame_cells();
+            const new_index = entry_index_of(list_path);
+            selection_status_area.textContent = i18n_message("ui_list_picker_moved", [display_name_of(selected_entries[new_index]), String(new_index + 1)]);
+        }
+        //ドラッグ中の項目の落とし先を消す
+        function clear_drop_marks(){
+            selected_list.querySelectorAll(selected_item_selector).forEach((item) => {
+                item.classList.remove("opd_list_picker_drop_before", "opd_list_picker_drop_after");
+            });
+        }
+        //ドラッグイベントの位置から落とし先を求める。項目の上半分なら {index: その項目の位置, is_after: false}、下半分なら is_after: true、項目の外なら末尾
+        function drop_target_from_event(event){
+            const item = event.target instanceof Element ? event.target.closest(selected_item_selector) : null;
+            if(item === null) return {index: selected_entries.length - 1, is_after: true};
+            const rect = item.getBoundingClientRect();
+            return {index: entry_index_of(item.getAttribute("data-list-path")), is_after: event.clientY > rect.top + rect.height / 2};
+        }
+        //落とし先を並び替え後の位置に変換する(取り除いた分だけ手前へ詰める)
+        function insert_index_of_drop(from_index, drop_target){
+            let to_index = drop_target.is_after ? drop_target.index + 1 : drop_target.index;
+            if(from_index < to_index) to_index--;
+            return to_index;
+        }
+
+        //iframe の表示先を差し替える。同一オリジンで操作できる場合は履歴を残さない replace を使う
+        function navigate_frame(url){
             try{
-                probe_frame.contentWindow.location.replace(url);
+                frame.contentWindow.location.replace(url);
             }catch(e){
                 //contentWindow を操作できない場合は src の差し替えにフォールバックする
-                probe_frame.src = url;
+                frame.src = url;
             }
+        }
+        function set_frame_loading(is_loading){
+            is_frame_loading = is_loading;
+            frame_skeleton.hidden = !is_loading;
         }
         //ヘルパーの注入に失敗したことを記録する
-        //probe_document: 注入に失敗した Document
+        //frame_document: 注入に失敗した Document
         //上限に達するまでは属性を消して次回のポーリングで注入し直せるようにし、上限に達したら属性を "failed" にして打ち切る
-        function record_helper_inject_failure(probe_document){
-            const failure_count = (helper_inject_failures.get(probe_document) ?? 0) + 1;
-            helper_inject_failures.set(probe_document, failure_count);
+        function record_helper_inject_failure(frame_document){
+            const failure_count = (helper_inject_failures.get(frame_document) ?? 0) + 1;
+            helper_inject_failures.set(frame_document, failure_count);
             if(failure_count < helper_inject_failure_limit){
-                probe_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
+                frame_document.documentElement?.removeAttribute("data-opd-list-picker-helper");
                 return;
             }
-            probe_document.documentElement?.setAttribute("data-opd-list-picker-helper", "failed");
+            frame_document.documentElement?.setAttribute("data-opd-list-picker-helper", "failed");
         }
-        //probe document に page world ヘルパー extensions/list_picker_helper.js を注入する
-        //probe_document: リスト一覧ページを読み込んでいる iframe の Document
+        //iframe の document に page world ヘルパー extensions/list_picker_helper.js を注入する
+        //frame_document: リスト一覧ページを読み込んでいる iframe の Document
         //documentElement の data-opd-list-picker-helper 属性が既にある document には注入しない(Document ごとに1回)
         //head が無い場合は何もしない(次回のポーリングで再試行する)
         //注入時は属性を "loading" にし、ヘルパー自身が読み込み完了時に属性を "ready" へ更新する
         //script の error と注入時の例外は失敗回数が3回に達するまで属性を削除して再試行し(合計3回試行)、3回目の失敗で属性を "failed" にする
         //script の load 後も属性が "ready" でなければ "failed" にする。"failed" の document には再注入せず、走査依頼も送らない
-        function inject_list_picker_helper(probe_document){
+        function inject_list_picker_helper(frame_document){
             try{
-                if(probe_document.documentElement.hasAttribute("data-opd-list-picker-helper")) return;
-                if(!probe_document.head) return;
-                const helper_script = probe_document.createElement("script");
+                if(frame_document.documentElement.hasAttribute("data-opd-list-picker-helper")) return;
+                if(!frame_document.head) return;
+                const helper_script = frame_document.createElement("script");
                 helper_script.src = chrome.runtime.getURL("extensions/list_picker_helper.js");
                 helper_script.addEventListener("error", function(){
                     //読み込みに失敗した document は属性を消して次回のポーリングで注入し直すが、繰り返し失敗する document は打ち切る
-                    record_helper_inject_failure(probe_document);
+                    record_helper_inject_failure(frame_document);
                 });
                 helper_script.addEventListener("load", function(){
                     //読み込めてもヘルパーが ready にできなかった document は、入れ直しても同じ結果になるため打ち切る
-                    if(probe_document.documentElement?.getAttribute("data-opd-list-picker-helper") === "ready") return;
-                    probe_document.documentElement?.setAttribute("data-opd-list-picker-helper", "failed");
+                    if(frame_document.documentElement?.getAttribute("data-opd-list-picker-helper") === "ready") return;
+                    frame_document.documentElement?.setAttribute("data-opd-list-picker-helper", "failed");
                 });
-                probe_document.documentElement.setAttribute("data-opd-list-picker-helper", "loading");
-                probe_document.head.appendChild(helper_script);
+                frame_document.documentElement.setAttribute("data-opd-list-picker-helper", "loading");
+                frame_document.head.appendChild(helper_script);
             }catch(e){
                 //注入できなかった場合も失敗として数え、上限に達するまでは次回のポーリングでやり直す
-                record_helper_inject_failure(probe_document);
+                record_helper_inject_failure(frame_document);
             }
         }
-        //列挙用のタイマーを止め、iframe が読み込んだページを解放する
-        function stop_probe(){
-            if(probe_interval !== null){
-                clearInterval(probe_interval);
-                probe_interval = null;
-            }
-            is_probe_loading = false;
-            navigate_probe_frame("about:blank");
+        //ヘルパーが準備できていれば listCell へのリスト ID 付与を依頼する(走査は同期的に終わる)
+        function request_helper_scan(frame_document){
+            if(frame_document.documentElement?.getAttribute("data-opd-list-picker-helper") !== "ready") return;
+            frame_document.dispatchEvent(new CustomEvent("opd_list_picker_scan"));
         }
-        //指定ユーザーのリスト一覧ページを非表示 iframe に読み込み、描画されたリストを定期的に拾い集める
-        //読み込み完了かつ今回の検出件数・未解決の listCell 数・文書高が一定時間変化しなければ完了、制限時間の経過で打ち切り、中身を読めない場合はエラーとして終了する
-        //完了・打ち切りの判定には今回の列挙で検出した件数と未解決の listCell 数を使い、選択を保つために残した前回のエントリは判定に含めない
-        //今回の列挙で1件も検出していないあいだは安定しても完了せず、制限時間の経過で打ち切る
-        //ヘルパー(data-opd-list-picker-helper 属性)の状態が ready か failed に定まるまでは、スクロール・未解決セルの累積・安定時間の加算を行わない
-        //ただし3秒(helper_settle_limit_ms)待っても定まらない場合はヘルパー無しとして進める
-        function start_probe(screen_name){
-            stop_probe();
-            //取得し直してもチェック済みのリストは選択を保てるよう残す
-            const kept_ids = new Set();
-            results_area.querySelectorAll('input[type="checkbox"]:checked').forEach((checkbox) => {
-                kept_ids.add(checkbox.getAttribute("data-list-id"));
-            });
-            found_lists.forEach((list_info, list_id) => {
-                if(!kept_ids.has(list_id)){
-                    found_lists.delete(list_id);
+        //iframe の document に、左ナビを隠し選択中のセルに枠と順番を重ねる style を入れる(Document ごとに1回)。色はダイアログ側の token と同じ値を使う
+        function ensure_frame_style(frame_document){
+            if(!frame_document.head) return;
+            if(frame_document.head.querySelector("style[opd_list_picker_css]") !== null) return;
+            const overlay_style = getComputedStyle(overlay);
+            const accent = overlay_style.getPropertyValue("--opd-list-picker-accent").trim();
+            const accent_text = overlay_style.getPropertyValue("--opd-list-picker-accent-text").trim();
+            const accent_background = overlay_style.getPropertyValue("--opd-list-picker-accent-background").trim();
+            const style = frame_document.createElement("style");
+            style.setAttribute("opd_list_picker_css", "");
+            style.textContent = `header[role="banner"]{display:none;}
+                html{scrollbar-width:thin;}
+                ${list_cell_selector}{cursor:pointer;position:relative;}
+                ${list_cell_selector}[data-opd-list-picker-order]{box-shadow:inset 0 0 0 2px ${accent};background-color:${accent_background};}
+                ${list_cell_selector}[data-opd-list-picker-order]::after{content:attr(data-opd-list-picker-order);position:absolute;top:0.4rem;left:0.4rem;z-index:1;min-width:1.6rem;height:1.6rem;padding:0 0.4rem;box-sizing:border-box;border-radius:0.8rem;background:${accent};color:${accent_text};font:700 0.85rem/1.6rem sans-serif;text-align:center;pointer-events:none;}`;
+            frame_document.head.appendChild(style);
+        }
+        //iframe の document に listCell のクリック・キー入力の捕捉を登録する(Document ごとに1回)
+        function prepare_frame_document(frame_document){
+            if(frame_documents_prepared.has(frame_document)) return;
+            frame_documents_prepared.add(frame_document);
+            frame_document.addEventListener("click", on_frame_click, true);
+            frame_document.addEventListener("auxclick", on_frame_click, true);
+            frame_document.addEventListener("keydown", on_frame_keydown, true);
+        }
+        //listCell 内のクリックはページ遷移させず、左クリックだけ選択の切り替えにする
+        function on_frame_click(event){
+            const cell = event.target instanceof Element ? event.target.closest(list_cell_selector) : null;
+            if(cell === null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if(event.type !== "click" || event.button !== 0) return;
+            toggle_cell(cell);
+        }
+        //iframe 内の Esc でもダイアログを閉じる。listCell 上の Enter / Space はページ遷移させず選択の切り替えにする
+        function on_frame_keydown(event){
+            if(event.key === "Escape"){
+                event.preventDefault();
+                event.stopPropagation();
+                close_dialog();
+                return;
+            }
+            if(event.key !== "Enter" && event.key !== " ") return;
+            const cell = event.target instanceof Element ? event.target.closest(list_cell_selector) : null;
+            if(cell === null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if(event.repeat) return;
+            toggle_cell(cell);
+        }
+        //セルのリストを選択に加える(既にあれば外す)。ID を決められないセルは手動入力を案内する
+        function toggle_cell(cell){
+            const frame_document = cell.ownerDocument;
+            request_helper_scan(frame_document);
+            const cell_info = resolve_list_cell_info(cell, frame_document.location.href);
+            if(cell_info === null){
+                status_area.textContent = i18n_message("ui_list_picker_cell_unresolved");
+                return;
+            }
+            toggle_entry(`/i/lists/${cell_info.id}`, cell_info.name);
+            render_selection();
+            mark_frame_cells();
+        }
+        function get_frame_document(){
+            try{
+                return frame.contentDocument;
+            }catch(e){
+                //クロスオリジンなどで中身を読めない場合
+                return null;
+            }
+        }
+        //iframe に表示中の listCell に選択の順番を属性で付け直す。手動入力で名前が無かった項目はセルから名前を補う
+        function mark_frame_cells(){
+            const frame_document = get_frame_document();
+            if(!frame_document) return;
+            const order_by_path = new Map();
+            selected_entries.forEach((entry, index) => order_by_path.set(entry.path, index + 1));
+            let is_name_filled = false;
+            frame_document.querySelectorAll(list_cell_selector).forEach((cell) => {
+                const cell_info = resolve_list_cell_info(cell, frame_document.location.href);
+                const order = cell_info === null ? undefined : order_by_path.get(`/i/lists/${cell_info.id}`);
+                if(order === undefined){
+                    cell.removeAttribute("data-opd-list-picker-order");
                     return;
                 }
-                //残したエントリは今回の列挙結果と混ざらないよう専用のセクションにまとめる
-                found_lists.set(list_id, {id: list_info.id, path: list_info.path, name: list_info.name, section: kept_section_name, is_kept: true});
+                cell.setAttribute("data-opd-list-picker-order", String(order));
+                const entry = selected_entries[order - 1];
+                if(entry.name === "" && cell_info.name !== ""){
+                    entry.name = cell_info.name;
+                    is_name_filled = true;
+                }
             });
-            probe_found_ids.clear();
-            probe_unresolved_keys.clear();
-            is_probe_loading = true;
-            has_probe_document = false;
-            probe_started_at = Date.now();
-            probe_stable_elapsed = 0;
-            probe_last_state = "";
-            helper_wait_elapsed = 0;
-            probe_expected_path = `/${screen_name}/lists`.toLowerCase();
-            render_results();
+            if(is_name_filled) render_selection();
+        }
+        function stop_frame_poll(){
+            if(frame_poll_timer !== null){
+                clearInterval(frame_poll_timer);
+                frame_poll_timer = null;
+            }
+        }
+        //対象 URL を読み込み(直し)、skeleton を表示する
+        function load_frame(){
+            frame_load_started_at = Date.now();
+            has_frame_document = false;
+            has_frame_reached_page = false;
+            set_frame_loading(true);
             status_area.textContent = i18n_message("ui_list_picker_loading");
-            navigate_probe_frame(`https://x.com/${screen_name}/lists`);
-
-            probe_interval = setInterval(function(){
-                let probe_document = null;
-                try{
-                    probe_document = probe_frame.contentDocument;
-                }catch(e){
-                    //クロスオリジンなどで中身を読めない場合は列挙を諦める
-                    stop_probe();
-                    render_results();
-                    status_area.textContent = i18n_message("ui_list_picker_error");
+            navigate_frame(frame_url);
+        }
+        //読み込みを打ち切り、skeleton を外して理由を表示する
+        function finish_frame_loading(message){
+            stop_frame_poll();
+            set_frame_loading(false);
+            status_area.textContent = message;
+        }
+        //指定ユーザーのリスト一覧ページを iframe に表示し、定期的に listCell へ選択の順番を付け直す
+        function start_frame(screen_name){
+            stop_frame_poll();
+            frame_expected_path = `/${screen_name}/lists`.toLowerCase();
+            frame_url = `https://x.com/${screen_name}/lists`;
+            frame_recover_count = 0;
+            load_frame();
+            frame_poll_timer = setInterval(poll_frame, frame_poll_interval_ms);
+        }
+        function poll_frame(){
+            let frame_document = null;
+            try{
+                frame_document = frame.contentDocument;
+            }catch(e){
+                //クロスオリジンなどで中身を読めない場合は表示を諦める
+                finish_frame_loading(i18n_message("ui_list_picker_error"));
+                return;
+            }
+            const elapsed_ms = Date.now() - frame_load_started_at;
+            const is_timed_out = is_frame_loading && elapsed_ms >= frame_load_limit_ms;
+            //読み込み前の about:blank と本文が無い状態は判定材料にならないので次回に回す
+            if(!frame_document || frame_document.location.href === "about:blank" || !frame_document.body){
+                //本文を一度も読めないまま制限時間を過ぎた場合は読み込み自体に失敗している
+                if(is_timed_out) finish_frame_loading(has_frame_document ? i18n_message("ui_list_picker_not_detected") : i18n_message("ui_list_picker_error"));
+                return;
+            }
+            has_frame_document = true;
+            const frame_path_lower = frame_document.location.pathname.toLowerCase().replace(/\/+$/, "");
+            if(frame_path_lower !== frame_expected_path){
+                //ログイン画面へ飛ばされた場合は待っても表示できないため終了する
+                if(frame_path_lower === "/login" || frame_path_lower.startsWith("/login/") || frame_path_lower.startsWith("/i/flow/login")){
+                    finish_frame_loading(i18n_message("ui_list_picker_login_required"));
                     return;
                 }
-                //制限時間を過ぎたら、iframe を読めているかどうかに関わらずそこまでの結果で打ち切る
-                if(Date.now() - probe_started_at >= probe_limit_ms){
-                    stop_probe();
-                    render_results();
-                    if(probe_found_ids.size > 0){
-                        //リスト ID を解決できなかった listCell があれば、そのリストは手動で入力してもらう必要がある
-                        const partial_message = i18n_message("ui_list_picker_partial");
-                        status_area.textContent = probe_unresolved_keys.size > 0 ? `${partial_message} ${i18n_message("ui_list_picker_some_unresolved")}` : partial_message;
-                    }else{
-                        //本文を一度も読めていない場合は読み込み自体に失敗している
-                        status_area.textContent = has_probe_document ? i18n_message("ui_list_picker_not_detected") : i18n_message("ui_list_picker_error");
-                    }
-                    return;
-                }
-                //読み込み前の about:blank と本文が無い状態は判定材料にならないので次回に回す
-                if(!probe_document || probe_document.location.href === "about:blank" || !probe_document.body) return;
-                has_probe_document = true;
-                //取得をやり直した直後は前回のページが残っていることがあるため、対象のパスを表示するまで採取しない
-                const probe_path_lower = probe_document.location.pathname.toLowerCase();
-                if(probe_path_lower.replace(/\/+$/, "") !== probe_expected_path){
-                    //ログイン画面へ飛ばされた場合は待っても取得できないため終了する
-                    if(probe_path_lower === "/login" || probe_path_lower.startsWith("/login/") || probe_path_lower.startsWith("/i/flow/login")){
-                        stop_probe();
-                        render_results();
-                        status_area.textContent = i18n_message("ui_list_picker_login_required");
-                    }
-                    return;
-                }
-
-                //リスト一覧ページを表示できたら page world ヘルパーを注入する(注入済みの document では何もしない)
-                inject_list_picker_helper(probe_document);
-                const helper_state = probe_document.documentElement.getAttribute("data-opd-list-picker-helper");
-                //ヘルパーが準備できていれば listCell へのリスト ID 付与を依頼してから収集する
-                if(helper_state === "ready"){
-                    probe_document.dispatchEvent(new CustomEvent("opd_list_picker_scan"));
-                }
-                //ヘルパーが走査できるようになったか、読み込めないと分かった状態。読み込みを待っているあいだは画面の内容を動かさない
-                //ただし読み込みの成否がいつまでも分からない document で待ち続けないよう、待ち時間が上限に達したらヘルパー無しとして進める
-                const is_helper_state_known = (helper_state === "ready" || helper_state === "failed");
-                if(!is_helper_state_known) helper_wait_elapsed += probe_interval_ms;
-                const is_helper_settled = (is_helper_state_known || helper_wait_elapsed >= helper_settle_limit_ms);
-
-                const before_size = found_lists.size;
-                let is_kept_entry_replaced = false;
-                collect_lists_from_document(probe_document).forEach((list_info) => {
-                    probe_found_ids.add(list_info.id);
-                    const known_list = found_lists.get(list_info.id);
-                    if(known_list === undefined){
-                        found_lists.set(list_info.id, list_info);
+                //対象ページを表示した後に別のページへ遷移した場合は対象ページを読み込み直す。繰り返す場合は打ち切る
+                if(has_frame_reached_page){
+                    frame_recover_count++;
+                    if(frame_recover_count > frame_recover_limit){
+                        finish_frame_loading(i18n_message("ui_list_picker_error"));
                         return;
                     }
-                    //選択のために残していたエントリは今回の情報(セクション・リスト名)で置き換える。チェック状態は id で引き継がれる
-                    if(known_list.is_kept !== true) return;
-                    found_lists.set(list_info.id, list_info);
-                    is_kept_entry_replaced = true;
-                });
-                if(found_lists.size !== before_size || is_kept_entry_replaced) render_results();
-
-                //段階的に読み込まれるリストを引き出すため最下部までスクロールする
-                //ヘルパーの読み込み中にスクロールすると、最初に見えていたセルが走査される前に画面外へ出てしまうため待つ
-                const scrolling_element = probe_document.scrollingElement;
-                if(is_helper_settled && scrolling_element) scrolling_element.scrollTop = scrolling_element.scrollHeight;
-
-                //仮想リストで画面外に出たセルも数え続けるため、未解決のセルはキーで累積し、解決できたキーだけを取り下げる
-                //ヘルパーの走査前に数えるとすべてのセルが未解決に見えるため、ヘルパーの状態が定まってから累積する
-                if(is_helper_settled){
-                    collect_list_cell_states(probe_document).forEach((cell_state) => {
-                        if(cell_state.is_resolved){
-                            probe_unresolved_keys.delete(cell_state.key);
-                            return;
-                        }
-                        if(cell_state.key !== "") probe_unresolved_keys.add(cell_state.key);
-                    });
+                    load_frame();
+                    return;
                 }
-                //未解決のセルはヘルパーの走査で減っていくため、安定状態の判定材料に含める
-                const unresolved_count = probe_unresolved_keys.size;
-                const probe_state = `${probe_found_ids.size}:${unresolved_count}:${scrolling_element?.scrollHeight}`;
-                //ヘルパーの状態が定まるまではスクロールも走査もしていないため、状態が変わらなくても安定とはみなさず、比較用の前回状態も持ち越さない
-                probe_stable_elapsed = (is_helper_settled && probe_state === probe_last_state) ? probe_stable_elapsed + probe_interval_ms : 0;
-                probe_last_state = is_helper_settled ? probe_state : "";
-
-                if(probe_document.readyState === "complete" && probe_found_ids.size > 0 && probe_stable_elapsed >= probe_stable_ms){
-                    stop_probe();
-                    //リスト ID を解決できなかった listCell が残っている場合は、そのリストを手動で入力してもらう必要がある
-                    status_area.textContent = unresolved_count > 0 ? i18n_message("ui_list_picker_some_unresolved") : "";
-                }
-            }, probe_interval_ms);
+                if(is_timed_out) finish_frame_loading(i18n_message("ui_list_picker_not_detected"));
+                return;
+            }
+            has_frame_reached_page = true;
+            //リスト一覧ページを表示できたら捕捉・style・ヘルパーを入れる(入れ済みの document では何もしない)
+            prepare_frame_document(frame_document);
+            ensure_frame_style(frame_document);
+            inject_list_picker_helper(frame_document);
+            request_helper_scan(frame_document);
+            mark_frame_cells();
+            if(!is_frame_loading) return;
+            if(frame_document.querySelector(list_cell_selector) !== null){
+                set_frame_loading(false);
+                status_area.textContent = "";
+                frame_recover_count = 0;
+                return;
+            }
+            if(is_timed_out){
+                set_frame_loading(false);
+                status_area.textContent = i18n_message("ui_list_picker_not_detected");
+            }
         }
-        //ユーザー名入力欄の値から列挙を開始する。リスト一覧ページのパスに解決できない入力は受け付けない
-        function start_probe_from_input(){
+        //ユーザー名入力欄の値から表示を始める。リスト一覧ページのパスに解決できない入力は受け付けない
+        function start_frame_from_input(){
             const resolved_path = resolve_list_column_path(user_input.value);
             const user_lists_match = (resolved_path ?? "").match(/^\/([A-Za-z0-9_]{1,15})\/lists$/);
             if(!user_lists_match){
                 alert(i18n_message("msg_list_picker_user_required"));
+                user_input.focus();
                 return;
             }
-            start_probe(user_lists_match[1]);
+            start_frame(user_lists_match[1]);
         }
-        //ダイアログを閉じ、タイマーと iframe を解放してフォーカスを開いた要素へ戻す
+        //読み込みが終わっても中身を読めない(エラーページなど)場合は、制限時間を待たずにエラーとして終了する
+        function on_frame_load(){
+            if(!is_frame_loading) return;
+            //中身を読める場合は about:blank でもポーリングの継続に任せる
+            if(get_frame_document() !== null) return;
+            finish_frame_loading(i18n_message("ui_list_picker_error"));
+        }
+        //ダイアログを閉じ、タイマーと iframe の内容を解放してフォーカスを開いた要素へ戻す
         function close_dialog(){
-            stop_probe();
+            stop_frame_poll();
             document.removeEventListener("keydown", on_dialog_keydown);
-            window.removeEventListener("blur", on_window_blur);
-            probe_frame.removeEventListener("load", on_probe_frame_load);
+            frame.removeEventListener("load", on_frame_load);
             overlay_observer.disconnect();
+            navigate_frame("about:blank");
             inert_applied_elements.forEach((element) => element.removeAttribute("inert"));
             overlay.remove();
             opener_element?.focus?.();
-        }
-        //列挙用の iframe にフォーカスが吸われた場合は、直前にフォーカスしていたダイアログ内の要素へ戻す(残っていなければ入力欄へ)
-        function on_window_blur(){
-            if(document.activeElement !== probe_frame) return;
-            if(last_focused_element !== null && dialog.contains(last_focused_element) && last_focused_element.isConnected){
-                last_focused_element.focus();
-                return;
-            }
-            user_input.focus();
-        }
-        //読み込みが終わっても中身を読めない(エラーページなど)場合は、制限時間を待たずにエラーとして終了する
-        function on_probe_frame_load(){
-            if(!is_probe_loading) return;
-            let probe_document = null;
-            try{
-                probe_document = probe_frame.contentDocument;
-            }catch(e){
-                //クロスオリジンで中身を読めない場合も読み込み失敗として扱う
-                probe_document = null;
-            }
-            //中身を読める場合は about:blank でも列挙の継続に任せる
-            if(probe_document !== null) return;
-            stop_probe();
-            render_results();
-            status_area.textContent = i18n_message("ui_list_picker_error");
         }
         //Esc で閉じ、Tab はダイアログ内のフォーカス可能要素を循環させる
         function on_dialog_keydown(event){
@@ -2308,38 +2400,126 @@ function run(settings){
             event.preventDefault();
             focusable_elements[0].focus();
         }
-        //チェックしたリストと手動入力を合わせて重複を除き、カラムをまとめて追加する
+        //入力欄の各行を解釈して一覧の末尾へ追加する。解釈できない行があれば入力欄に残して知らせ、false を返す
+        function add_manual_entries(){
+            const manual_entries = parse_manual_list_entries(manual_textarea.value);
+            manual_entries.paths.forEach((list_path) => add_entry(list_path, ""));
+            render_selection();
+            mark_frame_cells();
+            if(manual_entries.invalid.length > 0){
+                manual_textarea.value = manual_entries.invalid.join("\n");
+                alert(i18n_message("msg_list_picker_invalid_manual", [manual_entries.invalid.join("\n")]));
+                manual_textarea.focus();
+                return false;
+            }
+            manual_textarea.value = "";
+            return true;
+        }
+        //一覧の並び順のままカラムをまとめて追加する。入力欄に未追加の文字列が残っていれば先に追加を試みる
         function add_selected_columns(){
-            const add_targets = collect_add_paths();
-            if(add_targets.invalid.length > 0){
-                alert(i18n_message("msg_list_picker_invalid_manual", [add_targets.invalid.join("\n")]));
-                return;
-            }
-            if(add_targets.paths.length === 0){
+            if(manual_textarea.value.trim() !== "" && !add_manual_entries()) return;
+            if(selected_entries.length === 0){
                 alert(i18n_message("msg_list_picker_nothing_selected"));
+                manual_textarea.focus();
                 return;
             }
-            if(add_targets.paths.length > many_columns_threshold && !confirm(i18n_message("msg_list_picker_many_columns_confirm", [String(add_targets.paths.length)]))) return;
+            const paths = selected_entries.map((entry) => entry.path);
+            if(paths.length > many_columns_threshold && !confirm(i18n_message("msg_list_picker_many_columns_confirm", [String(paths.length)]))) return;
             close_dialog();
-            add_explore_columns(add_targets.paths, insert_first);
+            add_explore_columns(paths, insert_first);
         }
 
-        fetch_btn.addEventListener("click", start_probe_from_input);
+        show_btn.addEventListener("click", start_frame_from_input);
         user_input.addEventListener("keydown", function(event){
             if(event.key !== "Enter") return;
             event.preventDefault();
-            start_probe_from_input();
+            start_frame_from_input();
         });
-        //どちらも押した時点で描画されているチェックボックスだけを対象にする
+        //そのとき ID を決められている表示中のセルを文書順に、未選択のものだけ末尾へ追加する
         select_all_btn.addEventListener("click", function(){
-            results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = true;});
-            update_count();
+            const frame_document = get_frame_document();
+            if(!frame_document) return;
+            request_helper_scan(frame_document);
+            collect_lists_from_document(frame_document).forEach((list_info) => add_entry(list_info.path, list_info.name));
+            render_selection();
+            mark_frame_cells();
         });
         clear_all_btn.addEventListener("click", function(){
-            results_area.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {checkbox.checked = false;});
-            update_count();
+            selected_entries.length = 0;
+            render_selection();
+            mark_frame_cells();
         });
-        manual_textarea.addEventListener("input", update_count);
+        manual_add_btn.addEventListener("click", add_manual_entries);
+        //Enter で追加、Shift+Enter は改行のまま
+        manual_textarea.addEventListener("keydown", function(event){
+            if(event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+            event.preventDefault();
+            add_manual_entries();
+        });
+        //一覧の項目は除外ボタンのクリックで外す
+        selected_list.addEventListener("click", function(event){
+            const remove_btn = event.target instanceof Element ? event.target.closest(".opd_list_picker_remove_btn") : null;
+            if(remove_btn === null) return;
+            const item = remove_btn.closest(selected_item_selector);
+            const index = entry_index_of(item.getAttribute("data-list-path"));
+            if(index === -1) return;
+            selected_entries.splice(index, 1);
+            render_selection();
+            mark_frame_cells();
+            //フォーカスは同じ位置(末尾を外した場合は新しい末尾)の除外ボタンへ移し、項目が無くなれば入力欄へ移す
+            const next_entry = selected_entries[Math.min(index, selected_entries.length - 1)];
+            const next_item = next_entry === undefined ? null : find_selected_item(next_entry.path);
+            (next_item === null ? manual_textarea : next_item.querySelector(".opd_list_picker_remove_btn")).focus();
+        });
+        //項目にフォーカスした状態の Alt+↑ / Alt+↓ で1段ずつ動かす
+        selected_list.addEventListener("keydown", function(event){
+            if(!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+            const item = event.target instanceof Element ? event.target.closest(selected_item_selector) : null;
+            if(item === null) return;
+            event.preventDefault();
+            const list_path = item.getAttribute("data-list-path");
+            const from_index = entry_index_of(list_path);
+            if(from_index === -1) return;
+            move_entry_and_render(list_path, event.key === "ArrowUp" ? from_index - 1 : from_index + 1);
+        });
+        selected_list.addEventListener("dragstart", function(event){
+            const item = event.target instanceof Element ? event.target.closest(selected_item_selector) : null;
+            if(item === null) return;
+            dragging_path = item.getAttribute("data-list-path");
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", dragging_path);
+            item.classList.add("opd_list_picker_dragging");
+        });
+        selected_list.addEventListener("dragend", function(){
+            dragging_path = null;
+            clear_drop_marks();
+            selected_list.querySelectorAll(selected_item_selector).forEach((item) => item.classList.remove("opd_list_picker_dragging"));
+        });
+        //落とし先の目印は一覧の枠(項目の外)でも出す
+        selected_wrap.addEventListener("dragover", function(event){
+            if(dragging_path === null) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            clear_drop_marks();
+            const drop_target = drop_target_from_event(event);
+            if(drop_target.index === -1) return;
+            const target_item = find_selected_item(selected_entries[drop_target.index].path);
+            if(target_item === null || target_item.getAttribute("data-list-path") === dragging_path) return;
+            target_item.classList.add(drop_target.is_after ? "opd_list_picker_drop_after" : "opd_list_picker_drop_before");
+        });
+        selected_wrap.addEventListener("dragleave", function(event){
+            if(event.relatedTarget instanceof Node && selected_wrap.contains(event.relatedTarget)) return;
+            clear_drop_marks();
+        });
+        selected_wrap.addEventListener("drop", function(event){
+            if(dragging_path === null) return;
+            event.preventDefault();
+            clear_drop_marks();
+            const drop_target = drop_target_from_event(event);
+            const from_index = entry_index_of(dragging_path);
+            if(from_index === -1 || drop_target.index === -1) return;
+            move_entry_and_render(dragging_path, insert_index_of_drop(from_index, drop_target));
+        });
         add_btn.addEventListener("click", add_selected_columns);
         cancel_btn.addEventListener("click", close_dialog);
         //背景(オーバーレイ自身)の上で押して離してクリックされたときだけ閉じる
@@ -2355,21 +2535,17 @@ function run(settings){
             is_overlay_mouseup = false;
             if(is_background_click) close_dialog();
         });
-        //ダイアログ内の最後のフォーカス位置を控える(オーバーレイごと除去されるため個別の解除は不要)
-        dialog.addEventListener("focusin", function(event){
-            last_focused_element = event.target;
-        });
         document.addEventListener("keydown", on_dialog_keydown);
-        window.addEventListener("blur", on_window_blur);
-        probe_frame.addEventListener("load", on_probe_frame_load);
+        frame.addEventListener("load", on_frame_load);
 
-        render_results();
+        set_frame_loading(false);
+        render_selection();
         user_input.focus();
-        //ログイン中のユーザーが分かればそのままリスト一覧の列挙を始める
+        //ログイン中のユーザーが分かればそのままリスト一覧を表示する
         const login_screen_name = get_login_screen_name();
         if(login_screen_name !== null){
             user_input.value = login_screen_name;
-            start_probe(login_screen_name);
+            start_frame(login_screen_name);
         }else{
             status_area.textContent = i18n_message("ui_list_picker_not_detected");
         }
@@ -3037,28 +3213,6 @@ function collect_lists_from_document(doc){
         found_lists.set(list_id, {id: list_id, path: `/i/lists/${list_id}`, name: list_name, section: current_section});
     }
     return Array.from(found_lists.values());
-}
-//リスト一覧ページの Document から、並んでいる listCell の識別キーと解決状態を列挙する
-//doc: リスト一覧ページの Document
-//戻り値: {key: セル内の非空 span テキスト(trim 後)を文書順に改行で連結した文字列(非空の span が無い場合は空文字), is_resolved: resolve_list_cell_info でリスト ID を決められたか} の配列
-//走査範囲は [data-testid="primaryColumn"] 配下の [data-testid="listCell"] のみで、文書順に並べる。primaryColumn が無い場合は空配列を返す
-function collect_list_cell_states(doc){
-    const root = doc.querySelector('[data-testid="primaryColumn"]');
-    if(!root) return [];
-    const cell_states = [];
-    const cells = root.querySelectorAll('[data-testid="listCell"]');
-    for (let index = 0; index < cells.length; index++) {
-        const cell = cells[index];
-        //リスト名だけでは別のセルと衝突しうるため、セル内の文言をまとめて識別キーにする
-        const key_parts = [];
-        const span_elements = cell.querySelectorAll("span");
-        for (let span_index = 0; span_index < span_elements.length; span_index++) {
-            const span_text = span_elements[span_index].textContent.trim();
-            if(span_text !== "") key_parts.push(span_text);
-        }
-        cell_states.push({key: key_parts.join("\n"), is_resolved: resolve_list_cell_info(cell, doc.location.href) !== null});
-    }
-    return cell_states;
 }
 //手動入力欄の文字列を1行1件として解釈し、リストカラムのパスに変換する
 //text: textarea の文字列
