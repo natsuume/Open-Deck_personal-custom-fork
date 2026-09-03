@@ -60,6 +60,17 @@ let access_limit = {
     list_index:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null},
     list_management:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null}
 };
+//service worker は待機中に停止して起動し直すたびにメモリが初期化されるため、前回保存した値を復元してから更新する。
+//復元前に届いたレスポンスの更新はこの Promise の後に順序付ける
+const access_limit_restored = chrome.storage.local.get("api_access_limit").then((stored) => {
+    const stored_limit = stored.api_access_limit;
+    if(stored_limit == undefined) return;
+    for(const category of Object.keys(access_limit)){
+        if(stored_limit[category] != undefined) access_limit[category] = stored_limit[category];
+    }
+}).catch((e) => {
+    console.error("api_access_limit restore failed->", e);
+});
 function send_content_script(value){
     //chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });//firefoxではsession.setAccessLevel()が未対応なのでsessionは一旦お預け
     //chrome.storage.session.set
@@ -86,11 +97,11 @@ const API_CATEGORY_BY_OPERATION = {
 //リセット時刻 (x-rate-limit-reset) はサーバー時計基準なので、端末時計とのずれの影響を受けないよう、
 //サーバー時刻 (date ヘッダー) から求めた「リセットまでの残り秒数」を受信時点の端末時計に足した値を期限とする。
 //サーバー時刻が取れない場合はリセット時刻をそのまま期限にする
-function calc_expires_unix_time(reset_unix_time, server_unix_time){
+function calc_expires_unix_time(reset_unix_time, server_unix_time, received_unix_time){
     const reset = Number(reset_unix_time);
     if(!(reset > 0)) return null;
     if(!Number.isFinite(server_unix_time)) return reset;
-    return Date.now() / 1000 + (reset - server_unix_time);
+    return received_unix_time + (reset - server_unix_time);
 }
 
 chrome.webRequest.onHeadersReceived.addListener(function (resp) {
@@ -104,26 +115,31 @@ chrome.webRequest.onHeadersReceived.addListener(function (resp) {
 
     if (!category) return;
 
+    const received_unix_time = Date.now() / 1000;
     let server_unix_time = null;
+    const category_limit = {};
     for(const header of resp.responseHeaders){
         switch (header.name.toLowerCase()) {
             case "x-rate-limit-remaining":
-                access_limit[category].remaining = header.value;
+                category_limit.remaining = header.value;
                 break;
             case "x-rate-limit-limit":
-                access_limit[category].limit = header.value;
+                category_limit.limit = header.value;
                 break;
             case "x-rate-limit-reset":
-                access_limit[category].reset_unix_time = header.value;
+                category_limit.reset_unix_time = header.value;
                 break;
             case "date":
                 server_unix_time = Date.parse(header.value) / 1000;
                 break;
         }
     }
-    access_limit[category].expires_unix_time = calc_expires_unix_time(access_limit[category].reset_unix_time, server_unix_time);
 
-    send_content_script(access_limit);
+    access_limit_restored.then(() => {
+        Object.assign(access_limit[category], category_limit);
+        access_limit[category].expires_unix_time = calc_expires_unix_time(access_limit[category].reset_unix_time, server_unix_time, received_unix_time);
+        send_content_script(access_limit);
+    });
 }, { urls: Object.keys(API_CATEGORY_BY_OPERATION).map(operation => `*://x.com/i/api/graphql/*/${operation}*`) }, ['responseHeaders']);
 
 

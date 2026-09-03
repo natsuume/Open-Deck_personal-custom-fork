@@ -79,42 +79,58 @@ const API_LIMIT_CATEGORIES = [
 const api_limit_description_by_key = {};
 //title・alert共通で使うAPIリミットの説明文
 let api_limit_description = "";
+//期限到来時の再描画タイマー
+let api_limit_rerender_timer = null;
+//APIリミットのバッジ・tooltip を api_limit_obj から描画する。
+//storage の更新時に加え、最も早い期限が来た時点でも呼び直し、通信が無くても回復済みの表示に切り替わるようにする
+function render_api_limit_status(){
+    clearTimeout(api_limit_rerender_timer);
+    api_limit_rerender_timer = null;
+    const api_linit_status_btn = document.querySelector("#api_limit_status");
+    if(api_limit_obj == null || api_linit_status_btn == null) return;
+    const limit_percentages = [];
+    let has_expired_category = false;
+    let earliest_expires_unix_time = null;
+    const now_unix_time = Date.now() / 1000;
+    for(const category of API_LIMIT_CATEGORIES){
+        const category_limit = api_limit_obj[category.key];
+        //古い保存値にはカテゴリ自体が存在しない場合があるため、その場合は無視する
+        if(category_limit == undefined || category_limit.remaining == null || !(Number(category_limit.limit) > 0)) continue;
+        api_limit_description_by_key[category.key] = `${i18n_message(category.label_key)}${category_limit.remaining}/${category_limit.limit}-${unix_time_mmss(category_limit.reset_unix_time)}`;
+        //期限 (background が端末時計基準で算出した値) を過ぎた値は枠が回復済みなので、残存率の最小値計算には含めない (説明行にはリセット時刻付きで残す)
+        //期限が欠損・数値でない値は期限切れと判断できないため、そのまま計算に含める
+        const expires_unix_time = Number(category_limit.expires_unix_time ?? category_limit.reset_unix_time);
+        if(expires_unix_time > 0 && expires_unix_time <= now_unix_time){
+            has_expired_category = true;
+            continue;
+        }
+        if(expires_unix_time > 0 && (earliest_expires_unix_time == null || expires_unix_time < earliest_expires_unix_time)){
+            earliest_expires_unix_time = expires_unix_time;
+        }
+        limit_percentages.push(category_limit.remaining / category_limit.limit * 100);
+    }
+    api_limit_description = API_LIMIT_CATEGORIES
+        .filter(category => api_limit_description_by_key[category.key] != undefined)
+        .map(category => api_limit_description_by_key[category.key])
+        .join("\r\n");
+    if(limit_percentages.length > 0){
+        api_linit_status_btn.textContent = `${Math.floor(Math.min(...limit_percentages))}%`;
+    }else if(has_expired_category){
+        //観測済みの枠がすべてリセット時刻を過ぎている = 全枠が回復済み
+        api_linit_status_btn.textContent = "100%";
+    }
+    //一度も値を観測していない場合はバッジの表示を変えない
+    api_linit_status_btn.title = `${i18n_message("msg_api_limit_status_title", [api_limit_description])}`;
+    if(earliest_expires_unix_time != null){
+        //期限ちょうどの再描画で判定が now と同値になっても期限切れ側に倒れるよう、1 秒余裕を持たせる
+        api_limit_rerender_timer = setTimeout(render_api_limit_status, (earliest_expires_unix_time - now_unix_time + 1) * 1000);
+    }
+}
 chrome.storage.onChanged.addListener((changes, namespace) => {
     if(changes.api_access_limit != undefined){
         //console.log(changes)
         api_limit_obj = changes.api_access_limit.newValue;
-        const api_linit_status_btn = document.querySelector("#api_limit_status");
-        if(api_linit_status_btn != null){
-            const limit_percentages = [];
-            let has_expired_category = false;
-            const now_unix_time = Date.now() / 1000;
-            for(const category of API_LIMIT_CATEGORIES){
-                const category_limit = api_limit_obj[category.key];
-                //古い保存値にはカテゴリ自体が存在しない場合があるため、その場合は無視する
-                if(category_limit == undefined || category_limit.remaining == null || !(Number(category_limit.limit) > 0)) continue;
-                api_limit_description_by_key[category.key] = `${i18n_message(category.label_key)}${category_limit.remaining}/${category_limit.limit}-${unix_time_mmss(category_limit.reset_unix_time)}`;
-                //期限 (background が端末時計基準で算出した値) を過ぎた値は枠が回復済みなので、残存率の最小値計算には含めない (説明行にはリセット時刻付きで残す)
-                //期限が欠損・数値でない値は期限切れと判断できないため、そのまま計算に含める
-                const expires_unix_time = Number(category_limit.expires_unix_time ?? category_limit.reset_unix_time);
-                if(expires_unix_time > 0 && expires_unix_time <= now_unix_time){
-                    has_expired_category = true;
-                    continue;
-                }
-                limit_percentages.push(category_limit.remaining / category_limit.limit * 100);
-            }
-            api_limit_description = API_LIMIT_CATEGORIES
-                .filter(category => api_limit_description_by_key[category.key] != undefined)
-                .map(category => api_limit_description_by_key[category.key])
-                .join("\r\n");
-            if(limit_percentages.length > 0){
-                api_linit_status_btn.textContent = `${Math.floor(Math.min(...limit_percentages))}%`;
-            }else if(has_expired_category){
-                //観測済みの枠がすべてリセット時刻を過ぎている = 全枠が回復済み
-                api_linit_status_btn.textContent = "100%";
-            }
-            //一度も値を観測していない場合はバッジの表示を変えない
-            api_linit_status_btn.title = `${i18n_message("msg_api_limit_status_title", [api_limit_description])}`;
-        }
+        render_api_limit_status();
     }
   });
 //
