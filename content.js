@@ -2546,9 +2546,14 @@ function run(settings){
     //skeleton を外す上限時間のタイマー。読み込みが終わらなくても skeleton で X の画面 (エラー表示を含む) を隠し続けないようにする
     let post_form_skeleton_timer = null;
     const post_form_skeleton_limit_ms = 15000;
-    //iframe の読み込みを始めるときに呼ぶ。読み込み失敗の監視を付けて読み込み、skeleton を上限時間つきで表示する
+    //直近の読み込み開始時刻と、その読み込み失敗監視の解除関数
+    let post_form_load_started_at = 0;
+    let post_form_load_watch_cleanup = null;
+    //iframe の読み込みを始めるときに呼ぶ。前回の読み込み失敗監視を外してから付け直し、skeleton を上限時間つきで表示する
     function start_post_form_frame_load(frame){
-        watch_load_column([frame]);
+        post_form_load_watch_cleanup?.();
+        post_form_load_watch_cleanup = watch_load_column([frame]);
+        post_form_load_started_at = Date.now();
         frame.src = "https://x.com/intent/tweet";
         set_post_form_skeleton_visible(true);
     }
@@ -2574,10 +2579,12 @@ function run(settings){
         window.removeEventListener("resize", on_post_form_window_resize);
         window.removeEventListener("opd_post_composer_closed", on_post_form_composer_closed);
     }
-    //プロファイル切替などでポップオーバーが親ごと外された場合は、リスナーを外して以降の処理を止める
+    //プロファイル切替などでポップオーバーが親ごと外された場合は、リスナーとタイマーを外して以降の処理を止める
     function is_post_form_popover_detached(){
         if(post_form_popover !== null && post_form_popover.isConnected) return false;
         remove_post_form_popover_listeners();
+        clearTimeout(post_form_skeleton_timer);
+        post_form_skeleton_timer = null;
         return true;
     }
     //本体 UI にフォーカスがあるときの Esc で閉じる。他のモーダルが Esc を受け持つあいだ (モーダルダイアログの inert が乗っている / メディアビューワーの dialog が showModal で開いている) は何もしない
@@ -2686,12 +2693,13 @@ function run(settings){
             console.warn("post form: OpdExtTextReview を初期化できませんでした->", e);
         }
     }
-    //iframe がポストフォーム (intent/tweet か、投稿後に開き直される compose/post 配下) を表示しているか。読み込み中 (about:blank) は表示中とみなし、中身を読めない場合は表示していないとみなす
+    //iframe がポストフォーム (intent/tweet か、投稿後に開き直される compose/post 配下) を表示しているか
+    //読み込み開始から上限時間内の about:blank は読み込み中とみなして表示中扱いにし、上限を過ぎても about:blank のままなら遷移が成立しなかったとみなす。中身を読めない場合は表示していないとみなす
     function is_post_form_frame_on_composer(frame){
         try{
             const frame_location = frame.contentWindow?.location;
             if(frame_location == null) return false;
-            if(frame_location.href === "about:blank") return true;
+            if(frame_location.href === "about:blank") return Date.now() - post_form_load_started_at < post_form_skeleton_limit_ms;
             return frame_location.pathname.startsWith("/intent/tweet") || frame_location.pathname.startsWith("/compose/post");
         }catch(e){
             return false;
@@ -2737,7 +2745,12 @@ function run(settings){
         }else{
             //使い回す iframe が composer 以外の画面 (ホーム等) に移っていたらポストフォームを読み込み直す
             const frame = post_form_popover.querySelector(".opd_post_form_frame");
-            if(!is_post_form_frame_on_composer(frame)) start_post_form_frame_load(frame);
+            if(!is_post_form_frame_on_composer(frame)){
+                start_post_form_frame_load(frame);
+            }else if(!post_form_popover.querySelector(".opd_post_form_frame_skeleton").hidden){
+                //閉じているあいだに止めた skeleton の上限時間を付け直す
+                set_post_form_skeleton_visible(true);
+            }
         }
         post_form_popover.hidden = false;
         post_form_opener = opener_element ?? null;
@@ -2761,6 +2774,9 @@ function run(settings){
         post_form_popover.hidden = true;
         post_form_opener?.setAttribute?.("aria-expanded", "false");
         remove_post_form_popover_listeners();
+        //閉じているあいだは skeleton の上限時間を進めない (開き直したときに付け直す)
+        clearTimeout(post_form_skeleton_timer);
+        post_form_skeleton_timer = null;
     }
     //開閉ボタンの操作で表示と非表示を切り替える。opener_element: 開いた要素 (位置合わせの基準とフォーカスの戻し先)
     function toggle_post_form_popover(opener_element){
@@ -4159,7 +4175,10 @@ function watch_load_column(column_frames, max_retries = 5){
         });
     });
 
-    setTimeout(() => cleanups.forEach(fn => fn()), max_retries * 500 + 1000);
+    const stop_watching = () => cleanups.forEach(fn => fn());
+    setTimeout(stop_watching, max_retries * 500 + 1000);
+    //監視を途中で外すための関数を返す (同じ iframe を読み込み直すときに前の監視を解除するのに使う)
+    return stop_watching;
 }
 //設定初期化
 //初期設定の構築。既定プロファイルは create_default_profile() で作る
