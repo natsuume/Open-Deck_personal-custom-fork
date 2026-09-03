@@ -86,6 +86,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         const api_linit_status_btn = document.querySelector("#api_limit_status");
         if(api_linit_status_btn != null){
             const limit_percentages = [];
+            let has_expired_category = false;
             const now_unix_time = Date.now() / 1000;
             for(const category of API_LIMIT_CATEGORIES){
                 const category_limit = api_limit_obj[category.key];
@@ -93,15 +94,25 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
                 if(category_limit == undefined || category_limit.remaining == null) continue;
                 api_limit_description_by_key[category.key] = `${i18n_message(category.label_key)}${category_limit.remaining}/${category_limit.limit}-${unix_time_mmss(category_limit.reset_unix_time)}`;
                 //リセット時刻を過ぎた値は枠が回復済みなので、残存率の最小値計算には含めない (説明行にはリセット時刻付きで残す)
-                if(Number(category_limit.reset_unix_time) <= now_unix_time) continue;
+                //リセット時刻が欠損・数値でない値は期限切れと判断できないため、そのまま計算に含める
+                const reset_unix_time = Number(category_limit.reset_unix_time);
+                if(reset_unix_time > 0 && reset_unix_time <= now_unix_time){
+                    has_expired_category = true;
+                    continue;
+                }
                 limit_percentages.push(category_limit.remaining / category_limit.limit * 100);
             }
-            const min_limit_percentage = limit_percentages.length > 0 ? Math.min(...limit_percentages) : 99999;
             api_limit_description = API_LIMIT_CATEGORIES
                 .filter(category => api_limit_description_by_key[category.key] != undefined)
                 .map(category => api_limit_description_by_key[category.key])
                 .join("\r\n");
-            api_linit_status_btn.textContent = `${Math.floor(min_limit_percentage)}%`;
+            if(limit_percentages.length > 0){
+                api_linit_status_btn.textContent = `${Math.floor(Math.min(...limit_percentages))}%`;
+            }else if(has_expired_category){
+                //観測済みの枠がすべてリセット時刻を過ぎている = 全枠が回復済み
+                api_linit_status_btn.textContent = "100%";
+            }
+            //一度も値を観測していない場合はバッジの表示を変えない
             api_linit_status_btn.title = `${i18n_message("msg_api_limit_status_title", [api_limit_description])}`;
         }
     }
