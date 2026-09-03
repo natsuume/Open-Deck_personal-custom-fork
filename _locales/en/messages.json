@@ -328,5 +328,74 @@
   },
   "label_api_search": {
     "message": "Search:"
+  },
+  "ui_global_settings_title": {
+    "message": "Global settings"
+  },
+  "ui_global_settings_header": {
+    "message": "Global settings"
+  },
+  "ui_global_settings_description": {
+    "message": "Applied to every column item that is set to \"Follow global settings\"."
+  },
+  "ui_global_settings_pinned_label": {
+    "message": "Pin Explore / list columns"
+  },
+  "ui_global_settings_banner_label": {
+    "message": "Show banner"
+  },
+  "ui_global_settings_top_label": {
+    "message": "Show top bar"
+  },
+  "ui_global_settings_column_width_rem_label": {
+    "message": "Column width (rem, 12 or more)"
+  },
+  "ui_global_settings_apply_button": {
+    "message": "Apply"
+  },
+  "ui_global_settings_cancel_button": {
+    "message": "Cancel"
+  },
+  "ui_settings_inherit_option": {
+    "message": "Follow global settings ($1)"
+  },
+  "ui_settings_inherit_checkbox_label": {
+    "message": "Follow global settings"
+  },
+  "ui_settings_inherit_input_title": {
+    "message": "Uncheck \"Follow global settings\" to set this column individually"
+  },
+  "ui_settings_banner_label": {
+    "message": "Banner"
+  },
+  "ui_settings_top_label": {
+    "message": "Top bar"
+  },
+  "ui_settings_pinned_label": {
+    "message": "Pin"
+  },
+  "ui_settings_visible": {
+    "message": "Show"
+  },
+  "ui_settings_hidden": {
+    "message": "Hide"
+  },
+  "ui_settings_enabled": {
+    "message": "On"
+  },
+  "ui_settings_disabled": {
+    "message": "Off"
+  },
+  "ui_settings_pinned": {
+    "message": "Pinned"
+  },
+  "ui_settings_unpinned": {
+    "message": "Unpinned"
+  },
+  "msg_global_settings_invalid_width": {
+    "message": "Enter a column width of 12 or more"
+  },
+  "msg_global_settings_invalid_interval": {
+    "message": "Enter an auto-load interval of 1 second or more"
   }
 }

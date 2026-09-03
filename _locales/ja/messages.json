@@ -328,5 +328,74 @@
   },
   "label_api_search": {
     "message": "検索:"
+  },
+  "ui_global_settings_title": {
+    "message": "全体設定"
+  },
+  "ui_global_settings_header": {
+    "message": "全体設定"
+  },
+  "ui_global_settings_description": {
+    "message": "カラムごとに「全体設定に従う」になっている項目に適用されます。"
+  },
+  "ui_global_settings_pinned_label": {
+    "message": "Explore / リストカラムのピン止め"
+  },
+  "ui_global_settings_banner_label": {
+    "message": "バナー表示"
+  },
+  "ui_global_settings_top_label": {
+    "message": "トップ表示"
+  },
+  "ui_global_settings_column_width_rem_label": {
+    "message": "カラム幅 (rem、12以上)"
+  },
+  "ui_global_settings_apply_button": {
+    "message": "適用"
+  },
+  "ui_global_settings_cancel_button": {
+    "message": "キャンセル"
+  },
+  "ui_settings_inherit_option": {
+    "message": "全体設定に従う ($1)"
+  },
+  "ui_settings_inherit_checkbox_label": {
+    "message": "全体設定に従う"
+  },
+  "ui_settings_inherit_input_title": {
+    "message": "「全体設定に従う」を外すと個別に設定できます"
+  },
+  "ui_settings_banner_label": {
+    "message": "バナー表示"
+  },
+  "ui_settings_top_label": {
+    "message": "トップ表示"
+  },
+  "ui_settings_pinned_label": {
+    "message": "ピン止め"
+  },
+  "ui_settings_visible": {
+    "message": "表示"
+  },
+  "ui_settings_hidden": {
+    "message": "非表示"
+  },
+  "ui_settings_enabled": {
+    "message": "有効"
+  },
+  "ui_settings_disabled": {
+    "message": "無効"
+  },
+  "ui_settings_pinned": {
+    "message": "ピン止め"
+  },
+  "ui_settings_unpinned": {
+    "message": "解除"
+  },
+  "msg_global_settings_invalid_width": {
+    "message": "カラム幅は12以上の半角数字で入力してください"
+  },
+  "msg_global_settings_invalid_interval": {
+    "message": "自動更新間隔は1秒以上の半角数字で入力してください"
   }
 }

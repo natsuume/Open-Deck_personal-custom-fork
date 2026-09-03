@@ -2794,7 +2794,72 @@ function run(settings){
             })
         }
     }
+    //===== 全体設定: run() スコープの処理 (column_settings_save / last_load_profile / profile_store を参照する) =====
+    //現在のプロファイルの全体設定。run() の開始時に settings.global_settings から clone_global_settings で取り込む
+    //let global_settings = clone_global_settings(settings.global_settings);
+    //
+    //カラム設定パネルの HTML を種別に応じて組み立てる
+    //  options.auto_reload: 自動更新 (select .opd_a_reload_mode: inherit/true/false) と間隔 (checkbox .opd_a_reload_time_inherit + number .opd_a_reload_time_setting、秒単位) の行を含めるか
+    //  options.banner_top: バナー表示 (select .opd_banner_mode) とトップ表示 (select .opd_top_visible_mode) の行を含めるか
+    //  options.pinned:     ピン止め (select .opd_pinned_mode) の行を含めるか
+    //共通行: 表示モード (select .opd_tw_view_mode: inherit/0/1/2)、カラム幅 (select .opd_column_size_preset: inherit/0/1/2/3 と カスタムボタン .column_width_btn)
+    //post: {auto_reload:false, banner_top:false, pinned:false}、notification: {false, true, false}、home: {true, true, false}、explore: {true, true, true}
+    //各 select の inherit 選択肢は value="inherit" で、表示文字列は i18n の ui_settings_inherit_option に現在の全体値の表示名を渡したもの
+    function build_column_settings_panel(options){
+        return "";
+    }
+    //カラム設定パネルとカラムバーのイベントを登録する。登録済み (data-opd_settings_initialized="1") なら何もしない
+    //  select / 入力の change: 対応する属性を更新 → apply_column_dom_state → (iframe 項目なら) apply_column_iframe_styles → column_settings_save
+    //  バーのトグル (.opd_banner / .opd_top_bar) click: 属性 = String(!実効値) → 同上
+    //  バーのピン止め (.opd_pinned_btn) click: 既存の confirm を経て opd_setting_pinned = String(!実効値) → reconcile_column_pinned → column_settings_save
+    //  カスタム幅ボタン: prompt で rem を受け取り、COLUMN_WIDTH_MIN_REM 以上なら opd_column_width に明示値を設定
+    function bind_column_events(column_div){
+    }
+    //iframe の load を待たずに同期で反映できる項目をカラム div へ適用する
+    //  カラム幅: style.width = 実効 rem、幅 select の選択値 (15→0 / 20→1 / 30→2 / inherit→inherit / その他→3)
+    //  バーのチェック状態: .opd_banner / .opd_top_bar / .opd_pinned_btn の checked = 実効値
+    //  パネル表示: 各 select の選択値と inherit 選択肢の表示文字列、間隔入力の値 (秒) と disabled 状態
+    //  ピン止め: reconcile_column_pinned
+    //  自動更新: apply_column_auto_reload
+    function apply_column_dom_state(column_div){
+    }
+    //iframe 内 head に style 要素 (style[opd_banner_css] / style[opd_top_visible_css] / style[opd_tw_view_mode_css]) を用意し、実効値に応じて COLUMN_IFRAME_CSS の文字列を設定する
+    //iframe の contentWindow.document.head が読めない (未生成・クロスオリジン) 場合は何もしない (次回 load で再適用される)
+    //post カラムには適用しない
+    function apply_column_iframe_styles(column_div){
+    }
+    //ピン止めの不変条件「opd_pinned_path が非空 ⇔ 実効ピン止め」を保つ
+    //  実効値 = opd_setting_pinned ("inherit" なら global_settings.pinned)
+    //  実効 true かつ opd_pinned_path が空: opd_explore_path を opd_pinned_path に記録する
+    //  実効 false: opd_pinned_path を "" にする
+    //  バーのチェックボックス .opd_pinned_btn の checked を実効値に合わせる
+    //explore 以外のカラムでは何もしない。起動・追加・個別変更・全体変更のすべての経路から呼ぶ
+    function reconcile_column_pinned(column_div){
+    }
+    //自動更新 interval を冪等に再構成する: 既存の interval (iframe 要素の opd_auto_reload_interval_id) を必ず clear し、実効 auto_reload が true なら実効 auto_reload_time (ms) で作り直す
+    //interval 内の処理 (対象パスの判定・ホバー中の抑止・is_auto_update の確認・Reload 後の先頭スクロール) は現在の実装と同じ
+    function apply_column_auto_reload(column_div){
+    }
+    //自動更新 interval を止める。カラムを閉じる・二段目を破棄する・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
+    function stop_column_auto_reload(column_div){
+    }
+    //全体設定の変更を全カラムへ反映する: 各カラムに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
+    function apply_global_settings_to_columns(){
+    }
+    //全体設定ダイアログを開く。opener_element: 閉じたときにフォーカスを戻す要素
+    //#opd_main_element の直下にオーバーレイ #opd_global_settings_overlay (class "opd_dialog_overlay opd_global_settings_overlay") を 1 つだけ生成する (既に開いていればそこへフォーカスを移す)
+    //ダイアログ本体は role="dialog" aria-modal="true" aria-labelledby で、次のフォームを持つ:
+    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 以上) / 自動更新 checkbox / 自動更新間隔 number (秒、1 以上)
+    //  status 領域 (role="status" aria-live="polite"、高さを予約) と 適用 / キャンセル ボタン
+    //適用: 検証に失敗したら status 領域へ msg_global_settings_invalid_width / msg_global_settings_invalid_interval を表示して該当欄へフォーカスし、閉じない
+    //      成功したら global_settings を更新 → apply_global_settings_to_columns → 閉じる
+    //閉じる: キャンセル / Esc / 背景クリック (オーバーレイ上で mousedown と mouseup が揃ったときのみ)。閉じるときは inert を解除し opener_element にフォーカスを戻す
+    //フォーカストラップ・inert は get_dialog_focusable_elements / create_dialog_keydown_handler / set_inert_except を使う
+    function open_global_settings_dialog(opener_element){
+    }
     //カラム構成保存
+    //各カラムの継承可能 7 項目は read_column_setting で属性から読み (inherit は null)、column_pinned_override は opd_setting_pinned 属性のみから決める
+    //save_object には global_settings も含める
     function column_settings_save(mode, profile_num){
         let settings_array = {
             column_settings:[],
@@ -3067,6 +3132,119 @@ function set_title_favicon(){
         }
     });
     head_favicon_observer.observe(document.head, { childList: true });
+}
+
+//===== 全体設定 (global settings) =====
+//全体設定はプロファイルごと (opd_profile_store[n].global_settings) に持つ既定設定で、
+//各カラムの設定値が null (= 全体設定に従う) になっている項目に適用される。
+//
+//保存形式:
+//  opd_profile_store[n] = {
+//    name, profile: [column...],
+//    settings_schema_version: SETTINGS_SCHEMA_VERSION,
+//    global_settings: {banner, top_visible, tw_view_mode, column_width, auto_reload, auto_reload_time, pinned}
+//  }
+//  column = {
+//    type, column_save_path, column_save_title,
+//    banner: boolean|null, top_visible: boolean|null, tw_view_mode: "0"|"1"|"2"|null,
+//    column_width: number(rem)|null, auto_reload: boolean|null, auto_reload_time: number(ms)|null,
+//    column_pinned_override: boolean|null,   // null = 全体設定の pinned に従う
+//    column_pinned_path: string              // 実効ピン止め中のみ非空 (reconcile_column_pinned が保つ不変条件)
+//  }
+//
+//実効値 = カラム値 ?? global_settings 値。
+//単位は column_width が rem、auto_reload_time が ms で統一し、UI の入力欄だけ秒 (ms / 1000) で扱う。
+//
+//DOM 表現: カラム div (div[opd_column_type]) の属性に個別値を保持する。
+//  opd_column_width                "inherit" | rem 数値文字列
+//  opd_setting_banner              "inherit" | "true" | "false"
+//  opd_setting_top_visible         "inherit" | "true" | "false"
+//  opd_setting_tw_view_mode        "inherit" | "0" | "1" | "2"
+//  opd_setting_auto_reload         "inherit" | "true" | "false"
+//  opd_setting_auto_reload_time    "inherit" | ms 数値文字列
+//  opd_setting_pinned              "inherit" | "true" | "false"
+//カラムバーのトグル (.opd_banner / .opd_top_bar / .opd_pinned_btn) は実効状態を表示し、クリックで個別値 = !実効 を設定する。
+//カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
+//
+//項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / second_empty_column / dsp_column は対象外):
+//  項目            post  home  notification  explore(リスト含む)
+//  バナー表示       -     ○     ○             ○
+//  トップ表示       -     ○     ○             ○
+//  表示モード       -     ○     ○             ○
+//  カラム幅         ○     ○     ○             ○
+//  自動更新/間隔    -     ○     -             ○
+//  ピン止め         -     -     -             ○
+//
+//適用経路は 3 つに分ける:
+//  bind_column_events(column_div)        パネル・バーのイベント登録 (data-opd_settings_initialized で二重登録を防ぐ)
+//  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・バーのチェック状態・パネル表示・ピン止め reconcile・自動更新 interval)
+//  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード)。iframe の load ごとに実行し、head 未生成時は何もしない
+//カラム追加時は挿入直後に bind_column_events と apply_column_dom_state を同期で呼んでから column_settings_save する。
+//全体設定の変更時は、その項目が inherit の全カラムに対して apply_column_dom_state と apply_column_iframe_styles を呼び直す。
+const SETTINGS_SCHEMA_VERSION = 2;
+const GLOBAL_SETTINGS_DEFAULT = Object.freeze({
+    banner: false,
+    top_visible: true,
+    tw_view_mode: "0",
+    column_width: 30,
+    auto_reload: false,
+    auto_reload_time: 10000,
+    pinned: false,
+});
+//カラム幅の下限 (rem) と自動更新間隔の下限 (ms)
+const COLUMN_WIDTH_MIN_REM = 12;
+const AUTO_RELOAD_TIME_MIN_MS = 1000;
+//カラム側で全体設定に従える項目名と、その個別値を保持するカラム div の属性名
+const COLUMN_INHERITABLE_SETTINGS = Object.freeze({
+    banner: "opd_setting_banner",
+    top_visible: "opd_setting_top_visible",
+    tw_view_mode: "opd_setting_tw_view_mode",
+    column_width: "opd_column_width",
+    auto_reload: "opd_setting_auto_reload",
+    auto_reload_time: "opd_setting_auto_reload_time",
+    pinned: "opd_setting_pinned",
+});
+//iframe 内へ注入する CSS の正本 (初回 load・再 load・設定変更のどの経路でも同じ文字列を使う)
+const COLUMN_IFRAME_CSS = Object.freeze({
+    banner_hidden: `header[role="banner"]{display:none}`,
+    top_hidden: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
+    top_hidden_home: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;} div[role="progressbar"] + div{display:none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
+    tw_view_text_only: `div[data-testid="cellInnerDiv"]:has(div[aria-labelledby]){visibility: hidden; height: 0;}`,
+    tw_view_media_only: `div[data-testid="cellInnerDiv"]:not(:has(div[aria-labelledby])){visibility: hidden; height: 0;}`,
+});
+//プロファイル保存形式を現在のスキーマへ正規化する。変更があれば true を返す (呼び出し側が保存する)
+//  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 7 項目を null、column_pinned_path を "" にリセットし、version を更新する
+//  現在のスキーマ: global_settings の欠損・型不正は既定値で補い、column_width < COLUMN_WIDTH_MIN_REM / auto_reload_time < AUTO_RELOAD_TIME_MIN_MS は既定値へ戻す。
+//               カラム側の型不正 (数値でない幅・真偽でない真偽値・"0"〜"2" 以外の表示モード) は null にする
+//起動時 (init 内、run の前) に全プロファイルへ適用し、プロファイルローダーが保存した任意の JSON もここで吸収する
+function normalize_profile_store(store){
+    return false;
+}
+//global_settings の複製を返す (新規プロファイル保存時・欠損補完時に使う)
+function clone_global_settings(global_settings){
+    return Object.assign({}, GLOBAL_SETTINGS_DEFAULT, global_settings ?? {});
+}
+//カラム div の属性から項目 key の個別値を読む。"inherit" なら null、それ以外は保存形式と同じ型に変換する
+function read_column_setting(column_div, key){
+    return null;
+}
+//項目 key の実効値 (カラムの個別値 ?? 全体設定) を返す
+function effective_column_setting(column_div, key, global_settings){
+    return read_column_setting(column_div, key) ?? global_settings[key];
+}
+//モーダルダイアログ共通処理 (リスト選択ダイアログと全体設定ダイアログで共有する)
+//ダイアログ内でフォーカスを受け取れる要素 (非表示・disabled のものを除く) を文書順で返す
+function get_dialog_focusable_elements(dialog_element){
+    const focus_candidates = dialog_element.querySelectorAll('input, select, textarea, button, iframe, [tabindex]:not([tabindex="-1"])');
+    return Array.from(focus_candidates).filter((element) => !element.disabled && element.offsetParent !== null);
+}
+//Esc で close_dialog を呼び、Tab をダイアログ内で循環させる keydown ハンドラを返す (document に登録し、閉じるときに外す)
+function create_dialog_keydown_handler(dialog_element, close_dialog){
+    return function(event){};
+}
+//container の子要素のうち overlay 以外へ inert を付ける。元から inert のものは対象にせず、解除用の関数を返す
+function set_inert_except(container, overlay){
+    return function(){};
 }
 
 //カラムテンプレートの %name% プレースホルダーを values の同名キーで一括置換する
