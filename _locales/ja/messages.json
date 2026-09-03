@@ -365,6 +365,9 @@
   "ui_settings_inherit_input_title": {
     "message": "「全体設定に従う」を外すと個別に設定できます"
   },
+  "ui_settings_auto_reload_interval_locked_title": {
+    "message": "自動更新を無効にすると変更できます"
+  },
   "ui_settings_banner_label": {
     "message": "バナー表示"
   },
@@ -396,6 +399,6 @@
     "message": "カラム幅は12以上の半角数字で入力してください"
   },
   "msg_global_settings_invalid_interval": {
-    "message": "自動更新間隔は1秒以上の半角数字で入力してください"
+    "message": "自動更新間隔は1秒以上86400秒以下の半角数字で入力してください"
   }
 }

@@ -365,6 +365,9 @@
   "ui_settings_inherit_input_title": {
     "message": "Uncheck \"Follow global settings\" to set this column individually"
   },
+  "ui_settings_auto_reload_interval_locked_title": {
+    "message": "Turn auto-load off to change the interval"
+  },
   "ui_settings_banner_label": {
     "message": "Banner"
   },
@@ -396,6 +399,6 @@
     "message": "Enter a column width of 12 or more"
   },
   "msg_global_settings_invalid_interval": {
-    "message": "Enter an auto-load interval of 1 second or more"
+    "message": "Enter an auto-load interval between 1 and 86400 seconds"
   }
 }
