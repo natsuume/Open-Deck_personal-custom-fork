@@ -2695,7 +2695,7 @@ function run(settings){
             console.warn("post form: OpdExtTextReview を初期化できませんでした->", e);
         }
     }
-    //iframe がポストフォームを表示しているか。パスが intent/tweet か投稿後に開き直される compose/post 配下なら表示中、それ以外のパスでも composer の入力欄が画面にあれば表示中とみなす (下書きを消さない側に倒す)
+    //iframe がポストフォームを表示しているか。パスが intent/tweet か投稿後に開き直される compose/post 配下なら表示中、それ以外のパスでもダイアログとして開いた composer の入力欄が画面にあれば表示中とみなす (下書きを消さない側に倒す)。ホームタイムラインに埋め込まれた composer はダイアログではないため対象にならない
     //読み込み開始から上限時間内の about:blank は読み込み中とみなして表示中扱いにし、上限を過ぎても about:blank のままなら遷移が成立しなかったとみなす。中身を読めない場合は表示していないとみなす
     function is_post_form_frame_on_composer(frame){
         try{
@@ -2704,7 +2704,7 @@ function run(settings){
             if(frame_location == null) return false;
             if(frame_location.href === "about:blank") return Date.now() - post_form_load_started_at < post_form_skeleton_limit_ms;
             if(frame_location.pathname.startsWith("/intent/tweet") || frame_location.pathname.startsWith("/compose/post")) return true;
-            return frame_window.document.querySelector('div[contenteditable="true"][data-testid*="tweetTextarea"]') !== null;
+            return frame_window.document.querySelector('[role="dialog"] div[contenteditable="true"][data-testid*="tweetTextarea"]') !== null;
         }catch(e){
             return false;
         }
