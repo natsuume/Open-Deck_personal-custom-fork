@@ -2531,7 +2531,7 @@ function run(settings){
     //閉じるときは iframe を破棄せず隠すだけなので、書きかけの下書きは開き直しても残り、2 回目以降は読み込み待ちが無い。保持されるのは開閉のあいだだけで、プロファイル切替 (#opd_main_element の作り直し) やページ再読み込みでは失われる
     //閉じる経路は 閉じるボタン / Esc / 開閉ボタンの再押下 / X の composer が閉じたことの検知 の 4 つ
     //Esc はポップオーバーの iframe 内と本体 UI (document) の 2 か所で受け取るため、他のカラムの iframe 内で押した Esc は届かない。X が Esc を処理した (preventDefault した) 場合はそちらを優先する
-    //モーダルダイアログ (#opd_main_element 直下の .opd_dialog_overlay) が開いているあいだは新たに開かず、モーダルが背景に付けた inert がポップオーバーに乗っているあいだは Esc を無視しフォーカスも奪わない
+    //モーダルダイアログ (#opd_main_element 直下の .opd_dialog_overlay) が開いているあいだは新たに開かず、モーダルが背景に付けた inert がポップオーバーに乗っているあいだと、メディアビューワーの dialog が showModal で開いているあいだは Esc を無視しフォーカスも奪わない
     //composer が閉じたこと (投稿完了・下書き保存・破棄) は、page world の文章校正ヘルパーが送る window の opd_post_composer_closed (detail は JSON 文字列) で受け取る。iframe の documentElement に付けた data-opd-post-form-token と一致する通知だけを自分宛てとして扱う
     //ポップオーバー内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない (カラムを一括走査するセレクタに拾われるため)。置き場所も #main_rack_element の外にする
     //生成済みのポップオーバー。初回に開いたときに作り、以後は表示・非表示を切り替えて使い回す
@@ -2558,13 +2558,17 @@ function run(settings){
         remove_post_form_popover_listeners();
         return true;
     }
-    //本体 UI にフォーカスがあるときの Esc で閉じる。モーダルダイアログの inert が乗っているあいだは何もしない
+    //本体 UI にフォーカスがあるときの Esc で閉じる。他のモーダルが Esc を受け持つあいだ (モーダルダイアログの inert が乗っている / メディアビューワーの dialog が showModal で開いている) は何もしない
     function on_post_form_document_keydown(event){
         if(is_post_form_popover_detached()) return;
         if(event.key !== "Escape" || event.defaultPrevented) return;
-        if(post_form_popover.hasAttribute("inert")) return;
+        if(is_post_form_popover_blocked_by_modal()) return;
         event.preventDefault();
         close_post_form_popover();
+    }
+    //他のモーダルがポップオーバーの操作を塞いでいるか。モーダルダイアログは inert 属性で、top layer の dialog (メディアビューワー) は :modal で判定する
+    function is_post_form_popover_blocked_by_modal(){
+        return post_form_popover.hasAttribute("inert") || document.querySelector("dialog:modal") !== null;
     }
     //ウィンドウの大きさが変わっても開閉ボタンの横に留める
     function on_post_form_window_resize(){
@@ -2590,7 +2594,7 @@ function run(settings){
         setTimeout(function(){
             if(event.defaultPrevented) return;
             if(!is_post_form_popover_open()) return;
-            if(post_form_popover.hasAttribute("inert")) return;
+            if(is_post_form_popover_blocked_by_modal()) return;
             close_post_form_popover();
         }, 0);
     }
@@ -2673,7 +2677,7 @@ function run(settings){
             return;
         }
         if(post_form_popover === null || !post_form_popover.isConnected){
-            post_form_token = create_random_id();
+            post_form_token = crypto.randomUUID();
             const popover = document.createElement("div");
             popover.id = "opd_post_form_popover";
             popover.className = "opd_post_form_popover";
@@ -2716,7 +2720,7 @@ function run(settings){
     //テキストフォーカスの解除は通知に頼らず明示的に行い、自動更新の停止フラグが残らないようにする
     function close_post_form_popover(){
         if(!is_post_form_popover_open()) return;
-        if(!post_form_popover.hasAttribute("inert")) post_form_opener?.focus?.();
+        if(!is_post_form_popover_blocked_by_modal()) post_form_opener?.focus?.();
         set_text_focus_state(false);
         post_form_popover.hidden = true;
         post_form_opener?.setAttribute?.("aria-expanded", "false");
