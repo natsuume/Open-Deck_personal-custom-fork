@@ -75,6 +75,8 @@ const API_LIMIT_CATEGORIES = [
     {key: "list_index", label_key: "label_api_list_index"},
     {key: "list_management", label_key: "label_api_list_management"}
 ];
+//カテゴリごとの説明行。background の service worker が再起動して値が null に戻っても、最後に観測した行を保持し続ける
+const api_limit_description_by_key = {};
 //title・alert共通で使うAPIリミットの説明文
 let api_limit_description = "";
 chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -84,16 +86,18 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         const api_linit_status_btn = document.querySelector("#api_limit_status");
         if(api_linit_status_btn != null){
             const limit_percentages = [];
-            const description_lines = [];
             for(const category of API_LIMIT_CATEGORIES){
                 const category_limit = api_limit_obj[category.key];
                 //古い保存値にはカテゴリ自体が存在しない場合があるため、その場合は無視する
                 if(category_limit == undefined || category_limit.remaining == null) continue;
                 limit_percentages.push(category_limit.remaining / category_limit.limit * 100);
-                description_lines.push(`${i18n_message(category.label_key)}${category_limit.remaining}/${category_limit.limit}-${unix_time_mmss(category_limit.reset_unix_time)}`);
+                api_limit_description_by_key[category.key] = `${i18n_message(category.label_key)}${category_limit.remaining}/${category_limit.limit}-${unix_time_mmss(category_limit.reset_unix_time)}`;
             }
             const min_limit_percentage = limit_percentages.length > 0 ? Math.min(...limit_percentages) : 99999;
-            api_limit_description = description_lines.join("\r\n");
+            api_limit_description = API_LIMIT_CATEGORIES
+                .filter(category => api_limit_description_by_key[category.key] != undefined)
+                .map(category => api_limit_description_by_key[category.key])
+                .join("\r\n");
             api_linit_status_btn.textContent = `${Math.floor(min_limit_percentage)}%`;
             api_linit_status_btn.title = `${i18n_message("msg_api_limit_status_title", [api_limit_description])}`;
         }
