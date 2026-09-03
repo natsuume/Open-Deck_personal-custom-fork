@@ -91,12 +91,12 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
             for(const category of API_LIMIT_CATEGORIES){
                 const category_limit = api_limit_obj[category.key];
                 //古い保存値にはカテゴリ自体が存在しない場合があるため、その場合は無視する
-                if(category_limit == undefined || category_limit.remaining == null) continue;
+                if(category_limit == undefined || category_limit.remaining == null || !(Number(category_limit.limit) > 0)) continue;
                 api_limit_description_by_key[category.key] = `${i18n_message(category.label_key)}${category_limit.remaining}/${category_limit.limit}-${unix_time_mmss(category_limit.reset_unix_time)}`;
-                //リセット時刻を過ぎた値は枠が回復済みなので、残存率の最小値計算には含めない (説明行にはリセット時刻付きで残す)
-                //リセット時刻が欠損・数値でない値は期限切れと判断できないため、そのまま計算に含める
-                const reset_unix_time = Number(category_limit.reset_unix_time);
-                if(reset_unix_time > 0 && reset_unix_time <= now_unix_time){
+                //期限 (background が端末時計基準で算出した値) を過ぎた値は枠が回復済みなので、残存率の最小値計算には含めない (説明行にはリセット時刻付きで残す)
+                //期限が欠損・数値でない値は期限切れと判断できないため、そのまま計算に含める
+                const expires_unix_time = Number(category_limit.expires_unix_time ?? category_limit.reset_unix_time);
+                if(expires_unix_time > 0 && expires_unix_time <= now_unix_time){
                     has_expired_category = true;
                     continue;
                 }

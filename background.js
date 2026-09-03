@@ -52,13 +52,13 @@ chrome.runtime.onMessage.addListener(
 )
 //
 let access_limit = {
-    search:{limit: null, remaining: null, reset_unix_time: null},
-    time_line:{limit: null, remaining: null, reset_unix_time: null},
-    recommend_timeline:{limit: null, remaining: null, reset_unix_time: null},
-    list_timeline:{limit: null, remaining: null, reset_unix_time: null},
+    search:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null},
+    time_line:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null},
+    recommend_timeline:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null},
+    list_timeline:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null},
     //リスト一覧ページは操作名の異なる2つのAPIを使う。リミット枠が別なので、それぞれ独立したカテゴリで追跡する
-    list_index:{limit: null, remaining: null, reset_unix_time: null},
-    list_management:{limit: null, remaining: null, reset_unix_time: null}
+    list_index:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null},
+    list_management:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null}
 };
 function send_content_script(value){
     //chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });//firefoxではsession.setAccessLevel()が未対応なのでsessionは一旦お預け
@@ -83,6 +83,16 @@ const API_CATEGORY_BY_OPERATION = {
     ListsManagementPageTimeline: "list_management"
 };
 
+//リセット時刻 (x-rate-limit-reset) はサーバー時計基準なので、端末時計とのずれの影響を受けないよう、
+//サーバー時刻 (date ヘッダー) から求めた「リセットまでの残り秒数」を受信時点の端末時計に足した値を期限とする。
+//サーバー時刻が取れない場合はリセット時刻をそのまま期限にする
+function calc_expires_unix_time(reset_unix_time, server_unix_time){
+    const reset = Number(reset_unix_time);
+    if(!(reset > 0)) return null;
+    if(!Number.isFinite(server_unix_time)) return reset;
+    return Date.now() / 1000 + (reset - server_unix_time);
+}
+
 chrome.webRequest.onHeadersReceived.addListener(function (resp) {
     let category = null;
     for(const operation of Object.keys(API_CATEGORY_BY_OPERATION)){
@@ -94,8 +104,9 @@ chrome.webRequest.onHeadersReceived.addListener(function (resp) {
 
     if (!category) return;
 
+    let server_unix_time = null;
     for(const header of resp.responseHeaders){
-        switch (header.name) {
+        switch (header.name.toLowerCase()) {
             case "x-rate-limit-remaining":
                 access_limit[category].remaining = header.value;
                 break;
@@ -105,8 +116,12 @@ chrome.webRequest.onHeadersReceived.addListener(function (resp) {
             case "x-rate-limit-reset":
                 access_limit[category].reset_unix_time = header.value;
                 break;
+            case "date":
+                server_unix_time = Date.parse(header.value) / 1000;
+                break;
         }
     }
+    access_limit[category].expires_unix_time = calc_expires_unix_time(access_limit[category].reset_unix_time, server_unix_time);
 
     send_content_script(access_limit);
 }, { urls: Object.keys(API_CATEGORY_BY_OPERATION).map(operation => `*://x.com/i/api/graphql/*/${operation}*`) }, ['responseHeaders']);
