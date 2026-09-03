@@ -189,34 +189,55 @@
     "message": "リストカラムを複数追加"
   },
   "ui_list_picker_user_label": {
-    "message": "リスト一覧を取得するユーザー"
+    "message": "リスト一覧を表示するユーザー"
   },
-  "ui_list_picker_fetch_button": {
-    "message": "取得"
+  "ui_list_picker_show_button": {
+    "message": "表示"
   },
   "ui_list_picker_loading": {
-    "message": "リスト一覧を取得しています..."
-  },
-  "ui_list_picker_partial": {
-    "message": "取得を打ち切りました。途中までの結果を表示しています"
-  },
-  "ui_list_picker_some_unresolved": {
-    "message": "一部のリストの ID を取得できませんでした。取得できなかったリストは URL か ID を手動で入力してください"
+    "message": "リスト一覧を読み込んでいます..."
   },
   "ui_list_picker_not_detected": {
-    "message": "リストを自動検出できませんでした。下の入力欄に URL か ID を入力してください"
+    "message": "リスト一覧を表示できませんでした。URL か ID の入力欄から追加してください"
   },
   "ui_list_picker_error": {
-    "message": "リスト一覧ページを読み込めませんでした。下の入力欄に URL か ID を入力してください"
+    "message": "リスト一覧ページを読み込めませんでした。URL か ID の入力欄から追加してください"
+  },
+  "ui_list_picker_login_required": {
+    "message": "X にログインしていないためリスト一覧を表示できません。URL か ID の入力欄から追加してください"
+  },
+  "ui_list_picker_cell_unresolved": {
+    "message": "このリストの ID を取得できませんでした。URL か ID の入力欄から追加してください"
+  },
+  "ui_list_picker_frame_title": {
+    "message": "X のリスト一覧"
   },
   "ui_list_picker_select_all": {
-    "message": "全て選択"
+    "message": "表示中のリストを全て選択"
   },
   "ui_list_picker_clear_all": {
     "message": "選択解除"
   },
+  "ui_list_picker_selection_header": {
+    "message": "追加するカラム"
+  },
+  "ui_list_picker_selection_hint": {
+    "message": "クリックした順に並びます。ドラッグ&ドロップか Alt+↑ / Alt+↓ で並べ替えできます"
+  },
+  "ui_list_picker_empty_selection": {
+    "message": "リスト一覧でリストをクリックするか、URL か ID を入力して追加してください"
+  },
+  "ui_list_picker_remove_button": {
+    "message": "$1 を除外"
+  },
+  "ui_list_picker_moved": {
+    "message": "「$1」を $2 番目に移動しました"
+  },
   "ui_list_picker_manual_label": {
     "message": "追加するリストの URL か ID (1 行に 1 件)"
+  },
+  "ui_list_picker_manual_add_button": {
+    "message": "追加"
   },
   "ui_list_picker_selected_count": {
     "message": "追加するカラム: $1 件"
@@ -230,15 +251,6 @@
   "ui_list_picker_list_fallback_name": {
     "message": "リスト $1"
   },
-  "ui_list_picker_invalid_count": {
-    "message": "解釈できない行: $1"
-  },
-  "ui_list_picker_kept_section": {
-    "message": "選択済み"
-  },
-  "ui_list_picker_login_required": {
-    "message": "X にログインしていないためリスト一覧を取得できません。下の入力欄に URL か ID を入力してください"
-  },
   "msg_list_picker_nothing_selected": {
     "message": "追加するリストを選択するか入力してください"
   },
@@ -249,7 +261,7 @@
     "message": "$1 件のカラムを追加します。多数のカラムはメモリと通信量を消費します。続行しますか？"
   },
   "msg_list_picker_user_required": {
-    "message": "ユーザー名またはリスト一覧の URL を入力してください。リストの URL や ID は下の入力欄に入力してください"
+    "message": "ユーザー名またはリスト一覧の URL を入力してください。リストの URL や ID は選択領域の入力欄に入力してください"
   },
   "msg_auto_reload_set": {
     "message": "自動更新の秒数を$1秒に設定しました"

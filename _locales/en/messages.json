@@ -189,34 +189,55 @@
     "message": "Add multiple list columns"
   },
   "ui_list_picker_user_label": {
-    "message": "User whose lists to fetch"
+    "message": "User whose lists to show"
   },
-  "ui_list_picker_fetch_button": {
-    "message": "Fetch"
+  "ui_list_picker_show_button": {
+    "message": "Show"
   },
   "ui_list_picker_loading": {
-    "message": "Fetching lists..."
-  },
-  "ui_list_picker_partial": {
-    "message": "Fetching timed out. Showing partial results"
-  },
-  "ui_list_picker_some_unresolved": {
-    "message": "Some lists could not be identified. Enter the URL or ID of the missing lists manually"
+    "message": "Loading lists..."
   },
   "ui_list_picker_not_detected": {
-    "message": "Could not detect lists automatically. Enter list URLs or IDs below"
+    "message": "Could not show the lists. Add lists with the URL or ID field"
   },
   "ui_list_picker_error": {
-    "message": "Could not load the lists page. Enter list URLs or IDs below"
+    "message": "Could not load the lists page. Add lists with the URL or ID field"
+  },
+  "ui_list_picker_login_required": {
+    "message": "Cannot show lists because you are not logged in to X. Add lists with the URL or ID field"
+  },
+  "ui_list_picker_cell_unresolved": {
+    "message": "Could not identify this list. Add it with the URL or ID field"
+  },
+  "ui_list_picker_frame_title": {
+    "message": "Lists on X"
   },
   "ui_list_picker_select_all": {
-    "message": "Select all"
+    "message": "Select all visible lists"
   },
   "ui_list_picker_clear_all": {
     "message": "Clear selection"
   },
+  "ui_list_picker_selection_header": {
+    "message": "Columns to add"
+  },
+  "ui_list_picker_selection_hint": {
+    "message": "Ordered by click. Reorder by drag and drop or Alt+Up / Alt+Down"
+  },
+  "ui_list_picker_empty_selection": {
+    "message": "Click lists on the left, or enter a URL or ID to add"
+  },
+  "ui_list_picker_remove_button": {
+    "message": "Remove $1"
+  },
+  "ui_list_picker_moved": {
+    "message": "Moved “$1” to position $2"
+  },
   "ui_list_picker_manual_label": {
     "message": "List URLs or IDs to add (one per line)"
+  },
+  "ui_list_picker_manual_add_button": {
+    "message": "Add"
   },
   "ui_list_picker_selected_count": {
     "message": "Columns to add: $1"
@@ -230,15 +251,6 @@
   "ui_list_picker_list_fallback_name": {
     "message": "List $1"
   },
-  "ui_list_picker_invalid_count": {
-    "message": "Unrecognized lines: $1"
-  },
-  "ui_list_picker_kept_section": {
-    "message": "Selected"
-  },
-  "ui_list_picker_login_required": {
-    "message": "Cannot fetch lists because you are not logged in to X. Enter list URLs or IDs below"
-  },
   "msg_list_picker_nothing_selected": {
     "message": "Select or enter at least one list"
   },
@@ -249,7 +261,7 @@
     "message": "Add $1 columns? Many columns consume memory and network. Continue?"
   },
   "msg_list_picker_user_required": {
-    "message": "Enter a username or a lists page URL. Put list URLs or IDs in the text area below"
+    "message": "Enter a username or a lists page URL. Put list URLs or IDs in the field of the selection area"
   },
   "msg_auto_reload_set": {
     "message": "Auto-load interval set to $1 seconds."
