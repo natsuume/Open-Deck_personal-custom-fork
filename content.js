@@ -1872,6 +1872,7 @@ function run(settings){
     //    選択中の listCell には data-opd-list-picker-order 属性(1 始まりの追加順)を付け、iframe に注入した style で枠と順番の数字を重ねる。X の仮想リストでセルが入れ替わるため、属性の付け直しは定期的(400ms)に行う
     //    読み込み中は iframe の上に skeleton を重ね、listCell が描画されたら外す。制限時間(15秒)内に描画されなければ skeleton を外して not_detected を表示する
     //    対象ページを表示した後に別のパスへ遷移した場合は対象 URL を読み込み直す(2回を超えて繰り返す場合は error を表示して読み込みを止める)。ログイン画面へ飛ばされた場合は読み込みを止めて login_required を表示する
+    //    中身を読めない(クロスオリジン等)と分かった iframe は表示したままにせず about:blank に戻し、error を表示する
     //  ・表示中のリストを全て選択するボタン(そのとき ID を決められている listCell を文書順に、未選択のものだけ選択の末尾へ追加する)
     //  選択領域:
     //  ・追加するカラムの順序付き一覧(ol)。項目は追加した順に並び、この並び順のままカラムを追加する。項目のドラッグ&ドロップ(項目の上半分に落とすとその前、下半分に落とすとその後ろ、項目以外の場所に落とすと末尾)と、項目にフォーカスした状態の Alt+↑ / Alt+↓ で1段ずつ並べ替え、各項目の除外ボタンで外せる。並べ替えの結果は選択領域の状態表示(role="status")で知らせる
@@ -2194,9 +2195,16 @@ function run(settings){
             frame_document.addEventListener("auxclick", on_frame_click, true);
             frame_document.addEventListener("keydown", on_frame_keydown, true);
         }
+        //iframe 内のイベントの発生元から、それを含む listCell を返す(無ければ null)
+        //iframe の要素は別 realm のため instanceof では判定できず、closest を持つかで要素かどうかを見る
+        function list_cell_of_event(event){
+            const target = event.target;
+            if(!target || typeof target.closest !== "function") return null;
+            return target.closest(list_cell_selector);
+        }
         //listCell 内のクリックはページ遷移させず、左クリックだけ選択の切り替えにする
         function on_frame_click(event){
-            const cell = event.target instanceof Element ? event.target.closest(list_cell_selector) : null;
+            const cell = list_cell_of_event(event);
             if(cell === null) return;
             event.preventDefault();
             event.stopPropagation();
@@ -2212,7 +2220,7 @@ function run(settings){
                 return;
             }
             if(event.key !== "Enter" && event.key !== " ") return;
-            const cell = event.target instanceof Element ? event.target.closest(list_cell_selector) : null;
+            const cell = list_cell_of_event(event);
             if(cell === null) return;
             event.preventDefault();
             event.stopPropagation();
@@ -2278,11 +2286,12 @@ function run(settings){
             status_area.textContent = i18n_message("ui_list_picker_loading");
             navigate_frame(frame_url);
         }
-        //読み込みを打ち切り、skeleton を外して理由を表示する
-        function finish_frame_loading(message){
+        //読み込みを打ち切り、skeleton を外して理由を表示する。is_unreadable が真なら中身を読めない iframe を表示したままにせず空にする
+        function finish_frame_loading(message, is_unreadable = false){
             stop_frame_poll();
             set_frame_loading(false);
             status_area.textContent = message;
+            if(is_unreadable) navigate_frame("about:blank");
         }
         //指定ユーザーのリスト一覧ページを iframe に表示し、定期的に listCell へ選択の順番を付け直す
         function start_frame(screen_name){
@@ -2299,7 +2308,7 @@ function run(settings){
                 frame_document = frame.contentDocument;
             }catch(e){
                 //クロスオリジンなどで中身を読めない場合は表示を諦める
-                finish_frame_loading(i18n_message("ui_list_picker_error"));
+                finish_frame_loading(i18n_message("ui_list_picker_error"), true);
                 return;
             }
             const elapsed_ms = Date.now() - frame_load_started_at;
@@ -2311,6 +2320,8 @@ function run(settings){
                 return;
             }
             has_frame_document = true;
+            //対象ページ以外(ログイン画面など)を表示しているあいだも Esc で閉じられるよう、読める document には先に捕捉を登録する
+            prepare_frame_document(frame_document);
             const frame_path_lower = frame_document.location.pathname.toLowerCase().replace(/\/+$/, "");
             if(frame_path_lower !== frame_expected_path){
                 //ログイン画面へ飛ばされた場合は待っても表示できないため終了する
@@ -2332,8 +2343,7 @@ function run(settings){
                 return;
             }
             has_frame_reached_page = true;
-            //リスト一覧ページを表示できたら捕捉・style・ヘルパーを入れる(入れ済みの document では何もしない)
-            prepare_frame_document(frame_document);
+            //リスト一覧ページを表示できたら style とヘルパーを入れる(入れ済みの document では何もしない)
             ensure_frame_style(frame_document);
             inject_list_picker_helper(frame_document);
             request_helper_scan(frame_document);
@@ -2366,7 +2376,7 @@ function run(settings){
             if(!is_frame_loading) return;
             //中身を読める場合は about:blank でもポーリングの継続に任せる
             if(get_frame_document() !== null) return;
-            finish_frame_loading(i18n_message("ui_list_picker_error"));
+            finish_frame_loading(i18n_message("ui_list_picker_error"), true);
         }
         //ダイアログを閉じ、タイマーと iframe の内容を解放してフォーカスを開いた要素へ戻す
         function close_dialog(){
@@ -2490,11 +2500,13 @@ function run(settings){
             event.dataTransfer.setData("text/plain", dragging_path);
             item.classList.add("opd_list_picker_dragging");
         });
-        selected_list.addEventListener("dragend", function(){
+        //ドラッグ中の状態を戻す。ドロップ後の描き直しで元の項目が外れると dragend が一覧まで届かないため、ドロップ時にも呼ぶ
+        function end_drag(){
             dragging_path = null;
             clear_drop_marks();
             selected_list.querySelectorAll(selected_item_selector).forEach((item) => item.classList.remove("opd_list_picker_dragging"));
-        });
+        }
+        selected_list.addEventListener("dragend", end_drag);
         //落とし先の目印は一覧の枠(項目の外)でも出す
         selected_wrap.addEventListener("dragover", function(event){
             if(dragging_path === null) return;
@@ -2514,11 +2526,12 @@ function run(settings){
         selected_wrap.addEventListener("drop", function(event){
             if(dragging_path === null) return;
             event.preventDefault();
-            clear_drop_marks();
+            const dropped_path = dragging_path;
+            end_drag();
             const drop_target = drop_target_from_event(event);
-            const from_index = entry_index_of(dragging_path);
+            const from_index = entry_index_of(dropped_path);
             if(from_index === -1 || drop_target.index === -1) return;
-            move_entry_and_render(dragging_path, insert_index_of_drop(from_index, drop_target));
+            move_entry_and_render(dropped_path, insert_index_of_drop(from_index, drop_target));
         });
         add_btn.addEventListener("click", add_selected_columns);
         cancel_btn.addEventListener("click", close_dialog);
