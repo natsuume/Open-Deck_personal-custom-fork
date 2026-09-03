@@ -21,6 +21,11 @@ const column_auto_update_state = {
     text_focus: {date: 0, active: false},
     media_viewer: {active: false},
 };
+//テキストフォーカスの状態 (自動更新の停止判定に使う) を更新する。解除するときは経過時間の判定に使う日時も戻す
+function set_text_focus_state(is_active){
+    column_auto_update_state.text_focus.date = is_active ? Date.now() : 0;
+    column_auto_update_state.text_focus.active = is_active;
+}
 const ui_icon_define = {
     banner_hide:"icon/banner_hide.svg",
     top_bar_hide:"icon/top_hide.svg",
@@ -32,7 +37,7 @@ const ui_icon_define = {
     column_widesize:"icon/column_w_size.svg",
     column_add_1:"icon/column_add_1st.svg",
     column_add_2:"icon/column_add_2nd.svg",
-    add_post_column:"icon/post.svg",
+    post_form:"icon/post.svg",
     add_timeline_column:"icon/tl_column.svg",
     add_notification_column:"icon/notice_column.svg",
     add_explore_column:"icon/exp_column.svg",
@@ -271,11 +276,9 @@ function run(settings){
     window.addEventListener('opd_post_focus', (e) => {
         const detail = JSON.parse(e.detail);
         if(detail){
-            column_auto_update_state.text_focus.date = Date.now();
-            column_auto_update_state.text_focus.active = true;
+            set_text_focus_state(true);
         }else{
-            column_auto_update_state.text_focus.date = 0;
-            column_auto_update_state.text_focus.active = false;
+            set_text_focus_state(false);
         }
     });
     //画像表示パネル
@@ -399,11 +402,11 @@ function run(settings){
         outline: 2px solid currentColor;
         outline-offset: -2px;
     }
-    .dsp_btn_add_post_img{
+    .dsp_btn_post_form_img{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
         background-size: cover;
         background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_post_column)});
+        background-image: url(${chrome.runtime.getURL(ui_icon_define.post_form)});
         height: 69%;
         width: 69%;
     }
@@ -749,6 +752,8 @@ function run(settings){
         --opd-list-picker-surface: #ffffff;
         --opd-list-picker-skeleton: #bdbdbd;
         --opd-list-picker-muted-text: #555555;
+        --opd-frame-surface: var(--opd-list-picker-surface);
+        --opd-frame-skeleton: var(--opd-list-picker-skeleton);
     }
     .opd_list_picker_dialog{
         gap: 0.5rem;
@@ -791,22 +796,6 @@ function run(settings){
         width: 100%;
         height: 100%;
         border: 0;
-    }
-    .opd_list_picker_frame_skeleton{
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.6rem;
-        padding: 0.8rem;
-        box-sizing: border-box;
-        background: var(--opd-list-picker-surface);
-    }
-    .opd_list_picker_frame_skeleton span{
-        display: block;
-        height: 3rem;
-        border-radius: 4px;
-        background: var(--opd-list-picker-skeleton);
     }
     .opd_list_picker_selection_hint{
         margin: 0;
@@ -891,7 +880,6 @@ function run(settings){
         justify-content: flex-end;
         gap: 0.5rem;
     }
-    .opd_list_picker_frame_skeleton[hidden],
     .opd_list_picker_empty[hidden]{
         display: none;
     }
@@ -902,6 +890,91 @@ function run(settings){
         .opd_list_picker_selected_wrap{
             height: 16rem;
         }
+    }
+    /*iframe の読み込み中に重ねる skeleton (リストカラム複数追加ダイアログ・ポストフォームのポップオーバーで共用)。色は置き場所の --opd-frame-surface / --opd-frame-skeleton で決める*/
+    .opd_frame_skeleton{
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        padding: 0.8rem;
+        box-sizing: border-box;
+        background: var(--opd-frame-surface);
+    }
+    .opd_frame_skeleton span{
+        display: block;
+        height: 3rem;
+        border-radius: 4px;
+        background: var(--opd-frame-skeleton);
+    }
+    .opd_frame_skeleton[hidden]{
+        display: none;
+    }
+    /*ポストフォームのポップオーバー (サイドバーの投稿ボタンの横に出る非モーダルの浮動パネル。z-index はサイドバーと同じ 999 で、DOM 順が後なのでサイドバーの上・モーダルダイアログ (1000) の下に重なる)*/
+    .opd_post_form_popover{
+        --opd-post-form-surface: #ffffff;
+        --opd-post-form-border: #a9a9a9eb;
+        --opd-post-form-bar-background: #efefef;
+        --opd-post-form-text: black;
+        --opd-frame-surface: var(--opd-post-form-surface);
+        --opd-frame-skeleton: #bdbdbd;
+        position: fixed;
+        left: calc(60px + 0.5rem);
+        top: 8px;
+        z-index: 999;
+        display: flex;
+        flex-direction: column;
+        width: min(38rem, calc(100vw - 60px - 1.5rem));
+        height: min(80vh, 44rem);
+        box-sizing: border-box;
+        overflow: hidden;
+        background: var(--opd-post-form-surface);
+        border: 1px solid var(--opd-post-form-border);
+        border-radius: 5px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        color: var(--opd-post-form-text);
+    }
+    .opd_post_form_popover[hidden]{
+        display: none;
+    }
+    .opd_post_form_bar{
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.25rem 0.5rem;
+        background: var(--opd-post-form-bar-background);
+        border-bottom: 1px solid var(--opd-post-form-border);
+    }
+    .opd_post_form_title{
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+    .opd_post_form_close_btn{
+        flex: 0 0 auto;
+        border: 0;
+        padding: 0;
+        background-color: transparent;
+        cursor: pointer;
+    }
+    .opd_post_form_close_btn:focus-visible{
+        outline: 2px solid currentColor;
+        outline-offset: 2px;
+    }
+    .opd_post_form_frame_wrap{
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        background: var(--opd-post-form-surface);
+    }
+    .opd_post_form_frame{
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
     }
     .opd_ui_icon_color{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
@@ -938,7 +1011,7 @@ function run(settings){
             background-color: #2e2e2e !important;
         }
 
-        & .dsp_btn_add_post_img,
+        & .dsp_btn_post_form_img,
         & .dsp_btn_add_tl_img,
         & .dsp_btn_add_ntfc_img,
         & .dsp_btn_add_explr_img,
@@ -1004,6 +1077,14 @@ function run(settings){
             background: #2e2e2e;
             border: 1px solid #5d5d5d;
             color: white;
+        }
+
+        & .opd_post_form_popover {
+            --opd-post-form-surface: #2e2e2e;
+            --opd-post-form-border: #5d5d5d;
+            --opd-post-form-bar-background: #474747;
+            --opd-post-form-text: white;
+            --opd-frame-skeleton: #7a7a7a;
         }
     }
 
@@ -1091,17 +1172,14 @@ function run(settings){
     </style>`);
     //カラム要素作成-挿入
     let default_element_bar = `<span class="dsp_column_btn"><label class="dsp_column_settings_btn opd_ui_icon_color" title="${i18n_message("ui_column_settings_title")}"><input class="opd_settings_btn" type="button" value="S"></label></span><span class="dsp_column_btn"><input class="opd_banner" type="checkbox" title="${i18n_message("ui_column_banner_toggle_title")}" %column_banner_ch%><label class="dsp_column_banner_btn opd_ui_icon_color"></label></span><span class="dsp_column_btn"><input class="opd_top_bar" type="checkbox" title="${i18n_message("ui_column_top_toggle_title")}" %column_top_bar_ch%><label class="dsp_column_top_btn opd_ui_icon_color"></label></span>`;
-    let post_element_bar = `<span class="dsp_column_btn"><label class="dsp_column_settings_btn opd_ui_icon_color" title="${i18n_message("ui_column_settings_title")}"><input class="opd_settings_btn" type="button" value="S"></label></span>`;
     let othersns_default_element_bar = `<span class="dsp_column_btn"><label class="dsp_column_settings_btn opd_ui_icon_color" title="${i18n_message("ui_column_settings_title")}"><input class="opd_settings_btn" type="button" value="S"></label></span>`;
     //カラム設定パネルはカラム種別ごとに出す行が異なる (項目 × カラム種別の適用表に従う)
-    let post_settings_panel = build_column_settings_panel({iframe_styles:false, auto_reload:false, pinned:false});
     let notification_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:false, pinned:false});
     let home_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:true, pinned:false});
     let explore_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:true, pinned:true});
     let default_element = {
         /*main_bar_empty_column:{html:`<!--<section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" opd_column_width="%column_width_num%" id="main_bar_empty_column" style="height:100%;min-width: 70px;"></div></section>-->`},*/
         empty_column:{html:`<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_emptycolumn"><div opd_column_type="empty_column" opd_column_width="%column_width_attr%" style="height: 100%;min-width: 30rem;display: flex;align-items: center;justify-content: center;"><div><img src="${chrome.runtime.getURL(ui_icon_define.column_add_1)}" style="filter: brightness(0) saturate(100%) invert(61%) sepia(13%) saturate(13%) hue-rotate(335deg) brightness(89%) contrast(79%);"><p>左のバーからカラムを追加</p></div></div></section>`},
-        post:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="post" opd_column_width="%column_width_attr%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Post</span></div></span>${post_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${post_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com/intent/tweet" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
         second_empty_column:{html:`<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_second_emptycolumn"><div opd_column_type="second_empty_column" opd_column_width="%column_width_attr%" style="height:100%;min-width: 30rem;overflow: hidden;display: flex;align-items: center;justify-content: center;"><div><img src="${chrome.runtime.getURL(ui_icon_define.column_add_2)}" style="filter: brightness(0) saturate(100%) invert(61%) sepia(13%) saturate(13%) hue-rotate(335deg) brightness(89%) contrast(79%);"><p>1段目のカラムが配置できます</p></div></div></section>`},
         home:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="home" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Timeline</span></div></span>${default_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${home_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com/home" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
         notification:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="notification" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Notifications</span></div></span>${default_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${notification_settings_panel}<iframe allow="fullscreen" src="https://x.com/notifications" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
@@ -1110,7 +1188,7 @@ function run(settings){
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;background: white;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="add_post" title="${i18n_message("ui_add_post_column_title")}"><div class="dsp_btn_add_post_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_toggle_second_rack_title")}" id="second_rack"><div class="dsp_btn_second_rack_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
+    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_toggle_second_rack_title")}" id="second_rack"><div class="dsp_btn_second_rack_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
     //let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 100px;text-align: center;background-color: white;"><div><p style="margin-top:0;padding-top:1em;">Open-Deck<br>Prototype<br>v${manifest.version}</p><hr><p>Debug<br><input type="button" id="init_settings" value="init settings"/><br><input type="button" id="profile_load_save" value="Profile Load"/><br><input type="button" id="dnr_reload" value="dNR_Reload"/><br><input type="button" id="ext_reload" value="Ext_Reload"/></p><hr><p><input type="button" id="add_timeline" value="Add TimeLine"/> <div class="dsp_btn_parent"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_explr_img"></div></div> </p><p><input type="button" id="add_notify" value="Add Notification"/></p><p><input type="button" id="add_explore" value="Add Explore"/><hr><input type="button" id="second_rack" value="Second Rack"/><hr><input type="button" id="profile_save" value="Profile_Save"/><br><input type="button" id="profile_delete" value="Profile_Delete"/><br>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 110px;"></div></section>`;
     let main_column_html = ``;
     let second_column_html = ``;
@@ -1273,9 +1351,9 @@ function run(settings){
                             preload_desc_array.push(i18n_message("msg_profile_desc_second_row_end"));
                             preload_desc_count = 0;
                             break;
+                        //post は復元されないカラム種別なので、説明にも番号にも含めない
                         case "post":
-                            preload_desc_array.push(i18n_message("msg_profile_desc_post_column", [preload_desc_count]));
-                            break;
+                            continue;
                         case "home":
                             preload_desc_array.push(i18n_message("msg_profile_desc_timeline_column", [preload_desc_count]));
                             break;
@@ -1299,8 +1377,9 @@ function run(settings){
                 }
                 //console.log(preload_desc_array)
                 if(confirm(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\r\n")])}`)){
-                    //切り替え前のカラムの自動更新を止める
+                    //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
                     get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
+                    teardown_post_form_popover();
                     document.querySelector("#opd_main_element").remove();
                     last_load_profile = index;
                     chrome.storage.local.get("opd_settings", function(value){
@@ -1449,21 +1528,16 @@ function run(settings){
             chrome.runtime.sendMessage({message: "ext_reload"});
         }
     });
-    //ポストカラム追加
-    //TODO: カラム追加周りの処理をもっと簡略化すること
-    document.getElementById("add_post").addEventListener("click", function(){
-        const empty_column = document.querySelector(".dsp_column_emptycolumn");
-        const first_column = empty_column?.closest('div')?.querySelector('section[draggable="true"]');
-        const add_target_column = (is_shift_pressed && first_column) ? first_column : empty_column;
-
-        const new_column = fill_column_template(default_element["post"]["html"], inherit_column_template_values());
-        add_target_column.insertAdjacentHTML("beforebegin", new_column);
-        add_target_column.scrollIntoView({behavior: "smooth",inline: "end"});
-        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview]');
-        append_object_css("add_column", all_webview);
-        column_dd();
-        column_close();
-        column_settings_save("", last_load_profile);
+    //ポストフォームのポップオーバーを開閉する
+    document.getElementById("open_post_form").addEventListener("click", function(){
+        toggle_post_form_popover(this);
+    });
+    //ボタンとして振る舞わせるため、Enter と Space でも開閉する
+    document.getElementById("open_post_form").addEventListener("keydown", function(event){
+        if(event.repeat) return;
+        if(event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggle_post_form_popover(this);
     });
     //タイムラインカラム追加
     document.getElementById("add_timeline").addEventListener("click", function(){
@@ -1580,7 +1654,7 @@ function run(settings){
         <div class="opd_list_picker_browse">
         <div><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label> <input class="opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"> <input class="opd_list_picker_show_btn" type="button" value="${i18n_message("ui_list_picker_show_button")}"></div>
         <div class="opd_list_picker_status" role="status" aria-live="polite"></div>
-        <div class="opd_list_picker_frame_wrap"><iframe class="opd_list_picker_frame" title="${i18n_message("ui_list_picker_frame_title")}"></iframe><div class="opd_list_picker_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div>
+        <div class="opd_list_picker_frame_wrap"><iframe class="opd_list_picker_frame" title="${i18n_message("ui_list_picker_frame_title")}"></iframe><div class="opd_list_picker_frame_skeleton opd_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div>
         <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"></div>
         </div>
         <div class="opd_list_picker_selection">
@@ -2348,12 +2422,6 @@ function run(settings){
             const opd_utils = new OpdUtils();
             opd_utils.Init(column_frame);
 
-            if(column_type === "post"){
-                const ext_text_review = new OpdExtTextReview();
-                const ui_lang = chrome.i18n.getUILanguage();
-                ext_text_review.Init(column_frame, ui_icon_define, ui_lang);
-            }
-
             if(column_type === "home" || column_type === "explore"){
                 const auto_reload = new OpdExtAutoReload();
                 auto_reload.Init(column_frame);
@@ -2444,10 +2512,285 @@ function run(settings){
             })
         }
     }
+    //===== ポストフォームのポップオーバー: run() スコープの処理 =====
+    //ポストフォーム (https://x.com/intent/tweet の iframe) を、サイドバーの投稿ボタンの横に出す非モーダルの浮動パネル (ポップオーバー) で開閉する
+    //#opd_main_element の末尾に #opd_post_form_popover (class "opd_post_form_popover" role="dialog" aria-labelledby) を 1 つだけ生成する。中身は見出しと閉じるボタンを並べたバーと、iframe に読み込み中の skeleton を重ねる枠
+    //非モーダルなので開いているあいだも背景 (カラム・サイドバー) を操作でき、背景の inert もフォーカストラップも行わない
+    //閉じるときは iframe を破棄せず隠すだけなので、書きかけの下書きは開き直しても残り、2 回目以降は読み込み待ちが無い。保持されるのは開閉のあいだだけで、プロファイル切替 (#opd_main_element の作り直し) やページ再読み込みでは失われる。開き直したときに iframe が composer 以外の画面に移っていた場合と、前回の読み込みが終わっていなかった場合だけ intent/tweet を読み込み直す
+    //閉じる経路は 閉じるボタン / Esc / 開閉ボタンの再押下 / X の composer が閉じたことの検知 の 4 つ
+    //Esc はポップオーバーの iframe 内と本体 UI (document) の 2 か所で受け取るため、他のカラムの iframe 内で押した Esc は届かない。X が Esc を処理した (preventDefault した) 場合はそちらを優先する
+    //モーダルダイアログ (#opd_main_element 直下の .opd_dialog_overlay) が開いているあいだは新たに開かず、モーダルが背景に付けた inert がポップオーバーに乗っているあいだと、メディアビューワーの dialog が showModal で開いているあいだは Esc を無視しフォーカスも奪わない
+    //composer が閉じたこと (投稿完了・下書き保存・破棄) は、page world の文章校正ヘルパーが送る window の opd_post_composer_closed (detail は JSON 文字列) で受け取る。iframe の documentElement に付けた data-opd-post-form-token と一致する通知だけを自分宛てとして扱う
+    //ポップオーバー内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない (カラムを一括走査するセレクタに拾われるため)。置き場所も #main_rack_element の外にする
+    //生成済みのポップオーバー。初回に開いたときに作り、以後は表示・非表示を切り替えて使い回す
+    let post_form_popover = null;
+    //ポップオーバーを開いた要素。位置合わせの基準とフォーカスの戻し先に使う
+    let post_form_opener = null;
+    //composer 閉通知の送信元を照合する値。ポップオーバーの生成時に作る
+    let post_form_token = null;
+    //初期化済みの iframe の Document
+    const post_form_prepared_documents = new WeakSet();
+    //skeleton を外す上限時間のタイマー。読み込みが終わらなくても skeleton で X の画面 (エラー表示を含む) を隠し続けないようにする
+    let post_form_skeleton_timer = null;
+    const post_form_skeleton_limit_ms = 15000;
+    //直近の読み込み失敗監視の解除関数
+    let post_form_load_watch_cleanup = null;
+    //iframe の読み込みが始まってから Document の初期化が終わるまで true。skeleton の表示 (上限時間で外れる) とは別に持つ
+    let post_form_frame_loading = false;
+    //iframe の読み込みを始めるときに呼ぶ。前回の読み込み失敗監視を外してから付け直し、skeleton を上限時間つきで表示する
+    function start_post_form_frame_load(frame){
+        post_form_load_watch_cleanup?.();
+        post_form_load_watch_cleanup = watch_load_column([frame]);
+        post_form_frame_loading = true;
+        frame.src = "https://x.com/intent/tweet";
+        set_post_form_skeleton_visible(true);
+    }
+    function set_post_form_skeleton_visible(is_visible){
+        clearTimeout(post_form_skeleton_timer);
+        post_form_skeleton_timer = null;
+        const frame_skeleton = post_form_popover?.querySelector(".opd_post_form_frame_skeleton") ?? null;
+        if(frame_skeleton === null) return;
+        frame_skeleton.hidden = !is_visible;
+        if(is_visible){
+            post_form_skeleton_timer = setTimeout(function(){
+                set_post_form_skeleton_visible(false);
+            }, post_form_skeleton_limit_ms);
+        }
+    }
+    //ポップオーバーが表示されているか
+    function is_post_form_popover_open(){
+        return post_form_popover !== null && post_form_popover.isConnected && !post_form_popover.hidden;
+    }
+    //開いているあいだだけ登録するリスナーを外す
+    function remove_post_form_popover_listeners(){
+        document.removeEventListener("keydown", on_post_form_document_keydown);
+        window.removeEventListener("resize", on_post_form_window_resize);
+        window.removeEventListener("opd_post_composer_closed", on_post_form_composer_closed);
+    }
+    //ポップオーバーが確保している資源 (開いているあいだのリスナー・skeleton のタイマー・読み込み失敗監視) をすべて解放する。#opd_main_element を作り直す前と、親ごと外れたことに気づいたときに呼ぶ
+    function teardown_post_form_popover(){
+        remove_post_form_popover_listeners();
+        clearTimeout(post_form_skeleton_timer);
+        post_form_skeleton_timer = null;
+        post_form_load_watch_cleanup?.();
+        post_form_load_watch_cleanup = null;
+    }
+    //プロファイル切替などでポップオーバーが親ごと外された場合は、資源を解放して以降の処理を止める
+    function is_post_form_popover_detached(){
+        if(post_form_popover !== null && post_form_popover.isConnected) return false;
+        teardown_post_form_popover();
+        return true;
+    }
+    //本体 UI にフォーカスがあるときの Esc で閉じる。他のモーダルが Esc を受け持つあいだ (モーダルダイアログの inert が乗っている / メディアビューワーの dialog が showModal で開いている) は何もしない
+    function on_post_form_document_keydown(event){
+        if(is_post_form_popover_detached()) return;
+        if(event.key !== "Escape" || event.defaultPrevented) return;
+        if(is_post_form_popover_blocked_by_modal()) return;
+        event.preventDefault();
+        close_post_form_popover();
+    }
+    //他のモーダルがポップオーバーの操作を塞いでいるか。モーダルダイアログは inert 属性で、top layer の dialog (メディアビューワー) は :modal で判定する
+    function is_post_form_popover_blocked_by_modal(){
+        return post_form_popover.hasAttribute("inert") || document.querySelector("dialog:modal") !== null;
+    }
+    //ウィンドウの大きさが変わっても開閉ボタンの横に留める
+    function on_post_form_window_resize(){
+        if(is_post_form_popover_detached()) return;
+        position_post_form_popover();
+    }
+    //composer が閉じた通知。自分が開いた iframe からのもの (token が一致するもの) だけで閉じる
+    function on_post_form_composer_closed(event){
+        if(is_post_form_popover_detached()) return;
+        let detail = null;
+        try{
+            detail = JSON.parse(event.detail);
+        }catch(e){
+            //読めない通知は送信元を照合できないため無視する
+            return;
+        }
+        if(detail?.token !== post_form_token) return;
+        close_post_form_popover();
+    }
+    //ポップオーバーの iframe 内で押した Esc で閉じる。X の画面が Esc を処理した場合はそちらを優先するため、伝播が終わってから defaultPrevented を見る (この場では preventDefault しない)
+    //X が Esc に応えて確認 (下書きの破棄確認など) を出した場合も X の側に任せ、閉じない
+    function on_post_form_frame_keydown(event){
+        if(event.key !== "Escape") return;
+        const frame_document = event.currentTarget;
+        setTimeout(function(){
+            if(event.defaultPrevented) return;
+            if(!is_post_form_popover_open()) return;
+            if(is_post_form_popover_blocked_by_modal()) return;
+            if(frame_document?.querySelector?.('[data-testid="confirmationSheetDialog"], [role="alertdialog"]') !== null) return;
+            close_post_form_popover();
+        }, 0);
+    }
+    //iframe 内 head に属性つきの style 要素を用意する (無ければ作る)
+    function ensure_post_form_frame_style(frame_head, style_attribute){
+        let style_element = frame_head.querySelector(`style[${style_attribute}]`);
+        if(style_element === null){
+            frame_head.insertAdjacentHTML("beforeend", `<style ${style_attribute}></style>`);
+            style_element = frame_head.querySelector(`style[${style_attribute}]`);
+        }
+        return style_element;
+    }
+    //ポストフォームの iframe の Document を初期化する (Document ごとに 1 回)
+    //中身を読めない場合は何もしない (次回の load でやり直す)
+    //各処理は個別に try/catch し、1 つが失敗しても残りを止めない
+    function prepare_post_form_frame_document(frame){
+        let frame_document = null;
+        try{
+            frame_document = frame.contentWindow?.document ?? null;
+        }catch(e){
+            //別オリジンなどで中身を読めない場合は次回の load でやり直す
+            return;
+        }
+        if(frame_document === null) return;
+        //src を入れる前の初期 Document (about:blank) の load は対象外にし、X の画面を読み込み終えるまで skeleton を残す
+        if(frame_document.location?.href === "about:blank") return;
+        if(post_form_prepared_documents.has(frame_document)) return;
+        post_form_prepared_documents.add(frame_document);
+        post_form_frame_loading = false;
+        //読み込みが終わったので skeleton を外す
+        try{
+            set_post_form_skeleton_visible(false);
+        }catch(e){
+            console.warn("post form: skeleton を外せませんでした->", e);
+        }
+        //バナーとトップを隠し、スクロールバーを細くする
+        try{
+            const frame_head = frame_document.head;
+            if(frame_head){
+                ensure_post_form_frame_style(frame_head, "opd_main_css").textContent = `html{scrollbar-width:thin;}`;
+                ensure_post_form_frame_style(frame_head, "opd_banner_css").textContent = COLUMN_IFRAME_CSS.banner_hidden;
+                ensure_post_form_frame_style(frame_head, "opd_top_visible_css").textContent = COLUMN_IFRAME_CSS.top_hidden;
+            }
+        }catch(e){
+            console.warn("post form: iframe の style を用意できませんでした->", e);
+        }
+        //page world のヘルパーが composer 閉通知に載せる照合用の値を渡す
+        try{
+            frame_document.documentElement.setAttribute("data-opd-post-form-token", post_form_token);
+        }catch(e){
+            console.warn("post form: token を渡せませんでした->", e);
+        }
+        try{
+            frame_document.addEventListener("keydown", on_post_form_frame_keydown);
+        }catch(e){
+            console.warn("post form: iframe の keydown を登録できませんでした->", e);
+        }
+        try{
+            new OpdUtils().Init(frame);
+        }catch(e){
+            console.warn("post form: OpdUtils を初期化できませんでした->", e);
+        }
+        try{
+            //UITexts は ja と en の 2 言語しか無いため、UI 言語をどちらかに寄せる
+            const ui_lang = chrome.i18n.getUILanguage().startsWith("ja") ? "ja" : "en";
+            new OpdExtTextReview().Init(frame, ui_icon_define, ui_lang);
+        }catch(e){
+            console.warn("post form: OpdExtTextReview を初期化できませんでした->", e);
+        }
+    }
+    //iframe がポストフォームを表示しているか。パスが intent/tweet か投稿後に開き直される compose/post 配下なら表示中、それ以外のパスでもダイアログとして開いた composer の入力欄が画面にあれば表示中とみなす (下書きを消さない側に倒す)。ホームタイムラインに埋め込まれた composer はダイアログではないため対象にならない
+    //遷移が確定していない about:blank (下書きは存在しない) と、中身を読めない場合は表示していないとみなす
+    function is_post_form_frame_on_composer(frame){
+        try{
+            const frame_window = frame.contentWindow;
+            const frame_location = frame_window?.location;
+            if(frame_location == null) return false;
+            if(frame_location.href === "about:blank") return false;
+            if(frame_location.pathname.startsWith("/intent/tweet") || frame_location.pathname.startsWith("/compose/post")) return true;
+            return frame_window.document.querySelector('[role="dialog"] div[contenteditable="true"][data-testid*="tweetTextarea"]') !== null;
+        }catch(e){
+            return false;
+        }
+    }
+    //ポストフォームのポップオーバーを開く。opener_element: 開いた要素 (位置合わせの基準とフォーカスの戻し先)
+    function open_post_form_popover(opener_element){
+        const main_element = document.getElementById("opd_main_element");
+        if(main_element === null) return;
+        //モーダルダイアログを開いているあいだは背景を操作できないため、ポップオーバーも開かない
+        if(document.querySelector("#opd_main_element > .opd_dialog_overlay") !== null) return;
+        //既に表示中なら二重に生成せず、ポストフォームへフォーカスを移す
+        if(is_post_form_popover_open()){
+            post_form_popover.querySelector(".opd_post_form_frame")?.focus?.();
+            return;
+        }
+        if(post_form_popover === null || !post_form_popover.isConnected){
+            post_form_token = crypto.randomUUID();
+            const popover = document.createElement("div");
+            popover.id = "opd_post_form_popover";
+            popover.className = "opd_post_form_popover";
+            popover.setAttribute("role", "dialog");
+            popover.setAttribute("aria-labelledby", "opd_post_form_title");
+            popover.hidden = true;
+            popover.innerHTML = `<div class="opd_post_form_bar">
+            <h2 class="opd_post_form_title" id="opd_post_form_title">${i18n_message("ui_post_form_header")}</h2>
+            <button type="button" class="dsp_column_close_btn opd_ui_icon_color opd_post_form_close_btn" title="${i18n_message("ui_post_form_close_button")}" aria-label="${i18n_message("ui_post_form_close_button")}"></button>
+            </div>
+            <div class="opd_post_form_frame_wrap">
+            <iframe class="opd_post_form_frame" title="${i18n_message("ui_post_form_frame_title")}" allow="fullscreen"></iframe>
+            <div class="opd_post_form_frame_skeleton opd_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+            </div>`;
+            main_element.appendChild(popover);
+            post_form_popover = popover;
+            const new_frame = popover.querySelector(".opd_post_form_frame");
+            popover.querySelector(".opd_post_form_close_btn").addEventListener("click", function(){
+                close_post_form_popover();
+            });
+            new_frame.addEventListener("load", function(){
+                prepare_post_form_frame_document(new_frame);
+            });
+            start_post_form_frame_load(new_frame);
+        }else{
+            //使い回す iframe が composer 以外の画面 (ホーム等) に移っていたり、遷移が確定していなかったり、前回の読み込みが終わらないまま閉じていたらポストフォームを読み込み直す (読み込みが終わっていない画面に下書きは無い)
+            const frame = post_form_popover.querySelector(".opd_post_form_frame");
+            if(post_form_frame_loading || !is_post_form_frame_on_composer(frame)) start_post_form_frame_load(frame);
+        }
+        post_form_popover.hidden = false;
+        post_form_opener = opener_element ?? null;
+        post_form_opener?.setAttribute?.("aria-expanded", "true");
+        position_post_form_popover();
+        document.addEventListener("keydown", on_post_form_document_keydown);
+        window.addEventListener("resize", on_post_form_window_resize);
+        window.addEventListener("opd_post_composer_closed", on_post_form_composer_closed);
+        post_form_popover.querySelector(".opd_post_form_frame")?.focus?.();
+    }
+    //ポップオーバーを閉じる。iframe は破棄せず隠すだけなので書きかけの下書きは残る
+    //フォーカスの戻しとテキストフォーカスの解除は、フォーカスがポップオーバーの中にあるときだけ行う (非モーダルなので、composer 閉通知が届いたときに別のカラムの入力欄を使っている場合があり、そのフォーカスと停止フラグには触れない)
+    //フォーカスを戻すのを先にするのは、隠した後では iframe 内の focusout (テキストフォーカス解除の通知) が発火しないことがあるため。モーダルダイアログの inert が乗っているあいだはモーダルからフォーカスを奪わない
+    //テキストフォーカスの解除は通知に頼らず明示的に行い、自動更新の停止フラグが残らないようにする
+    function close_post_form_popover(){
+        if(!is_post_form_popover_open()) return;
+        if(post_form_popover.contains(document.activeElement)){
+            if(!is_post_form_popover_blocked_by_modal()) post_form_opener?.focus?.();
+            set_text_focus_state(false);
+        }
+        post_form_popover.hidden = true;
+        post_form_opener?.setAttribute?.("aria-expanded", "false");
+        //閉じているあいだは skeleton の上限時間を進めず (開き直したときに付け直す)、読み込み失敗監視の再読み込みも走らせない (開き直したときに composer 以外なら読み込み直す)
+        teardown_post_form_popover();
+    }
+    //開閉ボタンの操作で表示と非表示を切り替える。opener_element: 開いた要素 (位置合わせの基準とフォーカスの戻し先)
+    function toggle_post_form_popover(opener_element){
+        if(is_post_form_popover_open()){
+            close_post_form_popover();
+            return;
+        }
+        open_post_form_popover(opener_element);
+    }
+    //ポップオーバーの上端を開いた要素の上端に合わせる。下端が画面からはみ出す場合は収まる位置まで上げ、上端は画面の上端から余白の分より上へは出さない (左端は CSS で固定)
+    function position_post_form_popover(){
+        if(post_form_popover === null || post_form_opener === null) return;
+        const screen_margin = 8;
+        const opener_top = post_form_opener.getBoundingClientRect().top;
+        const max_top = window.innerHeight - post_form_popover.offsetHeight - screen_margin;
+        post_form_popover.style.top = `${Math.max(screen_margin, Math.min(opener_top, max_top))}px`;
+    }
     //===== 全体設定: run() スコープの処理 (global_settings / column_settings_save / last_load_profile / profile_store を参照する) =====
-    //全体設定の適用対象カラム (post / home / notification / explore) を返す。構造用カラムは含めない
+    //全体設定の適用対象カラム (home / notification / explore) を返す。構造用カラムは含めない
     function get_settings_target_columns(){
-        return document.querySelectorAll('#opd_main_element div[opd_column_type="post"], #opd_main_element div[opd_column_type="home"], #opd_main_element div[opd_column_type="notification"], #opd_main_element div[opd_column_type="explore"]');
+        return document.querySelectorAll('#opd_main_element div[opd_column_type="home"], #opd_main_element div[opd_column_type="notification"], #opd_main_element div[opd_column_type="explore"]');
     }
     //inherit 選択肢に併記する、項目 key の現在の全体値の表示名
     function global_setting_display_name(key){
@@ -2508,7 +2851,7 @@ function run(settings){
     //  options.auto_reload:   自動更新 (select .opd_a_reload_mode: inherit/true/false) と間隔 (checkbox .opd_a_reload_time_inherit + number .opd_a_reload_time_setting、秒単位) の行を含めるか
     //  options.pinned:        ピン止め (select .opd_pinned_mode) の行を含めるか
     //共通行: カラム幅 (select .opd_column_size_preset: inherit/0/1/2/3 と カスタムボタン .column_width_btn)
-    //post: {iframe_styles:false, auto_reload:false, pinned:false}、notification: {true, false, false}、home: {true, true, false}、explore: {true, true, true}
+    //notification: {iframe_styles:true, auto_reload:false, pinned:false}、home: {true, true, false}、explore: {true, true, true}
     //各 select の inherit 選択肢は value="inherit" で、表示文字列は i18n の ui_settings_inherit_option に現在の全体値の表示名を渡したもの
     function build_column_settings_panel(options){
         //設定行 1 行分 (ラベルと入力) を組み立てる
@@ -2748,7 +3091,6 @@ function run(settings){
     }
     //iframe 内 head に style 要素 (style[opd_banner_css] / style[opd_top_visible_css] / style[opd_tw_view_mode_css]) を用意し、実効値に応じて COLUMN_IFRAME_CSS の文字列を設定する
     //iframe の contentWindow.document.head が読めない (未生成・クロスオリジン) 場合は何もしない (次回 load で再適用される)
-    //post カラムは設定に依らずバナーとトップを常に非表示 (banner_hidden / top_hidden) にし、表示モードは適用しない
     //トップ非表示の CSS はカラム種別と iframe が現在表示しているパスで選ぶ: home カラムは top_hidden_home、explore カラムでリスト系ページを表示中は top_hidden_list (リスト名の見出しを残す)、それ以外は top_hidden
     //explore カラムはページ内遷移で表示パスが変わるため、mutate_url の URL 変化検知からも呼ばれる
     function apply_column_iframe_styles(column_div){
@@ -2779,13 +3121,6 @@ function run(settings){
         const top_visible_style = ensure_frame_style("opd_top_visible_css");
         const tw_view_mode_style = ensure_frame_style("opd_tw_view_mode_css");
         const column_type = column_div.getAttribute("opd_column_type");
-        //post カラムは設定に依らずバナーとトップを常に隠し、表示モードは適用しない
-        if(column_type === "post"){
-            banner_style.textContent = COLUMN_IFRAME_CSS.banner_hidden;
-            top_visible_style.textContent = COLUMN_IFRAME_CSS.top_hidden;
-            tw_view_mode_style.textContent = ``;
-            return;
-        }
         banner_style.textContent = effective_column_setting(column_div, "banner", global_settings) === true ? `` : COLUMN_IFRAME_CSS.banner_hidden;
         if(effective_column_setting(column_div, "top_visible", global_settings) === true){
             top_visible_style.textContent = ``;
@@ -2873,7 +3208,7 @@ function run(settings){
         column_frame.opd_auto_reload_interval_id = null;
         column_frame.opd_auto_reload_interval_ms = null;
     }
-    //全体設定の変更を全カラムへ反映する: 適用表の対象カラム (post / home / notification / explore) それぞれに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
+    //全体設定の変更を全カラムへ反映する: 適用表の対象カラム (home / notification / explore) それぞれに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
     //構造用カラム (main_bar_empty_column / empty_column / second_empty_column / dsp_column) には触れない
     function apply_global_settings_to_columns(){
         get_settings_target_columns().forEach((column_div) => {
@@ -3295,14 +3630,14 @@ function set_title_favicon(){
 //カラムバーのトグル (.opd_banner / .opd_top_bar / .opd_pinned_btn) は実効状態を表示し、クリックで個別値 = !実効 を設定する。
 //カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
 //
-//項目 × カラム種別の適用表 (○ = 適用対象、固定 = 設定行を出さず常に非表示の style を注入する。構造用カラム main_bar_empty_column / empty_column / second_empty_column / dsp_column は対象外):
-//  項目            post    home  notification  explore(リスト含む)
-//  バナー表示       固定    ○     ○             ○
-//  トップ表示       固定    ○     ○             ○ (リスト系ページ表示中の非表示はヘッダーをリスト名だけの専用バーに整形する)
-//  表示モード       -       ○     ○             ○
-//  カラム幅         ○     ○     ○             ○
-//  自動更新/間隔    -     ○     -             ○
-//  ピン止め         -     -     -             ○
+//項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / second_empty_column / dsp_column は対象外):
+//  項目            home  notification  explore(リスト含む)
+//  バナー表示       ○     ○             ○
+//  トップ表示       ○     ○             ○ (リスト系ページ表示中の非表示はヘッダーをリスト名だけの専用バーに整形する)
+//  表示モード       ○     ○             ○
+//  カラム幅         ○     ○             ○
+//  自動更新/間隔    ○     -             ○
+//  ピン止め         -     -             ○
 //
 //適用経路は 3 つに分ける:
 //  bind_column_events(column_div)        パネル・バーのイベント登録 (data-opd_settings_initialized で二重登録を防ぐ)
@@ -3801,12 +4136,13 @@ function get_cookie_color_mode() {
 //カラム読み込み失敗検出
 function watch_load_column(column_frames, max_retries = 5){
     const cleanups = [];
+    const retry_timers = [];
     column_frames.forEach(column => {
         let count = 0;
 
         const reLoad = () => {
             if (++count >= max_retries) return;
-            setTimeout(() => { column.src = column.src }, 500);
+            retry_timers.push(setTimeout(() => { column.src = column.src }, 500));
         };
 
         const onLoad = () => {
@@ -3825,7 +4161,14 @@ function watch_load_column(column_frames, max_retries = 5){
         });
     });
 
-    setTimeout(() => cleanups.forEach(fn => fn()), max_retries * 500 + 1000);
+    const stop_listening = () => cleanups.forEach(fn => fn());
+    setTimeout(stop_listening, max_retries * 500 + 1000);
+    //監視を途中で外すための関数を返す (同じ iframe を読み込み直すときに前の監視を解除するのに使う)。予約済みの再読み込みも取り消す
+    return () => {
+        stop_listening();
+        retry_timers.forEach(timer => clearTimeout(timer));
+        retry_timers.length = 0;
+    };
 }
 //設定初期化
 //初期設定の構築。既定プロファイルは create_default_profile() で作る

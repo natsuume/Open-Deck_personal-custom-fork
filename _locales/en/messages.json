@@ -29,9 +29,6 @@
   "ui_sidebar_logo_title": {
     "message": "Open-Deck\nv$1"
   },
-  "ui_add_post_column_title": {
-    "message": "Add post column"
-  },
   "ui_add_timeline_column_title": {
     "message": "Add timeline column"
   },
@@ -296,9 +293,6 @@
   "msg_initial_setup_completed": {
     "message": "Initial setup has completed!\nWelcome to Open-Deck!"
   },
-  "msg_profile_desc_post_column": {
-    "message": "$1-Post column"
-  },
   "msg_profile_desc_timeline_column": {
     "message": "$1-Timeline column"
   },
@@ -364,6 +358,18 @@
   },
   "ui_global_settings_cancel_button": {
     "message": "Cancel"
+  },
+  "ui_open_post_form_title": {
+    "message": "Open post form"
+  },
+  "ui_post_form_header": {
+    "message": "Post"
+  },
+  "ui_post_form_close_button": {
+    "message": "Close"
+  },
+  "ui_post_form_frame_title": {
+    "message": "Post form"
   },
   "ui_settings_inherit_option": {
     "message": "Follow global settings ($1)"
