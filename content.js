@@ -2037,6 +2037,8 @@ function run(settings){
             const active_path = active_item === null ? null : active_item.getAttribute("data-list-path");
             const is_active_remove_btn = active_element !== null && active_element.classList.contains("opd_list_picker_remove_btn");
             const saved_scroll_top = selected_wrap.scrollTop;
+            //項目を作り直すとドラッグ中の項目が外れて dragend が届かないため、先にドラッグ状態を戻す
+            end_drag();
             selected_list.textContent = "";
             selected_entries.forEach((entry, index) => {
                 const item = document.createElement("li");
@@ -2096,6 +2098,12 @@ function run(settings){
             selected_list.querySelectorAll(selected_item_selector).forEach((item) => {
                 item.classList.remove("opd_list_picker_drop_before", "opd_list_picker_drop_after");
             });
+        }
+        //ドラッグ中の状態を戻す。項目の描き直しやドロップで元の項目が外れると dragend が一覧まで届かないため、描き直しとドロップの時にも呼ぶ
+        function end_drag(){
+            dragging_path = null;
+            clear_drop_marks();
+            selected_list.querySelectorAll(selected_item_selector).forEach((item) => item.classList.remove("opd_list_picker_dragging"));
         }
         //ドラッグイベントの位置から落とし先を求める。項目の上半分なら {index: その項目の位置, is_after: false}、下半分なら is_after: true、項目の外なら末尾
         function drop_target_from_event(event){
@@ -2237,6 +2245,8 @@ function run(settings){
                 return;
             }
             toggle_entry(`/i/lists/${cell_info.id}`, cell_info.name);
+            //直前の未解決の案内は最新の操作の結果に置き換える
+            status_area.textContent = "";
             render_selection();
             mark_frame_cells();
         }
@@ -2269,7 +2279,8 @@ function run(settings){
                     is_name_filled = true;
                 }
             });
-            if(is_name_filled) render_selection();
+            //ドラッグ中に項目を作り直すとドラッグが途切れるため、名前の補完による描き直しは次回に回す
+            if(is_name_filled && dragging_path === null) render_selection();
         }
         function stop_frame_poll(){
             if(frame_poll_timer !== null){
@@ -2311,10 +2322,15 @@ function run(settings){
                 finish_frame_loading(i18n_message("ui_list_picker_error"), true);
                 return;
             }
+            //contentDocument が null になるのは別オリジンの document を表示しているときで、読み込み中かどうかに関わらず表示を諦める
+            if(!frame_document){
+                finish_frame_loading(i18n_message("ui_list_picker_error"), true);
+                return;
+            }
             const elapsed_ms = Date.now() - frame_load_started_at;
             const is_timed_out = is_frame_loading && elapsed_ms >= frame_load_limit_ms;
             //読み込み前の about:blank と本文が無い状態は判定材料にならないので次回に回す
-            if(!frame_document || frame_document.location.href === "about:blank" || !frame_document.body){
+            if(frame_document.location.href === "about:blank" || !frame_document.body){
                 //本文を一度も読めないまま制限時間を過ぎた場合は読み込み自体に失敗している
                 if(is_timed_out) finish_frame_loading(has_frame_document ? i18n_message("ui_list_picker_not_detected") : i18n_message("ui_list_picker_error"));
                 return;
@@ -2371,9 +2387,8 @@ function run(settings){
             }
             start_frame(user_lists_match[1]);
         }
-        //読み込みが終わっても中身を読めない(エラーページなど)場合は、制限時間を待たずにエラーとして終了する
+        //読み込んだ document の中身を読めない(別オリジンなど)場合は、読み込み中かどうかに関わらずエラーとして終了する
         function on_frame_load(){
-            if(!is_frame_loading) return;
             //中身を読める場合は about:blank でもポーリングの継続に任せる
             if(get_frame_document() !== null) return;
             finish_frame_loading(i18n_message("ui_list_picker_error"), true);
@@ -2500,12 +2515,6 @@ function run(settings){
             event.dataTransfer.setData("text/plain", dragging_path);
             item.classList.add("opd_list_picker_dragging");
         });
-        //ドラッグ中の状態を戻す。ドロップ後の描き直しで元の項目が外れると dragend が一覧まで届かないため、ドロップ時にも呼ぶ
-        function end_drag(){
-            dragging_path = null;
-            clear_drop_marks();
-            selected_list.querySelectorAll(selected_item_selector).forEach((item) => item.classList.remove("opd_list_picker_dragging"));
-        }
         selected_list.addEventListener("dragend", end_drag);
         //落とし先の目印は一覧の枠(項目の外)でも出す
         selected_wrap.addEventListener("dragover", function(event){
