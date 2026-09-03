@@ -365,6 +365,18 @@
   "ui_global_settings_cancel_button": {
     "message": "Cancel"
   },
+  "ui_open_post_form_title": {
+    "message": "Open post form"
+  },
+  "ui_post_form_header": {
+    "message": "Post"
+  },
+  "ui_post_form_close_button": {
+    "message": "Close"
+  },
+  "ui_post_form_frame_title": {
+    "message": "Post form"
+  },
   "ui_settings_inherit_option": {
     "message": "Follow global settings ($1)"
   },

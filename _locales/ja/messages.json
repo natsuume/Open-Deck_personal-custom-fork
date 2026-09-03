@@ -365,6 +365,18 @@
   "ui_global_settings_cancel_button": {
     "message": "キャンセル"
   },
+  "ui_open_post_form_title": {
+    "message": "ポストフォームを開く"
+  },
+  "ui_post_form_header": {
+    "message": "ポスト"
+  },
+  "ui_post_form_close_button": {
+    "message": "閉じる"
+  },
+  "ui_post_form_frame_title": {
+    "message": "ポストフォーム"
+  },
   "ui_settings_inherit_option": {
     "message": "全体設定に従う ($1)"
   },

@@ -21,6 +21,11 @@ const column_auto_update_state = {
     text_focus: {date: 0, active: false},
     media_viewer: {active: false},
 };
+//テキストフォーカスの状態 (自動更新の停止判定に使う) を更新する。解除するときは経過時間の判定に使う日時も戻す
+function set_text_focus_state(is_active){
+    column_auto_update_state.text_focus.date = is_active ? Date.now() : 0;
+    column_auto_update_state.text_focus.active = is_active;
+}
 const ui_icon_define = {
     banner_hide:"icon/banner_hide.svg",
     top_bar_hide:"icon/top_hide.svg",
@@ -271,11 +276,9 @@ function run(settings){
     window.addEventListener('opd_post_focus', (e) => {
         const detail = JSON.parse(e.detail);
         if(detail){
-            column_auto_update_state.text_focus.date = Date.now();
-            column_auto_update_state.text_focus.active = true;
+            set_text_focus_state(true);
         }else{
-            column_auto_update_state.text_focus.date = 0;
-            column_auto_update_state.text_focus.active = false;
+            set_text_focus_state(false);
         }
     });
     //画像表示パネル
@@ -749,6 +752,8 @@ function run(settings){
         --opd-list-picker-surface: #ffffff;
         --opd-list-picker-skeleton: #bdbdbd;
         --opd-list-picker-muted-text: #555555;
+        --opd-frame-surface: var(--opd-list-picker-surface);
+        --opd-frame-skeleton: var(--opd-list-picker-skeleton);
     }
     .opd_list_picker_dialog{
         gap: 0.5rem;
@@ -791,22 +796,6 @@ function run(settings){
         width: 100%;
         height: 100%;
         border: 0;
-    }
-    .opd_list_picker_frame_skeleton{
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.6rem;
-        padding: 0.8rem;
-        box-sizing: border-box;
-        background: var(--opd-list-picker-surface);
-    }
-    .opd_list_picker_frame_skeleton span{
-        display: block;
-        height: 3rem;
-        border-radius: 4px;
-        background: var(--opd-list-picker-skeleton);
     }
     .opd_list_picker_selection_hint{
         margin: 0;
@@ -891,7 +880,6 @@ function run(settings){
         justify-content: flex-end;
         gap: 0.5rem;
     }
-    .opd_list_picker_frame_skeleton[hidden],
     .opd_list_picker_empty[hidden]{
         display: none;
     }
@@ -902,6 +890,90 @@ function run(settings){
         .opd_list_picker_selected_wrap{
             height: 16rem;
         }
+    }
+    /*iframe の読み込み中に重ねる skeleton (リストカラム複数追加ダイアログ・ポストフォームのポップオーバーで共用)。色は置き場所の --opd-frame-surface / --opd-frame-skeleton で決める*/
+    .opd_frame_skeleton{
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        padding: 0.8rem;
+        box-sizing: border-box;
+        background: var(--opd-frame-surface);
+    }
+    .opd_frame_skeleton span{
+        display: block;
+        height: 3rem;
+        border-radius: 4px;
+        background: var(--opd-frame-skeleton);
+    }
+    .opd_frame_skeleton[hidden]{
+        display: none;
+    }
+    /*ポストフォームのポップオーバー (サイドバーの投稿ボタンの横に出る非モーダルの浮動パネル。z-index はサイドバーと同じ 999 で、DOM 順が後なのでサイドバーの上・モーダルダイアログ (1000) の下に重なる)*/
+    .opd_post_form_popover{
+        --opd-post-form-surface: #ffffff;
+        --opd-post-form-border: #a9a9a9eb;
+        --opd-post-form-bar-background: #efefef;
+        --opd-post-form-text: black;
+        --opd-frame-surface: var(--opd-post-form-surface);
+        --opd-frame-skeleton: #bdbdbd;
+        position: fixed;
+        left: calc(60px + 0.5rem);
+        z-index: 999;
+        display: flex;
+        flex-direction: column;
+        width: min(38rem, calc(100vw - 60px - 1.5rem));
+        height: min(80vh, 44rem);
+        box-sizing: border-box;
+        overflow: hidden;
+        background: var(--opd-post-form-surface);
+        border: 1px solid var(--opd-post-form-border);
+        border-radius: 5px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+        color: var(--opd-post-form-text);
+    }
+    .opd_post_form_popover[hidden]{
+        display: none;
+    }
+    .opd_post_form_bar{
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.25rem 0.5rem;
+        background: var(--opd-post-form-bar-background);
+        border-bottom: 1px solid var(--opd-post-form-border);
+    }
+    .opd_post_form_title{
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+    .opd_post_form_close_btn{
+        flex: 0 0 auto;
+        border: 0;
+        padding: 0;
+        background-color: transparent;
+        cursor: pointer;
+    }
+    .opd_post_form_close_btn:focus-visible{
+        outline: 2px solid currentColor;
+        outline-offset: 2px;
+    }
+    .opd_post_form_frame_wrap{
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        background: var(--opd-post-form-surface);
+    }
+    .opd_post_form_frame{
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
     }
     .opd_ui_icon_color{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
@@ -1004,6 +1076,14 @@ function run(settings){
             background: #2e2e2e;
             border: 1px solid #5d5d5d;
             color: white;
+        }
+
+        & .opd_post_form_popover {
+            --opd-post-form-surface: #2e2e2e;
+            --opd-post-form-border: #5d5d5d;
+            --opd-post-form-bar-background: #474747;
+            --opd-post-form-text: white;
+            --opd-frame-skeleton: #7a7a7a;
         }
     }
 
@@ -1580,7 +1660,7 @@ function run(settings){
         <div class="opd_list_picker_browse">
         <div><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label> <input class="opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"> <input class="opd_list_picker_show_btn" type="button" value="${i18n_message("ui_list_picker_show_button")}"></div>
         <div class="opd_list_picker_status" role="status" aria-live="polite"></div>
-        <div class="opd_list_picker_frame_wrap"><iframe class="opd_list_picker_frame" title="${i18n_message("ui_list_picker_frame_title")}"></iframe><div class="opd_list_picker_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div>
+        <div class="opd_list_picker_frame_wrap"><iframe class="opd_list_picker_frame" title="${i18n_message("ui_list_picker_frame_title")}"></iframe><div class="opd_list_picker_frame_skeleton opd_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div>
         <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"></div>
         </div>
         <div class="opd_list_picker_selection">
@@ -2443,6 +2523,220 @@ function run(settings){
                 }
             })
         }
+    }
+    //===== ポストフォームのポップオーバー: run() スコープの処理 =====
+    //ポストフォーム (https://x.com/intent/tweet の iframe) を、サイドバーの投稿ボタンの横に出す非モーダルの浮動パネル (ポップオーバー) で開閉する
+    //#opd_main_element の末尾に #opd_post_form_popover (class "opd_post_form_popover" role="dialog" aria-labelledby) を 1 つだけ生成する。中身は見出しと閉じるボタンを並べたバーと、iframe に読み込み中の skeleton を重ねる枠
+    //非モーダルなので開いているあいだも背景 (カラム・サイドバー) を操作でき、背景の inert もフォーカストラップも行わない
+    //閉じるときは iframe を破棄せず隠すだけなので、書きかけの下書きは開き直しても残り、2 回目以降は読み込み待ちが無い。保持されるのは開閉のあいだだけで、プロファイル切替 (#opd_main_element の作り直し) やページ再読み込みでは失われる
+    //閉じる経路は 閉じるボタン / Esc / 開閉ボタンの再押下 / X の composer が閉じたことの検知 の 4 つ
+    //Esc はポップオーバーの iframe 内と本体 UI (document) の 2 か所で受け取るため、他のカラムの iframe 内で押した Esc は届かない。X が Esc を処理した (preventDefault した) 場合はそちらを優先する
+    //モーダルダイアログ (#opd_main_element 直下の .opd_dialog_overlay) が開いているあいだは新たに開かず、モーダルが背景に付けた inert がポップオーバーに乗っているあいだは Esc を無視しフォーカスも奪わない
+    //composer が閉じたこと (投稿完了・下書き保存・破棄) は、page world の文章校正ヘルパーが送る window の opd_post_composer_closed (detail は JSON 文字列) で受け取る。iframe の documentElement に付けた data-opd-post-form-token と一致する通知だけを自分宛てとして扱う
+    //ポップオーバー内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない (カラムを一括走査するセレクタに拾われるため)。置き場所も #main_rack_element の外にする
+    //生成済みのポップオーバー。初回に開いたときに作り、以後は表示・非表示を切り替えて使い回す
+    let post_form_popover = null;
+    //ポップオーバーを開いた要素。位置合わせの基準とフォーカスの戻し先に使う
+    let post_form_opener = null;
+    //composer 閉通知の送信元を照合する値。ポップオーバーの生成時に作る
+    let post_form_token = null;
+    //初期化済みの iframe の Document
+    const post_form_prepared_documents = new WeakSet();
+    //ポップオーバーが表示されているか
+    function is_post_form_popover_open(){
+        return post_form_popover !== null && post_form_popover.isConnected && !post_form_popover.hidden;
+    }
+    //開いているあいだだけ登録するリスナーを外す
+    function remove_post_form_popover_listeners(){
+        document.removeEventListener("keydown", on_post_form_document_keydown);
+        window.removeEventListener("resize", on_post_form_window_resize);
+        window.removeEventListener("opd_post_composer_closed", on_post_form_composer_closed);
+    }
+    //プロファイル切替などでポップオーバーが親ごと外された場合は、リスナーを外して以降の処理を止める
+    function is_post_form_popover_detached(){
+        if(post_form_popover !== null && post_form_popover.isConnected) return false;
+        remove_post_form_popover_listeners();
+        return true;
+    }
+    //本体 UI にフォーカスがあるときの Esc で閉じる。モーダルダイアログの inert が乗っているあいだは何もしない
+    function on_post_form_document_keydown(event){
+        if(is_post_form_popover_detached()) return;
+        if(event.key !== "Escape" || event.defaultPrevented) return;
+        if(post_form_popover.hasAttribute("inert")) return;
+        event.preventDefault();
+        close_post_form_popover();
+    }
+    //ウィンドウの大きさが変わっても開閉ボタンの横に留める
+    function on_post_form_window_resize(){
+        if(is_post_form_popover_detached()) return;
+        position_post_form_popover();
+    }
+    //composer が閉じた通知。自分が開いた iframe からのもの (token が一致するもの) だけで閉じる
+    function on_post_form_composer_closed(event){
+        if(is_post_form_popover_detached()) return;
+        let detail = null;
+        try{
+            detail = JSON.parse(event.detail);
+        }catch(e){
+            //読めない通知は送信元を照合できないため無視する
+            return;
+        }
+        if(detail?.token !== post_form_token) return;
+        close_post_form_popover();
+    }
+    //ポップオーバーの iframe 内で押した Esc で閉じる。X の画面が Esc を処理した場合はそちらを優先するため、伝播が終わってから defaultPrevented を見る (この場では preventDefault しない)
+    function on_post_form_frame_keydown(event){
+        if(event.key !== "Escape") return;
+        setTimeout(function(){
+            if(event.defaultPrevented) return;
+            if(!is_post_form_popover_open()) return;
+            if(post_form_popover.hasAttribute("inert")) return;
+            close_post_form_popover();
+        }, 0);
+    }
+    //iframe 内 head に属性つきの style 要素を用意する (無ければ作る)
+    function ensure_post_form_frame_style(frame_head, style_attribute){
+        let style_element = frame_head.querySelector(`style[${style_attribute}]`);
+        if(style_element === null){
+            frame_head.insertAdjacentHTML("beforeend", `<style ${style_attribute}></style>`);
+            style_element = frame_head.querySelector(`style[${style_attribute}]`);
+        }
+        return style_element;
+    }
+    //ポストフォームの iframe の Document を初期化する (Document ごとに 1 回)
+    //中身を読めない場合は何もしない (次回の load でやり直す)
+    //各処理は個別に try/catch し、1 つが失敗しても残りを止めない
+    function prepare_post_form_frame_document(frame){
+        let frame_document = null;
+        try{
+            frame_document = frame.contentWindow?.document ?? null;
+        }catch(e){
+            //別オリジンなどで中身を読めない場合は次回の load でやり直す
+            return;
+        }
+        if(frame_document === null) return;
+        //src を入れる前の初期 Document (about:blank) の load は対象外にし、X の画面を読み込み終えるまで skeleton を残す
+        if(frame_document.location?.href === "about:blank") return;
+        if(post_form_prepared_documents.has(frame_document)) return;
+        post_form_prepared_documents.add(frame_document);
+        //読み込みが終わったので skeleton を外す
+        try{
+            const frame_skeleton = post_form_popover?.querySelector(".opd_post_form_frame_skeleton") ?? null;
+            if(frame_skeleton !== null) frame_skeleton.hidden = true;
+        }catch(e){
+            console.warn("post form: skeleton を外せませんでした->", e);
+        }
+        //バナーとトップを隠し、スクロールバーを細くする
+        try{
+            const frame_head = frame_document.head;
+            if(frame_head){
+                ensure_post_form_frame_style(frame_head, "opd_main_css").textContent = `html{scrollbar-width:thin;}`;
+                ensure_post_form_frame_style(frame_head, "opd_banner_css").textContent = COLUMN_IFRAME_CSS.banner_hidden;
+                ensure_post_form_frame_style(frame_head, "opd_top_visible_css").textContent = COLUMN_IFRAME_CSS.top_hidden;
+            }
+        }catch(e){
+            console.warn("post form: iframe の style を用意できませんでした->", e);
+        }
+        //page world のヘルパーが composer 閉通知に載せる照合用の値を渡す
+        try{
+            frame_document.documentElement.setAttribute("data-opd-post-form-token", post_form_token);
+        }catch(e){
+            console.warn("post form: token を渡せませんでした->", e);
+        }
+        try{
+            frame_document.addEventListener("keydown", on_post_form_frame_keydown);
+        }catch(e){
+            console.warn("post form: iframe の keydown を登録できませんでした->", e);
+        }
+        try{
+            new OpdUtils().Init(frame);
+        }catch(e){
+            console.warn("post form: OpdUtils を初期化できませんでした->", e);
+        }
+        try{
+            //UITexts は ja と en の 2 言語しか無いため、UI 言語をどちらかに寄せる
+            const ui_lang = chrome.i18n.getUILanguage().startsWith("ja") ? "ja" : "en";
+            new OpdExtTextReview().Init(frame, ui_icon_define, ui_lang);
+        }catch(e){
+            console.warn("post form: OpdExtTextReview を初期化できませんでした->", e);
+        }
+    }
+    //ポストフォームのポップオーバーを開く。opener_element: 開いた要素 (位置合わせの基準とフォーカスの戻し先)
+    function open_post_form_popover(opener_element){
+        const main_element = document.getElementById("opd_main_element");
+        if(main_element === null) return;
+        //モーダルダイアログを開いているあいだは背景を操作できないため、ポップオーバーも開かない
+        if(document.querySelector("#opd_main_element > .opd_dialog_overlay") !== null) return;
+        //既に表示中なら二重に生成せず、ポストフォームへフォーカスを移す
+        if(is_post_form_popover_open()){
+            post_form_popover.querySelector(".opd_post_form_frame")?.focus?.();
+            return;
+        }
+        if(post_form_popover === null || !post_form_popover.isConnected){
+            post_form_token = create_random_id();
+            const popover = document.createElement("div");
+            popover.id = "opd_post_form_popover";
+            popover.className = "opd_post_form_popover";
+            popover.setAttribute("role", "dialog");
+            popover.setAttribute("aria-labelledby", "opd_post_form_title");
+            popover.hidden = true;
+            popover.innerHTML = `<div class="opd_post_form_bar">
+            <h2 class="opd_post_form_title" id="opd_post_form_title">${i18n_message("ui_post_form_header")}</h2>
+            <button type="button" class="dsp_column_close_btn opd_ui_icon_color opd_post_form_close_btn" title="${i18n_message("ui_post_form_close_button")}" aria-label="${i18n_message("ui_post_form_close_button")}"></button>
+            </div>
+            <div class="opd_post_form_frame_wrap">
+            <iframe class="opd_post_form_frame" title="${i18n_message("ui_post_form_frame_title")}" allow="fullscreen"></iframe>
+            <div class="opd_post_form_frame_skeleton opd_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+            </div>`;
+            main_element.appendChild(popover);
+            post_form_popover = popover;
+            const new_frame = popover.querySelector(".opd_post_form_frame");
+            popover.querySelector(".opd_post_form_close_btn").addEventListener("click", function(){
+                close_post_form_popover();
+            });
+            new_frame.addEventListener("load", function(){
+                prepare_post_form_frame_document(new_frame);
+            });
+            //読み込みに失敗したときは読み込み直す
+            watch_load_column([new_frame]);
+            new_frame.src = "https://x.com/intent/tweet";
+            popover.querySelector(".opd_post_form_frame_skeleton").hidden = false;
+        }
+        post_form_popover.hidden = false;
+        post_form_opener = opener_element ?? null;
+        post_form_opener?.setAttribute?.("aria-expanded", "true");
+        position_post_form_popover();
+        document.addEventListener("keydown", on_post_form_document_keydown);
+        window.addEventListener("resize", on_post_form_window_resize);
+        window.addEventListener("opd_post_composer_closed", on_post_form_composer_closed);
+        post_form_popover.querySelector(".opd_post_form_frame")?.focus?.();
+    }
+    //ポップオーバーを閉じる。iframe は破棄せず隠すだけなので書きかけの下書きは残る
+    //フォーカスを戻すのを先にするのは、隠した後では iframe 内の focusout (テキストフォーカス解除の通知) が発火しないことがあるため。モーダルダイアログの inert が乗っているあいだはモーダルからフォーカスを奪わない
+    //テキストフォーカスの解除は通知に頼らず明示的に行い、自動更新の停止フラグが残らないようにする
+    function close_post_form_popover(){
+        if(!is_post_form_popover_open()) return;
+        if(!post_form_popover.hasAttribute("inert")) post_form_opener?.focus?.();
+        set_text_focus_state(false);
+        post_form_popover.hidden = true;
+        post_form_opener?.setAttribute?.("aria-expanded", "false");
+        remove_post_form_popover_listeners();
+    }
+    //開閉ボタンの操作で表示と非表示を切り替える。opener_element: 開いた要素 (位置合わせの基準とフォーカスの戻し先)
+    function toggle_post_form_popover(opener_element){
+        if(is_post_form_popover_open()){
+            close_post_form_popover();
+            return;
+        }
+        open_post_form_popover(opener_element);
+    }
+    //ポップオーバーの上端を開いた要素の上端に合わせる。下端が画面からはみ出す場合は収まる位置まで上げ、上端は画面の上端から余白の分より上へは出さない (左端は CSS で固定)
+    function position_post_form_popover(){
+        if(post_form_popover === null || post_form_opener === null) return;
+        const screen_margin = 8;
+        const opener_top = post_form_opener.getBoundingClientRect().top;
+        const max_top = window.innerHeight - post_form_popover.offsetHeight - screen_margin;
+        post_form_popover.style.top = `${Math.max(screen_margin, Math.min(opener_top, max_top))}px`;
     }
     //===== 全体設定: run() スコープの処理 (global_settings / column_settings_save / last_load_profile / profile_store を参照する) =====
     //全体設定の適用対象カラム (post / home / notification / explore) を返す。構造用カラムは含めない
