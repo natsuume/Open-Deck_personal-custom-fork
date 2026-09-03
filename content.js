@@ -124,8 +124,11 @@ if(location.href == "https://twitter.com/run-opdeck" || location.href == "https:
     function init(){
         //console.log("Welcome to Open-Deck!");
         chrome.storage.local.get("opd_settings", function(value){
+            //初回起動 (設定が無い) は settings_init が既定の設定とプロファイルを書き込んでページを再読み込みするため、この起動ではプロファイルを読まない
+            let is_first_time_init = false;
             if(value.opd_settings == undefined){
                 last_load_profile = 0;
+                is_first_time_init = true;
                 settings_init();
             }else{
                 if(JSON.parse(value.opd_settings).last_load_profile == undefined){
@@ -142,6 +145,7 @@ if(location.href == "https://twitter.com/run-opdeck" || location.href == "https:
                 //console.log(last_load_profile);
             }
             
+            if(is_first_time_init) return;
             chrome.storage.local.get("opd_profile_store", function(store_value){
                 //console.log(store_value)
                 //console.log(JSON.parse(store_value.opd_profile_store))
@@ -2694,13 +2698,11 @@ function run(settings){
             const is_time_locked = is_time_inherit || is_auto_reload_on;
             reload_time_input.readOnly = is_time_locked;
             reload_time_input.setAttribute("aria-disabled", String(is_time_locked));
-            if(is_time_inherit){
-                reload_time_input.title = i18n_message("ui_settings_inherit_input_title");
-            }else if(is_auto_reload_on){
-                reload_time_input.title = i18n_message("ui_settings_auto_reload_interval_locked_title");
-            }else{
-                reload_time_input.title = "";
-            }
+            //ロックの理由ごとの解除条件を列挙する (両方でロックされていれば両方を示す)
+            const lock_reasons = [];
+            if(is_time_inherit) lock_reasons.push(i18n_message("ui_settings_inherit_input_title"));
+            if(is_auto_reload_on) lock_reasons.push(i18n_message("ui_settings_auto_reload_interval_locked_title"));
+            reload_time_input.title = lock_reasons.join("\n");
         }
         reconcile_column_pinned(column_div);
         apply_column_auto_reload(column_div);
