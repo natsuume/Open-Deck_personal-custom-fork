@@ -622,6 +622,12 @@ function run(settings){
     }
     /*リストカラム複数追加ダイアログ*/
     .opd_list_picker_overlay{
+        --opd-list-picker-accent: #1d9bf0;
+        --opd-list-picker-accent-text: #ffffff;
+        --opd-list-picker-accent-background: rgba(29, 155, 240, 0.15);
+        --opd-list-picker-surface: #ffffff;
+        --opd-list-picker-skeleton: #bdbdbd;
+        --opd-list-picker-muted-text: #555555;
         position: fixed;
         inset: 0;
         z-index: 1000;
@@ -630,70 +636,166 @@ function run(settings){
         justify-content: center;
         background: rgba(0, 0, 0, 0.5);
     }
-    .opd_list_picker_probe{
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 40rem;
-        max-width: 100%;
-        height: 100%;
-        opacity: 0;
-        pointer-events: none;
-        border: 0;
-    }
     .opd_list_picker_dialog{
         position: relative;
         z-index: 1;
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
-        width: 40rem;
-        max-width: 90%;
-        max-height: 90%;
+        width: 72rem;
+        max-width: 95%;
+        max-height: 92%;
+        box-sizing: border-box;
         overflow-y: auto;
         padding: 1rem;
         background: #efefefeb;
         border: 1px solid #a9a9a9eb;
         color: black;
     }
-    .opd_list_picker_status{
+    .opd_list_picker_body{
+        display: flex;
+        flex-direction: row;
+        gap: 1rem;
+        min-height: 0;
+    }
+    .opd_list_picker_browse{
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        flex: 3 1 0;
+        min-width: 0;
+    }
+    .opd_list_picker_selection{
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        flex: 2 1 0;
+        min-width: 0;
+    }
+    .opd_list_picker_status,
+    .opd_list_picker_selection_status{
         min-height: 1.5rem;
         font-size: 0.9rem;
     }
-    .opd_list_picker_results{
+    .opd_list_picker_frame_wrap{
+        position: relative;
+        height: clamp(12rem, 55vh, 34rem);
+        background: var(--opd-list-picker-surface);
+        border-radius: 5px;
+        overflow: hidden;
+    }
+    .opd_list_picker_frame{
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+    }
+    .opd_list_picker_frame_skeleton{
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        padding: 0.8rem;
+        box-sizing: border-box;
+        background: var(--opd-list-picker-surface);
+    }
+    .opd_list_picker_frame_skeleton span{
+        display: block;
+        height: 3rem;
+        border-radius: 4px;
+        background: var(--opd-list-picker-skeleton);
+    }
+    .opd_list_picker_selection_hint{
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--opd-list-picker-muted-text);
+    }
+    .opd_list_picker_selected_wrap{
+        position: relative;
+        flex: 1 1 auto;
         min-height: 10rem;
-        height: 20rem;
         overflow-y: auto;
-        padding: 0.5rem;
-        background: white;
+        background: var(--opd-list-picker-surface);
         border-radius: 5px;
     }
-    .opd_list_picker_results label{
-        display: block;
+    .opd_list_picker_selected{
+        list-style: none;
+        margin: 0;
+        padding: 0.4rem;
+    }
+    .opd_list_picker_selected_item{
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.3rem 0.4rem;
+        border-top: 2px solid transparent;
+        border-bottom: 2px solid transparent;
+        border-radius: 4px;
+        cursor: grab;
+    }
+    .opd_list_picker_selected_item:focus-visible{
+        outline: 2px solid var(--opd-list-picker-accent);
+        outline-offset: -2px;
+    }
+    .opd_list_picker_selected_item.opd_list_picker_dragging{
+        opacity: 0.5;
+    }
+    .opd_list_picker_selected_item.opd_list_picker_drop_before{
+        border-top-color: var(--opd-list-picker-accent);
+    }
+    .opd_list_picker_selected_item.opd_list_picker_drop_after{
+        border-bottom-color: var(--opd-list-picker-accent);
+    }
+    .opd_list_picker_drag_handle{
+        color: var(--opd-list-picker-muted-text);
+        user-select: none;
+    }
+    .opd_list_picker_order{
+        min-width: 1.8rem;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    .opd_list_picker_selected_name{
+        flex: 1 1 auto;
+        min-width: 0;
         overflow-wrap: anywhere;
     }
-    .opd_list_picker_skeleton{
-        height: 1.2rem;
-        margin: 0.4rem 0;
-        border-radius: 4px;
-        background: #bdbdbd;
+    .opd_list_picker_remove_btn{
+        flex: none;
     }
-    .opd_list_picker_group{
-        margin-bottom: 0.5rem;
+    .opd_list_picker_empty{
+        margin: 0;
+        padding: 0.8rem;
+        color: var(--opd-list-picker-muted-text);
+    }
+    .opd_list_picker_manual_row{
+        display: flex;
+        align-items: flex-start;
+        gap: 0.4rem;
     }
     .opd_list_picker_manual{
-        width: 100%;
-        min-height: 5rem;
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 3rem;
         box-sizing: border-box;
     }
     .opd_list_picker_count{
-        min-height: 2.6rem;
+        min-height: 1.5rem;
     }
     .opd_list_picker_actions{
         display: flex;
         flex-direction: row;
         justify-content: flex-end;
         gap: 0.5rem;
+    }
+    @media (max-width: 60rem){
+        .opd_list_picker_body{
+            flex-direction: column;
+        }
+        .opd_list_picker_selected_wrap{
+            height: 16rem;
+        }
     }
     .opd_ui_icon_color{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
@@ -785,18 +887,16 @@ function run(settings){
             filter: brightness(0.7);
         }
 
+        & .opd_list_picker_overlay {
+            --opd-list-picker-surface: #474747;
+            --opd-list-picker-skeleton: #7a7a7a;
+            --opd-list-picker-muted-text: #c0c0c0;
+        }
+
         & .opd_list_picker_dialog {
             background: #2e2e2e;
             border: 1px solid #5d5d5d;
             color: white;
-        }
-
-        & .opd_list_picker_results {
-            background: #474747;
-        }
-
-        & .opd_list_picker_skeleton {
-            background: #7a7a7a;
         }
     }
 
@@ -1758,18 +1858,26 @@ function run(settings){
     }
     //リストカラム複数追加の選択ダイアログを開く
     //insert_first: 追加するカラムを末尾ではなく先頭に入れる場合は true、opener_element: ダイアログを閉じたときにフォーカスを戻す要素
-    //#opd_main_element の直下にオーバーレイ #opd_list_picker_overlay を1つだけ生成する(既に開いている場合は生成しない)。オーバーレイは次の要素を持つ:
-    //  ・role="dialog" aria-modal="true" のダイアログ本体
-    //  ・リスト列挙用の非表示 iframe(リストが描画されるだけの画面内サイズを持ち、opacity 0・pointer-events none で操作対象から外す)。iframe 内の listCell には page world ヘルパー(extensions/list_picker_helper.js)がリスト ID を属性として付与する
-    //  ・リスト一覧を取得するユーザー名の入力欄と取得ボタン
-    //  ・取得状態の表示(loading / partial / some_unresolved / not_detected / error / login_required)
-    //  ・検出したリストのチェックボックス一覧と、全て選択・選択解除のボタン
-    //  ・追加するリストの URL か ID を1行1件で入力する textarea
-    //  ・追加するカラム件数の表示と、追加ボタン・キャンセルボタン
-    //Esc キー・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe を破棄して opener_element にフォーカスを戻す
+    //#opd_main_element の直下にオーバーレイ #opd_list_picker_overlay を1つだけ生成する(既に開いている場合は生成しない)。オーバーレイは role="dialog" aria-modal="true" のダイアログ本体を持ち、ダイアログは閲覧領域・選択領域・操作ボタンで構成する:
+    //  閲覧領域:
+    //  ・リスト一覧を表示するユーザー名の入力欄と表示ボタン
+    //  ・表示状態の表示(loading / not_detected / error / login_required / cell_unresolved)
+    //  ・X のリスト一覧ページ(https://x.com/<screen_name>/lists)を表示する iframe。ページ内の左ナビ(header[role="banner"])は隠し、それ以外は X の画面のまま表示する
+    //    [data-testid="primaryColumn"] 配下の listCell へのクリック(左・中・右)と Enter / Space はキャプチャ段階で止めてページ遷移させず、左クリックと Enter / Space はそのリストの選択を切り替える
+    //    リスト ID の解決は page world ヘルパー(extensions/list_picker_helper.js)が付ける属性と resolve_list_cell_info で行い、ID を決められないセルを選んだときは状態表示で手動入力を案内する
+    //    選択中の listCell には data-opd-list-picker-order 属性(1 始まりの追加順)を付け、iframe に注入した style で枠と順番の数字を重ねる。X の仮想リストでセルが入れ替わるため、属性の付け直しは定期的(400ms)に行う
+    //    読み込み中は iframe の上に skeleton を重ね、listCell が描画されたら外す。制限時間(15秒)内に描画されなければ skeleton を外して not_detected を表示する
+    //    対象ページを表示した後に別のパスへ遷移した場合は対象 URL を読み込み直す(2回を超えて繰り返す場合は error を表示して読み込みを止める)。ログイン画面へ飛ばされた場合は読み込みを止めて login_required を表示する
+    //  ・表示中のリストを全て選択するボタン(そのとき ID を決められている listCell を文書順に、未選択のものだけ選択の末尾へ追加する)
+    //  選択領域:
+    //  ・追加するカラムの順序付き一覧(ol)。項目は追加した順に並び、この並び順のままカラムを追加する。項目のドラッグ&ドロップ(項目の上半分に落とすとその前、下半分に落とすとその後ろ、項目以外の場所に落とすと末尾)と、項目にフォーカスした状態の Alt+↑ / Alt+↓ で1段ずつ並べ替え、各項目の除外ボタンで外せる。並べ替えの結果は選択領域の状態表示(role="status")で知らせる
+    //  ・URL か ID の入力欄(textarea)と追加ボタン。1 行 1 件として解釈し、解釈できた行を一覧の末尾へ追加する(既にある項目は追加しない)。解釈できない行は alert で知らせて入力欄に残し、入力欄へフォーカスを戻す。Enter で追加、Shift+Enter で改行
+    //  ・追加するカラム件数の表示と選択解除ボタン
+    //  操作ボタン: 追加ボタン・キャンセルボタン。追加時に入力欄へ未追加の文字列が残っていれば先に追加を試み、解釈できない行があれば追加を中止する
+    //Esc キー(iframe 内で押した場合を含む)・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe の内容を破棄して opener_element にフォーカスを戻す
     //開いているあいだは overlay 以外の #opd_main_element の子要素を inert にして背景を操作対象から外し、閉じるときに解除する(元から inert が付いていた要素は触らない)
-    //取得をやり直したときはチェック済みのエントリを「選択済み」セクションとして残し、完了・打ち切りの判定には今回の列挙で検出した件数と未解決の listCell 数を使う
-    //追加時はチェックしたリストのパスと手動入力から解釈したパスを結合し、重複を除去して add_explore_columns に渡す
+    //Tab はダイアログ内のフォーカス可能要素(iframe を含む)を循環させる。iframe 内では X の画面のフォーカス移動に任せる
+    //追加時は一覧の並び順のままパスを add_explore_columns に渡す
     //ダイアログ内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない(カラムを一括走査するセレクタに拾われるため)
     function open_list_picker_dialog(insert_first, opener_element){
         const main_element = document.getElementById("opd_main_element");
