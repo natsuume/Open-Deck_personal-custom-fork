@@ -3156,8 +3156,8 @@ function set_title_favicon(){
 //実効値 = カラム値 ?? global_settings 値。
 //単位は column_width が rem、auto_reload_time が ms で統一し、UI の入力欄だけ秒 (ms / 1000) で扱う。
 //
-//DOM 表現: カラム div (div[opd_column_type]) の属性に個別値を保持する。
-//  opd_column_width                "inherit" | rem 数値文字列
+//DOM 表現: カラム div (div[opd_column_type]) の属性に個別値を保持する。属性が無い項目 (そのカラム種別に適用されない項目) は inherit と同じく null として読む。
+//  opd_column_width                "inherit" | rem 数値文字列 (テンプレートでは属性用 %column_width_attr% と style 用 %column_width_num% (実効 rem) を別の値で埋める)
 //  opd_setting_banner              "inherit" | "true" | "false"
 //  opd_setting_top_visible         "inherit" | "true" | "false"
 //  opd_setting_tw_view_mode        "inherit" | "0" | "1" | "2"
@@ -3180,7 +3180,7 @@ function set_title_favicon(){
 //  bind_column_events(column_div)        パネル・バーのイベント登録 (data-opd_settings_initialized で二重登録を防ぐ)
 //  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・バーのチェック状態・パネル表示・ピン止め reconcile・自動更新 interval)
 //  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード)。iframe の load ごとに実行し、head 未生成時は何もしない
-//カラム追加時は挿入直後に bind_column_events と apply_column_dom_state を同期で呼んでから column_settings_save する。
+//起動時 (run() の初期化でプロファイルからカラムを組み立てたとき) とカラム追加時は、挿入直後に bind_column_events と apply_column_dom_state を同期で呼ぶ (追加時はその後 column_settings_save する)。
 //全体設定の変更時は、その項目が inherit の全カラムに対して apply_column_dom_state と apply_column_iframe_styles を呼び直す。
 const SETTINGS_SCHEMA_VERSION = 2;
 const GLOBAL_SETTINGS_DEFAULT = Object.freeze({
@@ -3230,7 +3230,8 @@ function clone_global_settings(global_settings){
     }
     return cloned;
 }
-//カラム div の属性から項目 key の個別値を読む。"inherit" なら null、それ以外は保存形式と同じ型に変換する
+//カラム div の属性から項目 key の個別値を読む。属性が無い・"inherit" なら null、それ以外は保存形式と同じ型に変換する
+//(真偽値は "true" のとき true、数値は Number()、表示モードは文字列のまま。変換結果が不正 (NaN 等) なら null)
 function read_column_setting(column_div, key){
     return null;
 }
