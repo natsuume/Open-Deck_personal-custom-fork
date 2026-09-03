@@ -2482,7 +2482,7 @@ function run(settings){
     //  select / 入力の change: 対応する属性を更新 → apply_column_dom_state → (iframe 項目なら) apply_column_iframe_styles → column_settings_save
     //  バーのトグル (.opd_banner / .opd_top_bar) click: 属性 = String(!実効値) → 同上
     //  バーのピン止め (.opd_pinned_btn) click: 既存の confirm を経て opd_setting_pinned = String(!実効値) → reconcile_column_pinned → apply_column_dom_state → column_settings_save
-    //  カスタム幅ボタン: prompt で rem を受け取り、COLUMN_WIDTH_MIN_REM 以上なら opd_column_width に明示値を設定
+    //  カスタム幅ボタン: prompt で rem を受け取り、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM の範囲なら opd_column_width に明示値を設定
     function bind_column_events(column_div){
         if(column_div == null) return;
         if(column_div.dataset.opd_settings_initialized === "1") return;
@@ -2556,7 +2556,7 @@ function run(settings){
             const setting_width = prompt(i18n_message("msg_column_width_prompt"), now_width);
             if(setting_width === null) return;
             const setting_width_num = Number(setting_width);
-            if(!Number.isFinite(setting_width_num) || setting_width_num < COLUMN_WIDTH_MIN_REM){
+            if(!Number.isFinite(setting_width_num) || setting_width_num < COLUMN_WIDTH_MIN_REM || setting_width_num > COLUMN_WIDTH_MAX_REM){
                 alert(i18n_message("msg_invalid_value_alert"));
                 return;
             }
@@ -2754,18 +2754,21 @@ function run(settings){
         const pinned_checkbox = column_div.querySelector(".opd_pinned_btn");
         if(pinned_checkbox !== null) pinned_checkbox.checked = is_pinned;
     }
-    //自動更新 interval を冪等に再構成する: 既存の interval (iframe 要素の opd_auto_reload_interval_id) を必ず clear し、実効 auto_reload が true なら実効 auto_reload_time (ms) で作り直す
+    //自動更新 interval を冪等に再構成する: 実効 auto_reload と実効 auto_reload_time (ms) が動作中の interval (iframe 要素の opd_auto_reload_interval_id / opd_auto_reload_interval_ms) と同じなら何もせずカウントダウンを維持し、
+    //異なるときだけ既存の interval を clear して作り直す (実効 auto_reload が false なら止めるだけ)
     //interval は毎回、iframe が /home・/search・/i/lists 配下のいずれかを表示していることを確かめ、iframe にマウスが乗っている (auto_reload_mouse_hover が "false" 以外) あいだは何もしない。
     //is_auto_update() がカラム全体の自動更新を許可していれば OpdExtAutoReload の Reload を呼び、その 100ms 後に iframe を先頭までスクロールする
     function apply_column_auto_reload(column_div){
-        stop_column_auto_reload(column_div);
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
         //自動更新の対象は home / explore カラムのみ
         const column_type = column_div.getAttribute("opd_column_type");
-        if(column_type !== "home" && column_type !== "explore") return;
-        if(effective_column_setting(column_div, "auto_reload", global_settings) !== true) return;
-        const auto_reload_time = effective_column_setting(column_div, "auto_reload_time", global_settings);
+        const is_enabled = (column_type === "home" || column_type === "explore") && effective_column_setting(column_div, "auto_reload", global_settings) === true;
+        const auto_reload_time = is_enabled ? effective_column_setting(column_div, "auto_reload_time", global_settings) : null;
+        if(is_enabled && column_frame.opd_auto_reload_interval_id != null && column_frame.opd_auto_reload_interval_ms === auto_reload_time) return;
+        stop_column_auto_reload(column_div);
+        if(!is_enabled) return;
+        column_frame.opd_auto_reload_interval_ms = auto_reload_time;
         column_frame.opd_auto_reload_interval_id = setInterval(function(){
             const frame_window = column_frame.contentWindow;
             if(frame_window == null) return;
@@ -2793,6 +2796,7 @@ function run(settings){
         if(column_frame.opd_auto_reload_interval_id == null) return;
         clearInterval(column_frame.opd_auto_reload_interval_id);
         column_frame.opd_auto_reload_interval_id = null;
+        column_frame.opd_auto_reload_interval_ms = null;
     }
     //全体設定の変更を全カラムへ反映する: 適用表の対象カラム (post / home / notification / explore) それぞれに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
     //構造用カラム (main_bar_empty_column / empty_column / second_empty_column / dsp_column) には触れない
@@ -2806,7 +2810,7 @@ function run(settings){
     //全体設定ダイアログを開く。opener_element: 閉じたときにフォーカスを戻す要素
     //#opd_main_element の直下にオーバーレイ #opd_global_settings_overlay (class "opd_dialog_overlay opd_global_settings_overlay") を 1 つだけ生成する (既に開いていればそこへフォーカスを移す)
     //ダイアログ本体は role="dialog" aria-modal="true" aria-labelledby で、次のフォームを持つ:
-    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 以上) / 自動更新 checkbox / 自動更新間隔 number (秒、AUTO_RELOAD_TIME_MIN_MS 〜 AUTO_RELOAD_TIME_MAX_MS を秒に直した範囲)
+    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM) / 自動更新 checkbox / 自動更新間隔 number (秒、AUTO_RELOAD_TIME_MIN_MS 〜 AUTO_RELOAD_TIME_MAX_MS を秒に直した範囲)
     //  status 領域 (id 付き、role="status" aria-live="polite"、高さを予約) と 適用 / キャンセル ボタン
     //適用: 検証に失敗したら status 領域へ msg_global_settings_invalid_width / msg_global_settings_invalid_interval を表示し、該当欄へ aria-invalid と status 領域を指す aria-describedby を付けてフォーカスし、閉じない
     //      成功したら該当欄の aria-invalid / aria-describedby を外し、global_settings を更新 → apply_global_settings_to_columns → 閉じる
@@ -2834,7 +2838,7 @@ function run(settings){
         <div class="opd_global_settings_row"><label for="opd_global_settings_banner">${i18n_message("ui_global_settings_banner_label")}</label><input class="opd_global_settings_banner" id="opd_global_settings_banner" type="checkbox"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_top_visible">${i18n_message("ui_global_settings_top_label")}</label><input class="opd_global_settings_top_visible" id="opd_global_settings_top_visible" type="checkbox"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_view_mode">${i18n_message("ui_settings_view_mode_label")}</label><select class="opd_global_settings_view_mode" id="opd_global_settings_view_mode"><option value="0">${i18n_message("ui_settings_view_mode_all")}</option><option value="1">${i18n_message("ui_settings_view_mode_text_only")}</option><option value="2">${i18n_message("ui_settings_view_mode_media_only")}</option></select></div>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_column_width">${i18n_message("ui_global_settings_column_width_rem_label")}</label><input class="opd_global_settings_column_width opd_column_settings_input_text" id="opd_global_settings_column_width" type="number" min="${COLUMN_WIDTH_MIN_REM}"></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_column_width">${i18n_message("ui_global_settings_column_width_rem_label")}</label><input class="opd_global_settings_column_width opd_column_settings_input_text" id="opd_global_settings_column_width" type="number" min="${COLUMN_WIDTH_MIN_REM}" max="${COLUMN_WIDTH_MAX_REM}"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload">${i18n_message("ui_settings_auto_reload_label")}</label><input class="opd_global_settings_auto_reload" id="opd_global_settings_auto_reload" type="checkbox"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload_time">${i18n_message("ui_settings_auto_reload_interval_label")}</label><span><input class="opd_global_settings_auto_reload_time opd_column_settings_input_text" id="opd_global_settings_auto_reload_time" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}">${i18n_message("ui_settings_seconds_suffix")}</span></div>
         <div class="opd_global_settings_status" id="opd_global_settings_status" role="status" aria-live="polite"></div>
@@ -2896,7 +2900,7 @@ function run(settings){
         //入力を検証して全体設定を更新し、全カラムへ反映する
         function apply_global_settings(){
             const column_width_value = Number(column_width_input.value);
-            const is_width_invalid = column_width_input.value.trim() === "" || !Number.isFinite(column_width_value) || column_width_value < COLUMN_WIDTH_MIN_REM;
+            const is_width_invalid = column_width_input.value.trim() === "" || !Number.isFinite(column_width_value) || column_width_value < COLUMN_WIDTH_MIN_REM || column_width_value > COLUMN_WIDTH_MAX_REM;
             mark_input_validity(column_width_input, is_width_invalid);
             if(is_width_invalid){
                 status_area.textContent = i18n_message("msg_global_settings_invalid_width");
@@ -3240,8 +3244,9 @@ const GLOBAL_SETTINGS_DEFAULT = Object.freeze({
     auto_reload_time: 10000,
     pinned: false,
 });
-//カラム幅の下限 (rem) と自動更新間隔の下限・上限 (ms、上限は 24 時間)
+//カラム幅の下限・上限 (rem) と自動更新間隔の下限・上限 (ms、上限は 24 時間)
 const COLUMN_WIDTH_MIN_REM = 12;
+const COLUMN_WIDTH_MAX_REM = 300;
 const AUTO_RELOAD_TIME_MIN_MS = 1000;
 const AUTO_RELOAD_TIME_MAX_MS = 86400000;
 //カラム側で全体設定に従える項目名と、その個別値を保持するカラム div の属性名
@@ -3264,7 +3269,7 @@ const COLUMN_IFRAME_CSS = Object.freeze({
 });
 //プロファイル保存形式を現在のスキーマへ正規化する。変更があれば true を返す (呼び出し側が保存する)
 //  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 7 項目を null、column_pinned_path を "" にリセットし、version を更新する
-//  現在のスキーマ: global_settings の欠損・型不正は既定値で補い、範囲外 (column_width < COLUMN_WIDTH_MIN_REM、auto_reload_time が AUTO_RELOAD_TIME_MIN_MS 未満または AUTO_RELOAD_TIME_MAX_MS 超過) も既定値へ戻す。
+//  現在のスキーマ: global_settings の欠損・型不正は既定値で補い、範囲外 (column_width が COLUMN_WIDTH_MIN_REM 未満または COLUMN_WIDTH_MAX_REM 超過、auto_reload_time が AUTO_RELOAD_TIME_MIN_MS 未満または AUTO_RELOAD_TIME_MAX_MS 超過) も既定値へ戻す。
 //               カラム側の型不正 (数値でない幅・真偽でない真偽値・"0"〜"2" 以外の表示モード) と範囲外 (下限未満・上限超過) は null にする。
 //               column_pinned_override が false なのに column_pinned_path が非空の場合はパスを "" に戻す
 //起動時 (init 内、run の前) に全プロファイルへ適用し、プロファイルローダーが保存した任意の JSON もここで吸収する
@@ -3292,7 +3297,7 @@ function normalize_profile_store(store){
         if(typeof normalized.banner !== "boolean") normalized.banner = GLOBAL_SETTINGS_DEFAULT.banner;
         if(typeof normalized.top_visible !== "boolean") normalized.top_visible = GLOBAL_SETTINGS_DEFAULT.top_visible;
         if(to_view_mode_or_null(normalized.tw_view_mode) === null) normalized.tw_view_mode = GLOBAL_SETTINGS_DEFAULT.tw_view_mode;
-        if(to_number_in_range_or_null(normalized.column_width, COLUMN_WIDTH_MIN_REM, Number.MAX_VALUE) === null) normalized.column_width = GLOBAL_SETTINGS_DEFAULT.column_width;
+        if(to_number_in_range_or_null(normalized.column_width, COLUMN_WIDTH_MIN_REM, COLUMN_WIDTH_MAX_REM) === null) normalized.column_width = GLOBAL_SETTINGS_DEFAULT.column_width;
         if(typeof normalized.auto_reload !== "boolean") normalized.auto_reload = GLOBAL_SETTINGS_DEFAULT.auto_reload;
         if(to_number_in_range_or_null(normalized.auto_reload_time, AUTO_RELOAD_TIME_MIN_MS, AUTO_RELOAD_TIME_MAX_MS) === null) normalized.auto_reload_time = GLOBAL_SETTINGS_DEFAULT.auto_reload_time;
         if(typeof normalized.pinned !== "boolean") normalized.pinned = GLOBAL_SETTINGS_DEFAULT.pinned;
@@ -3338,7 +3343,7 @@ function normalize_profile_store(store){
                 banner: to_boolean_or_null(column.banner),
                 top_visible: to_boolean_or_null(column.top_visible),
                 tw_view_mode: to_view_mode_or_null(column.tw_view_mode),
-                column_width: to_number_in_range_or_null(column.column_width, COLUMN_WIDTH_MIN_REM, Number.MAX_VALUE),
+                column_width: to_number_in_range_or_null(column.column_width, COLUMN_WIDTH_MIN_REM, COLUMN_WIDTH_MAX_REM),
                 auto_reload: to_boolean_or_null(column.auto_reload),
                 auto_reload_time: to_number_in_range_or_null(column.auto_reload_time, AUTO_RELOAD_TIME_MIN_MS, AUTO_RELOAD_TIME_MAX_MS),
                 column_pinned_override: to_boolean_or_null(column.column_pinned_override),
@@ -3372,7 +3377,7 @@ function clone_global_settings(global_settings){
 }
 //カラム div の属性から項目 key の個別値を読む。属性が無い・"inherit" なら null、それ以外は保存形式と同じ型に変換する
 //(真偽値は "true" のとき true、数値は Number()、表示モードは文字列のまま)
-//型不正 (NaN 等) と範囲外 (column_width が COLUMN_WIDTH_MIN_REM 未満、auto_reload_time が AUTO_RELOAD_TIME_MIN_MS 未満 / AUTO_RELOAD_TIME_MAX_MS 超過) も null にし、全体設定へ委ねる
+//型不正 (NaN 等) と範囲外 (column_width が COLUMN_WIDTH_MIN_REM 未満 / COLUMN_WIDTH_MAX_REM 超過、auto_reload_time が AUTO_RELOAD_TIME_MIN_MS 未満 / AUTO_RELOAD_TIME_MAX_MS 超過) も null にし、全体設定へ委ねる
 function read_column_setting(column_div, key){
     const attribute_name = COLUMN_INHERITABLE_SETTINGS[key];
     if(attribute_name === undefined) return null;
@@ -3385,7 +3390,7 @@ function read_column_setting(column_div, key){
         const number_value = Number(raw_value);
         if(!Number.isFinite(number_value)) return null;
         const min_value = key === "column_width" ? COLUMN_WIDTH_MIN_REM : AUTO_RELOAD_TIME_MIN_MS;
-        const max_value = key === "column_width" ? Number.MAX_VALUE : AUTO_RELOAD_TIME_MAX_MS;
+        const max_value = key === "column_width" ? COLUMN_WIDTH_MAX_REM : AUTO_RELOAD_TIME_MAX_MS;
         return (number_value < min_value || number_value > max_value) ? null : number_value;
     }
     if(raw_value === "true") return true;

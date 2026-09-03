@@ -396,7 +396,7 @@
     "message": "Unpinned"
   },
   "msg_global_settings_invalid_width": {
-    "message": "Enter a column width of 12 or more"
+    "message": "Enter a column width between 12 and 300"
   },
   "msg_global_settings_invalid_interval": {
     "message": "Enter an auto-load interval between 1 and 86400 seconds"
