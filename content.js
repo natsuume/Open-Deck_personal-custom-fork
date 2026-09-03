@@ -2826,7 +2826,7 @@ function run(settings){
     }
     //iframe 内 head に style 要素 (style[opd_banner_css] / style[opd_top_visible_css] / style[opd_tw_view_mode_css]) を用意し、実効値に応じて COLUMN_IFRAME_CSS の文字列を設定する
     //iframe の contentWindow.document.head が読めない (未生成・クロスオリジン) 場合は何もしない (次回 load で再適用される)
-    //post カラムには適用しない
+    //post カラムは設定に依らずバナーとトップを常に非表示 (banner_hidden / top_hidden) にし、表示モードは適用しない
     function apply_column_iframe_styles(column_div){
     }
     //ピン止めの不変条件「opd_pinned_path が非空 ⇔ 実効ピン止め」を保つ
@@ -2844,7 +2844,8 @@ function run(settings){
     //自動更新 interval を止める。カラムを閉じる・二段目を破棄する・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
     function stop_column_auto_reload(column_div){
     }
-    //全体設定の変更を全カラムへ反映する: 各カラムに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
+    //全体設定の変更を全カラムへ反映する: 適用表の対象カラム (post / home / notification / explore) それぞれに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
+    //構造用カラム (main_bar_empty_column / empty_column / second_empty_column / dsp_column) には触れない
     function apply_global_settings_to_columns(){
     }
     //全体設定ダイアログを開く。opener_element: 閉じたときにフォーカスを戻す要素
@@ -3167,11 +3168,11 @@ function set_title_favicon(){
 //カラムバーのトグル (.opd_banner / .opd_top_bar / .opd_pinned_btn) は実効状態を表示し、クリックで個別値 = !実効 を設定する。
 //カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
 //
-//項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / second_empty_column / dsp_column は対象外):
-//  項目            post  home  notification  explore(リスト含む)
-//  バナー表示       -     ○     ○             ○
-//  トップ表示       -     ○     ○             ○
-//  表示モード       -     ○     ○             ○
+//項目 × カラム種別の適用表 (○ = 適用対象、固定 = 設定行を出さず常に非表示の style を注入する。構造用カラム main_bar_empty_column / empty_column / second_empty_column / dsp_column は対象外):
+//  項目            post    home  notification  explore(リスト含む)
+//  バナー表示       固定    ○     ○             ○
+//  トップ表示       固定    ○     ○             ○
+//  表示モード       -       ○     ○             ○
 //  カラム幅         ○     ○     ○             ○
 //  自動更新/間隔    -     ○     -             ○
 //  ピン止め         -     -     -             ○
@@ -3475,7 +3476,7 @@ function watch_load_column(column_frames, max_retries = 5){
 }
 //設定初期化
 //初期設定の構築。既定プロファイルは settings_schema_version (= SETTINGS_SCHEMA_VERSION) と global_settings (= clone_global_settings()) を持ち、
-//各カラムの継承可能 7 項目と column_pinned_override は null (全体設定に従う) にする
+//各カラムの継承可能 7 項目と column_pinned_override は null (全体設定に従う) にする。ただし home カラムの banner だけは true の明示値にする (既定プロファイルの Home はバナー表示)
 function settings_init(){
     const profile_store_default =[{type:"main_bar_empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"home", banner:true, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"notification", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", auto_reload:false, auto_reload_time:10000, column_pinned_path:"", column_save_title:"", column_width:null}, {type:"explore", banner:false, top_visible:true, tw_view_mode:"0", exp_type:"", column_save_path:"/explore", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}, {type:"empty_column", banner:false, top_visible:true, tw_view_mode:"0", column_save_path:"", column_save_title:"", column_pinned_path:"", auto_reload:false, auto_reload_time:10000, column_width:null}];
     const settings = {
