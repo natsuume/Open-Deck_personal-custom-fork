@@ -62,9 +62,10 @@
         let hop = 0;
         while (fiber && hop++ < max_hop) {
             if (typeof fiber.memoizedProps?.onRefresh === 'function') {
-                const current_props = get_current_fiber(fiber).memoizedProps;
-                //現在側に onRefresh が無ければ (props が変わった等) 古い側の関数は呼ばず、さらに親を探す
-                if (typeof current_props?.onRefresh === 'function') return current_props;
+                const current_fiber = get_current_fiber(fiber);
+                if (typeof current_fiber.memoizedProps?.onRefresh === 'function') return current_fiber.memoizedProps;
+                //現在側に onRefresh が無ければ (props が変わった等) 古い側の関数は呼ばず、現在側の親からさらに探す
+                fiber = current_fiber;
             }
             fiber = fiber.return;
         }
