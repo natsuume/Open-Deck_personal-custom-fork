@@ -55,18 +55,16 @@
     };
 
     //onRefresh の存在する memoizedProps を、要素の Fiber から親方向 (return) へ最大 max_hop 段たどって取得する。
-    //見つけた fiber は古い側 (alternate) のことがあるため、現在コミットされている側に解決してからその memoizedProps を返す
+    //DOM ノードが指す fiber とそこから辿った fiber は古い側 (alternate) のことがあり、古い側の props には
+    //後から付いた onRefresh が無かったり古い関数が入っていたりするため、訪れる fiber ごとに
+    //現在コミットされている側へ解決してから props を見る
     function get_on_refresh_props(elem, max_hop = 30){
         if (!elem) return null;
         let fiber = get_props(elem, "Fiber");
         let hop = 0;
         while (fiber && hop++ < max_hop) {
-            if (typeof fiber.memoizedProps?.onRefresh === 'function') {
-                const current_fiber = get_current_fiber(fiber);
-                if (typeof current_fiber.memoizedProps?.onRefresh === 'function') return current_fiber.memoizedProps;
-                //現在側に onRefresh が無ければ (props が変わった等) 古い側の関数は呼ばず、現在側の親からさらに探す
-                fiber = current_fiber;
-            }
+            fiber = get_current_fiber(fiber);
+            if (typeof fiber.memoizedProps?.onRefresh === 'function') return fiber.memoizedProps;
             fiber = fiber.return;
         }
         return null;
