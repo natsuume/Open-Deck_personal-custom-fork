@@ -96,7 +96,25 @@
                 a = b = next_parent;
                 continue;
             }
-            //a が parent_a の子集合に属していれば a 側が parent_a の tree、b が属していれば入れ替わっている
+            if (parent_a.child === parent_b.child) {
+                //両方の親が同じ子リストを共有している (親が子を複製せずに bailout した) 場合、
+                //そのリストに載っている側は複製されていない = 今も current なので、ここで確定する。
+                //古い側の return は古い親を指し続けることがあるため、親へ進んで判定を続けてはいけない
+                let child = parent_a.child;
+                while (child) {
+                    if (child === a) return fiber;
+                    if (child === b) return alternate;
+                    child = child.sibling;
+                }
+                return fiber;
+            }
+            if (a.return !== b.return) {
+                //return ポインタが交差することは無い前提で、それぞれの親をそのまま採用する
+                a = parent_a;
+                b = parent_b;
+                continue;
+            }
+            //a と b が同じ親を指しているが親同士は子リストを共有していない場合、どちらの親の子リストに属するかで側を決める
             const pick_side = (children_of, parent_of_a, parent_of_b) => {
                 let child = children_of.child;
                 while (child) {
@@ -106,17 +124,6 @@
                 }
                 return false;
             };
-            if (parent_a.child === parent_b.child) {
-                //両方の親が同じ子集合を共有している (子が再描画されていない) 場合
-                if (!pick_side(parent_a, parent_a, parent_b)) return fiber;
-                continue;
-            }
-            if (a.return !== b.return) {
-                //return ポインタが交差することは無い前提で、それぞれの親をそのまま採用する
-                a = parent_a;
-                b = parent_b;
-                continue;
-            }
             if (!pick_side(parent_a, parent_a, parent_b) && !pick_side(parent_b, parent_b, parent_a)) return fiber;
         }
         if (a.tag !== HOST_ROOT_TAG) return fiber;
