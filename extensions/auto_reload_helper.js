@@ -86,9 +86,13 @@
             if (!parent_a) break;
             const parent_b = parent_a.alternate;
             if (!parent_b) {
-                //親に alternate が無ければ、その親までは 1 本道なので親から先を同じ手順でたどる
+                //親に alternate が無ければ、その親までは 1 本道なので親から先を同じ手順でたどる。
+                //その親が根 (return が無い) なら根そのものを判定対象にする
                 const next_parent = parent_a.return;
-                if (!next_parent) break;
+                if (!next_parent) {
+                    a = b = parent_a;
+                    break;
+                }
                 a = b = next_parent;
                 continue;
             }
