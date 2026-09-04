@@ -63,7 +63,8 @@
         while (fiber && hop++ < max_hop) {
             if (typeof fiber.memoizedProps?.onRefresh === 'function') {
                 const current_props = get_current_fiber(fiber).memoizedProps;
-                return typeof current_props?.onRefresh === 'function' ? current_props : fiber.memoizedProps;
+                //現在側に onRefresh が無ければ (props が変わった等) 古い側の関数は呼ばず、さらに親を探す
+                if (typeof current_props?.onRefresh === 'function') return current_props;
             }
             fiber = fiber.return;
         }
