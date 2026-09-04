@@ -54,19 +54,69 @@
         get_on_refresh_props(document.querySelector('section[role="region"]'))?.onRefresh();
     };
 
-    //onRefresh の存在する memoizedProps を、要素の Fiber から親方向 (return) へ最大 max_hop 段たどって取得する
+    //onRefresh の存在する memoizedProps を、要素の Fiber から親方向 (return) へ最大 max_hop 段たどって取得する。
+    //見つけた fiber は古い側 (alternate) のことがあるため、現在コミットされている側に解決してからその memoizedProps を返す
     function get_on_refresh_props(elem, max_hop = 30){
         if (!elem) return null;
         let fiber = get_props(elem, "Fiber");
         let hop = 0;
         while (fiber && hop++ < max_hop) {
-            const memoized_props = fiber.memoizedProps;
-            if (typeof memoized_props?.onRefresh === 'function') {
-                return memoized_props;
+            if (typeof fiber.memoizedProps?.onRefresh === 'function') {
+                const current_props = get_current_fiber(fiber).memoizedProps;
+                return typeof current_props?.onRefresh === 'function' ? current_props : fiber.memoizedProps;
             }
             fiber = fiber.return;
         }
         return null;
+    }
+
+    //fiber と fiber.alternate のうち、現在コミットされている tree に属する側を返す (React の findCurrentFiberUsingSlowPath 相当)。
+    //fiber 単体には current かどうかの印が無く、return ポインタは bailout した親の古い側を指し続けることがあるため、
+    //両方から親を同時にたどり、HostRoot (tag 3) に着いたときに root.stateNode.current と一致した側を current と判定する。
+    //判定できない構造に出会ったときは fiber をそのまま返す
+    function get_current_fiber(fiber){
+        const alternate = fiber.alternate;
+        if (!alternate) return fiber;
+        const HOST_ROOT_TAG = 3;
+        const MAX_DEPTH = 10000;
+        let a = fiber;
+        let b = alternate;
+        for (let depth = 0; depth < MAX_DEPTH; depth++) {
+            const parent_a = a.return;
+            if (!parent_a) break;
+            const parent_b = parent_a.alternate;
+            if (!parent_b) {
+                //親に alternate が無ければ、その親までは 1 本道なので親から先を同じ手順でたどる
+                const next_parent = parent_a.return;
+                if (!next_parent) break;
+                a = b = next_parent;
+                continue;
+            }
+            //a が parent_a の子集合に属していれば a 側が parent_a の tree、b が属していれば入れ替わっている
+            const pick_side = (children_of, parent_of_a, parent_of_b) => {
+                let child = children_of.child;
+                while (child) {
+                    if (child === a) { a = parent_of_a; b = parent_of_b; return true; }
+                    if (child === b) { a = parent_of_b; b = parent_of_a; return true; }
+                    child = child.sibling;
+                }
+                return false;
+            };
+            if (parent_a.child === parent_b.child) {
+                //両方の親が同じ子集合を共有している (子が再描画されていない) 場合
+                if (!pick_side(parent_a, parent_a, parent_b)) return fiber;
+                continue;
+            }
+            if (a.return !== b.return) {
+                //return ポインタが交差することは無い前提で、それぞれの親をそのまま採用する
+                a = parent_a;
+                b = parent_b;
+                continue;
+            }
+            if (!pick_side(parent_a, parent_a, parent_b) && !pick_side(parent_b, parent_b, parent_a)) return fiber;
+        }
+        if (a.tag !== HOST_ROOT_TAG) return fiber;
+        return a.stateNode?.current === a ? fiber : alternate;
     }
 
     //ReactProps取得関数
