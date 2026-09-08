@@ -4,59 +4,119 @@
     <title>Open-Deckについて</title>
     <script src="about_opd.js" charset="UTF-8"></script>
     <style>
+        :root{
+            --opd-bg: #eff3f4;
+            --opd-surface: #ffffff;
+            --opd-border: #cfd9de;
+            --opd-border-soft: #eff3f4;
+            --opd-text: #0f1419;
+            --opd-text-muted: #536471;
+            --opd-accent: #1d9bf0;
+            --opd-accent-hover: #1a8cd8;
+            --opd-radius-lg: 16px;
+            --opd-shadow-sm: 0 1px 2px rgba(15, 20, 25, 0.08);
+            --opd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, Arial, sans-serif;
+        }
+        @media (prefers-color-scheme: dark){
+            :root{
+                --opd-bg: #000000;
+                --opd-surface: #16181c;
+                --opd-border: #3e4144;
+                --opd-border-soft: #2f3336;
+                --opd-text: #e7e9ea;
+                --opd-text-muted: #8b98a5;
+                --opd-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+            }
+        }
         html{
             color-scheme: light dark;
+        }
+        body{
+            margin: 0;
+            box-sizing: border-box;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: var(--opd-bg);
+            color: var(--opd-text);
+            font-family: var(--opd-font);
+        }
+        .opd_about_card{
+            width: 100%;
+            max-width: 42rem;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.5rem;
+            background: var(--opd-surface);
+            border: 1px solid var(--opd-border);
+            border-radius: var(--opd-radius-lg);
+            box-shadow: var(--opd-shadow-sm);
         }
         .about_area1{
             display: flex;
             flex-direction: row;
-            width: 700px;
-        }
-        .about_area2{
-            display: flex;
-            flex-direction: row;
-            justify-content: space-around;
-            width: 700px;
-            font-size: 1.3rem;
-        }
-        .about_area2 div{
-            display: flex;
-            flex-direction: column;
             align-items: center;
-            margin-right: 1rem;
-        }
-        .about_area1 h1{
-            font-size: 4rem;
-            margin-bottom: 0;
-            margin-top: 0;
-        }
-        .about_area1 h2{
-            font-size: 2rem;
-            margin-top: 0;
+            gap: 1rem;
         }
         .opd_logo{
             background-repeat: no-repeat;
             background-size: contain;
             background-position: center;
-            width: 200px;
-            min-height: 60px;
-            height: 200px;
-            margin-right: 1rem;
+            flex-shrink: 0;
+            width: 7.5rem;
+            min-height: 3.75rem;
+            height: 7.5rem;
             cursor: pointer;
         }
         .opd_logo_text{
             background-repeat: no-repeat;
             background-size: contain;
-            width: 400px;
-            height: 100px;
-            margin-right: 1rem;
+            background-position: left center;
+            width: 100%;
+            max-width: 15rem;
+            height: 3.75rem;
             margin-bottom: 0.5rem;
         }
         .opd_div_font{
-            font-size: 1.5rem;
+            font-size: 0.9375rem;
+            color: var(--opd-text-muted);
         }
         .opd_div_font span{
             margin-left: 0.5rem;
+            color: var(--opd-text);
+            font-weight: 600;
+        }
+        .about_area2{
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin: 0;
+            padding-top: 1rem;
+            border-top: 1px solid var(--opd-border-soft);
+        }
+        .opd_about_link{
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .opd_about_link_label{
+            font-size: 0.75rem;
+            color: var(--opd-text-muted);
+        }
+        .opd_about_link a{
+            color: var(--opd-accent);
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .opd_about_link a:hover{
+            color: var(--opd-accent-hover);
+            text-decoration: underline;
         }
         @media (prefers-color-scheme: dark) {
             .opd_logo_text{
@@ -66,21 +126,23 @@
     </style>
 </head>
 <body>
-    <section class="about_area1">
-        <div class="opd_logo"></div>
-        <div>
-            <div class="opd_logo_text"></div>
+    <div class="opd_about_card">
+        <section class="about_area1">
+            <div class="opd_logo"></div>
             <div>
-                <div class="opd_div_font">CodeName:<span>Shizuku</span></div>
-                <div class="opd_div_font">Version:<span id="ext_version"></span></div>
+                <div class="opd_logo_text"></div>
+                <div>
+                    <div class="opd_div_font">CodeName:<span>Shizuku</span></div>
+                    <div class="opd_div_font">Version:<span id="ext_version"></span></div>
+                </div>
             </div>
-        </div>
-    </section>
-    <section class="about_area2">
-        <div>Development<br><a href="https://twitter.com/kw_nobu2" target="_blank" rel="noopener noreferrer">kawa-nobu</a></div>
-        <div>GitHub<br><a href="https://github.com/kawa-nobu/Open-Deck" target="_blank" rel="noopener noreferrer">Open-Deck</a></div>
-        <div>ChangeLog<br><a href="https://github.com/kawa-nobu/Open-Deck/releases" target="_blank" rel="noopener noreferrer">Releases</a></div>
-        <div>Help<br><a href="https://kawa-nobu.github.io/Open-Deck-Wiki/" target="_blank" rel="noopener noreferrer">Open-Deck Document</a></div>
-    </section>
+        </section>
+        <section class="about_area2">
+            <div class="opd_about_link"><span class="opd_about_link_label">Development</span><a href="https://twitter.com/kw_nobu2" target="_blank" rel="noopener noreferrer">kawa-nobu</a></div>
+            <div class="opd_about_link"><span class="opd_about_link_label">GitHub</span><a href="https://github.com/kawa-nobu/Open-Deck" target="_blank" rel="noopener noreferrer">Open-Deck</a></div>
+            <div class="opd_about_link"><span class="opd_about_link_label">ChangeLog</span><a href="https://github.com/kawa-nobu/Open-Deck/releases" target="_blank" rel="noopener noreferrer">Releases</a></div>
+            <div class="opd_about_link"><span class="opd_about_link_label">Help</span><a href="https://kawa-nobu.github.io/Open-Deck-Wiki/" target="_blank" rel="noopener noreferrer">Open-Deck Document</a></div>
+        </section>
+    </div>
 </body>
 </html>

@@ -413,6 +413,12 @@
   "ui_settings_unpinned": {
     "message": "解除"
   },
+  "ui_dialog_ok": {
+    "message": "OK"
+  },
+  "ui_dialog_cancel": {
+    "message": "キャンセル"
+  },
   "msg_global_settings_invalid_width": {
     "message": "カラム幅は12以上300以下の半角数字で入力してください"
   },

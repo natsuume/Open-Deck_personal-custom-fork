@@ -12,7 +12,7 @@ class OpdExtMediaViewer {
                 if (["animated_gif","video"].includes(info.type)) {
                     return `
                     <video data-media
-                        style="width:auto;height:auto;max-width:calc(100% - 160px);max-height:100%;object-fit:contain;"
+                        style="width:auto;height:auto;max-width:calc(100% - 2 * 4.75rem);max-height:100%;object-fit:contain;border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,0.7);"
                         src="${info.video_info.variants.at(-1).url}"
                         controls
                         autoplay
@@ -23,7 +23,7 @@ class OpdExtMediaViewer {
                 if (info.type === "photo") {
                     return `
                         <img data-media
-                            style="width:auto;height:auto;max-width:calc(100% - 160px);max-height:100%;object-fit:contain;"
+                            style="width:auto;height:auto;max-width:calc(100% - 2 * 4.75rem);max-height:100%;object-fit:contain;border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,0.7);"
                             src="${info.media_url_https + "?name=orig"}"
                         />`;
                 }
@@ -74,12 +74,12 @@ class OpdExtMediaViewer {
 
             Object.assign(media_viewer_dialog, {
                 id: "opd_media_viewer",
-                style: "z-index:999999;border:none;background:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:12px;width:85vw;height:85vh;overflow:hidden;"
+                style: "z-index:999999;border:none;background:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:0.75rem;width:85vw;height:85vh;overflow:hidden;"
             });
             media_viewer_dialog.closedBy = "any";
             media_viewer_dialog.innerHTML = `
             <div style="width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;align-items:center;">
-                <div class="opd_media_viewer_func_btn_circle" style="display:flex;width:100%;justify-content:flex-end;">
+                <div class="opd_media_viewer_func_btn_circle" style="display:flex;width:100%;justify-content:flex-end;padding:0 0.75rem;box-sizing:border-box;">
                     <button type="button" data-close><span class="media_viewer_icon_close opd_media_viewer_func_btn_icon_color"></span></button>
                 </div>
 
@@ -89,7 +89,7 @@ class OpdExtMediaViewer {
                     <button type="button" class="opd_media_viewer_func_btn media_switch_btn" data-media-next><span class="media_viewer_icon_next opd_media_viewer_func_btn_icon_color"></span></button>
                 </div>
 
-                <div class="opd_media_viewer_func_btn_circle" style="width:100%;margin-top:10px;display:flex;justify-content:center;">
+                <div class="opd_media_viewer_func_btn_circle" style="width:100%;margin-top:0.625rem;display:flex;justify-content:center;padding:0 0.75rem;box-sizing:border-box;">
                     <button type="button" data-media-download><span class="media_viewer_icon_download opd_media_viewer_func_btn_icon_color"></span></button>
                 </div>
             </div>

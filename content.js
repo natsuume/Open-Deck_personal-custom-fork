@@ -1665,9 +1665,9 @@ function run(settings){
         { childList: true, subtree: false }
     );
     //APIリミット表示用
-    document.querySelector("#api_limit_status").addEventListener("click", function(){
+    document.querySelector("#api_limit_status").addEventListener("click", async function(){
         if(api_limit_obj != null){
-            alert(i18n_message("msg_api_limit_status_alert", [api_limit_description]))
+            await show_alert_dialog(i18n_message("msg_api_limit_status_alert", [api_limit_description]));
         }
     });
     //Open-Deckについて表示
@@ -1676,9 +1676,9 @@ function run(settings){
     });
     //デバッグメニュー表示
     let debug_menu_click_counter = 0;
-    document.querySelector(".opd_version_span").addEventListener("click", function(){
+    document.querySelector(".opd_version_span").addEventListener("click", async function(){
         if(debug_menu_click_counter >= 7){
-            alert(i18n_message("msg_debug_menu_enabled"));
+            await show_alert_dialog(i18n_message("msg_debug_menu_enabled"));
             document.querySelector(".opd_debug_menu").style.display = "flex";
         }else{
             debug_menu_click_counter += 1;
@@ -1729,7 +1729,7 @@ function run(settings){
     function create_profile_list_btn(){
         //プロファイルリスト切替イベント初期化
         for (let index = 0; index < profile_store.length; index++) {
-            document.querySelector(`#userProfile-${index}`).addEventListener("click",function(){
+            document.querySelector(`#userProfile-${index}`).addEventListener("click",async function(){
                 //console.log(profile_store[index].profile)
                 const preload_array = profile_store[index].profile;
                 let preload_desc_array = new Array(); 
@@ -1771,23 +1771,22 @@ function run(settings){
                     preload_desc_count += 1;
                 }
                 //console.log(preload_desc_array)
-                if(confirm(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\r\n")])}`)){
-                    //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
-                    get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
-                    teardown_post_form_popover();
-                    side_rack_resize_observer.disconnect();
-                    document.querySelector("#opd_main_element").remove();
-                    last_load_profile = index;
-                    chrome.storage.local.get("opd_settings", function(value){
-                        let load_setting = JSON.parse(value.opd_settings);
-                        load_setting.last_load_profile = index;
-                        chrome.storage.local.set({'opd_settings': JSON.stringify(load_setting)}, function () {
-                        });
+                if(!(await show_confirm_dialog(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\r\n")])}`))) return;
+                //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
+                get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
+                teardown_post_form_popover();
+                side_rack_resize_observer.disconnect();
+                document.querySelector("#opd_main_element").remove();
+                last_load_profile = index;
+                chrome.storage.local.get("opd_settings", function(value){
+                    let load_setting = JSON.parse(value.opd_settings);
+                    load_setting.last_load_profile = index;
+                    chrome.storage.local.set({'opd_settings': JSON.stringify(load_setting)}, function () {
                     });
-                    const column_settings = {column_settings:profile_store[index].profile, global_settings:profile_store[index].global_settings};
-                    //console.log(column_settings)
-                    run(column_settings, profile_store);
-                }
+                });
+                const column_settings = {column_settings:profile_store[index].profile, global_settings:profile_store[index].global_settings};
+                //console.log(column_settings)
+                run(column_settings, profile_store);
             })
         }
     }
@@ -1856,8 +1855,8 @@ function run(settings){
     }
     //メインバーイベント
     document.getElementById("init_settings").addEventListener("click", function(){
-        chrome.storage.local.remove("opd_settings", function(value){
-            alert(i18n_message("msg_settings_reset_completed"));
+        chrome.storage.local.remove("opd_settings", async function(value){
+            await show_alert_dialog(i18n_message("msg_settings_reset_completed"));
         });
     });
     //画像付きを開いた時の自動スクロール阻止
@@ -1899,19 +1898,17 @@ function run(settings){
         window.open(chrome.runtime.getURL("profile_debug.html"), "OPD-Profile-Loader", 'width=720, height=600');
     });
     //
-    document.getElementById("dnr_reload").addEventListener("click", function(){
-        if(confirm(i18n_message("msg_dnr_reload_confirm"))){
-            chrome.runtime.sendMessage({message: "dnr_upd"}).then((value)=>{
-                if(value == true){
-                    location.reload();
-                }
-            });
-        }
+    document.getElementById("dnr_reload").addEventListener("click", async function(){
+        if(!(await show_confirm_dialog(i18n_message("msg_dnr_reload_confirm")))) return;
+        chrome.runtime.sendMessage({message: "dnr_upd"}).then((value)=>{
+            if(value == true){
+                location.reload();
+            }
+        });
     });
-    document.getElementById("ext_reload").addEventListener("click", function(){
-        if(confirm(i18n_message("msg_extension_reload_confirm"))){
-            chrome.runtime.sendMessage({message: "ext_reload"});
-        }
+    document.getElementById("ext_reload").addEventListener("click", async function(){
+        if(!(await show_confirm_dialog(i18n_message("msg_extension_reload_confirm")))) return;
+        chrome.runtime.sendMessage({message: "ext_reload"});
     });
     //ポストフォームのポップオーバーを開閉する
     document.getElementById("open_post_form").addEventListener("click", function(){
@@ -2496,11 +2493,11 @@ function run(settings){
             }
         }
         //ユーザー名入力欄の値から表示を始める。リスト一覧ページのパスに解決できない入力は受け付けない
-        function start_frame_from_input(){
+        async function start_frame_from_input(){
             const resolved_path = resolve_list_column_path(user_input.value);
             const user_lists_match = (resolved_path ?? "").match(/^\/([A-Za-z0-9_]{1,15})\/lists$/);
             if(!user_lists_match){
-                alert(i18n_message("msg_list_picker_user_required"));
+                await show_alert_dialog(i18n_message("msg_list_picker_user_required"));
                 user_input.focus();
                 return;
             }
@@ -2530,14 +2527,14 @@ function run(settings){
         //Esc で閉じ、Tab はダイアログ内のフォーカス可能要素を循環させる
         const on_dialog_keydown = create_dialog_keydown_handler(dialog, close_dialog);
         //入力欄の各行を解釈して一覧の末尾へ追加する。解釈できない行があれば入力欄に残して知らせ、false を返す
-        function add_manual_entries(){
+        async function add_manual_entries(){
             const manual_entries = parse_manual_list_entries(manual_textarea.value);
             manual_entries.paths.forEach((list_path) => add_entry(list_path, ""));
             render_selection();
             mark_frame_cells();
             if(manual_entries.invalid.length > 0){
                 manual_textarea.value = manual_entries.invalid.join("\n");
-                alert(i18n_message("msg_list_picker_invalid_manual", [manual_entries.invalid.join("\n")]));
+                await show_alert_dialog(i18n_message("msg_list_picker_invalid_manual", [manual_entries.invalid.join("\n")]));
                 manual_textarea.focus();
                 return false;
             }
@@ -2545,15 +2542,15 @@ function run(settings){
             return true;
         }
         //一覧の並び順のままカラムをまとめて追加する。入力欄に未追加の文字列が残っていれば先に追加を試みる
-        function add_selected_columns(){
-            if(manual_textarea.value.trim() !== "" && !add_manual_entries()) return;
+        async function add_selected_columns(){
+            if(manual_textarea.value.trim() !== "" && !(await add_manual_entries())) return;
             if(selected_entries.length === 0){
-                alert(i18n_message("msg_list_picker_nothing_selected"));
+                await show_alert_dialog(i18n_message("msg_list_picker_nothing_selected"));
                 manual_textarea.focus();
                 return;
             }
             const paths = selected_entries.map((entry) => entry.path);
-            if(paths.length > many_columns_threshold && !confirm(i18n_message("msg_list_picker_many_columns_confirm", [String(paths.length)]))) return;
+            if(paths.length > many_columns_threshold && !(await show_confirm_dialog(i18n_message("msg_list_picker_many_columns_confirm", [String(paths.length)])))) return;
             close_dialog();
             add_explore_columns(paths, insert_first);
         }
@@ -2689,19 +2686,19 @@ function run(settings){
         add_explore_column("/explore");
     });
     //リストカラム追加(Exploreカラムの派生。ログインユーザーのリスト一覧を初期表示する)
-    document.getElementById("add_list").addEventListener("click", function(){
-        //prompt 表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
+    document.getElementById("add_list").addEventListener("click", async function(){
+        //ダイアログ表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
         const insert_first = is_shift_pressed;
         const screen_name = get_login_screen_name();
         let list_path = null;
         if(screen_name){
             list_path = `/${screen_name}/lists`;
         }else{
-            const input = prompt(i18n_message("msg_list_column_path_prompt"));
+            const input = await show_prompt_dialog(i18n_message("msg_list_column_path_prompt"));
             if(input === null) return;
             list_path = resolve_list_column_path(input);
             if(list_path === null){
-                alert(i18n_message("msg_invalid_value_alert"));
+                await show_alert_dialog(i18n_message("msg_invalid_value_alert"));
                 return;
             }
         }
@@ -2730,29 +2727,30 @@ function run(settings){
         open_global_settings_dialog(this);
     });
     //プロファイル保存ボタン
-    document.getElementById("profile_save").addEventListener("click", function(){
-        if(confirm(i18n_message("msg_profile_save_confirm"))){
-            let profile = column_settings_save("profile_out");
-            const save_object = {name:"user_profile", profile:profile.column_settings, settings_schema_version:SETTINGS_SCHEMA_VERSION, global_settings:profile.global_settings};
-            //console.log(profile)
-            profile_store.push(save_object);
-            //console.log(profile_store)
-            chrome.storage.local.set({'opd_profile_store': JSON.stringify(profile_store)}, function () {
-                let profile_list_btn_html = "";
-                //プロファイルリスト初期化
-                for (let index = 0; index < profile_store.length; index++) {
-                    profile_list_btn_html += `<div class="dsp_btn_parent" id="userProfile-${index}"><div class="dsp_btn_change_profile_btn">P${index}</div></div>`;
-                }
-                document.querySelector("#profile_btn_list").innerHTML = profile_list_btn_html;
-                create_profile_list_btn();
-            });
-        }
+    document.getElementById("profile_save").addEventListener("click", async function(){
+        if(!(await show_confirm_dialog(i18n_message("msg_profile_save_confirm")))) return;
+        let profile = column_settings_save("profile_out");
+        const save_object = {name:"user_profile", profile:profile.column_settings, settings_schema_version:SETTINGS_SCHEMA_VERSION, global_settings:profile.global_settings};
+        //console.log(profile)
+        profile_store.push(save_object);
+        //console.log(profile_store)
+        chrome.storage.local.set({'opd_profile_store': JSON.stringify(profile_store)}, function () {
+            let profile_list_btn_html = "";
+            //プロファイルリスト初期化
+            for (let index = 0; index < profile_store.length; index++) {
+                profile_list_btn_html += `<div class="dsp_btn_parent" id="userProfile-${index}"><div class="dsp_btn_change_profile_btn">P${index}</div></div>`;
+            }
+            document.querySelector("#profile_btn_list").innerHTML = profile_list_btn_html;
+            create_profile_list_btn();
+        });
     });
     //プロファイル削除ボタン
-    document.getElementById("profile_delete").addEventListener("click", function(){
-        const delete_num = Number(prompt(i18n_message("msg_profile_delete_number_prompt")));
+    document.getElementById("profile_delete").addEventListener("click", async function(){
+        const delete_input = await show_prompt_dialog(i18n_message("msg_profile_delete_number_prompt"));
+        if(delete_input === null) return;
+        const delete_num = Number(delete_input);
         if(last_load_profile != delete_num){
-            if(confirm(i18n_message("msg_profile_delete_confirm", [delete_num]))){
+            if(await show_confirm_dialog(i18n_message("msg_profile_delete_confirm", [delete_num]))){
                 let after_profile_num = null;
                 profile_store.splice(delete_num, 1);
                 //console.log(profile_store)
@@ -2787,7 +2785,7 @@ function run(settings){
                 });
             }
         }else{
-            alert(i18n_message("msg_profile_delete_current_alert"));
+            await show_alert_dialog(i18n_message("msg_profile_delete_current_alert"));
         }
     });
     //カラム拡張機能の初期化(カラム拡張機能の追加はここで行います)
@@ -2876,7 +2874,7 @@ function run(settings){
             //既にイベントが登録済みのカラムはスキップ
             if(close_btns[index].dataset.opd_close_initialized === "1") continue;
                 close_btns[index].dataset.opd_close_initialized = "1";
-                close_btns[index].addEventListener("click", function(){
+                close_btns[index].addEventListener("click", async function(){
                 const target_column = this.closest(".dsp_column");
                 const pin_checkbox = target_column.querySelector(".opd_pinned_btn")?.checked;
                 if(pin_checkbox == false || pin_checkbox == undefined){
@@ -2886,13 +2884,12 @@ function run(settings){
                     update_side_rack_state();
                     column_settings_save("", last_load_profile);
                 }else{
-                    if(confirm(i18n_message("msg_pinned_column_close_confirm"))){
-                        stop_column_auto_reload(target_column.querySelector("div[opd_column_type]"));
-                        target_column.remove();
-                        append_object_css();
-                        update_side_rack_state();
-                        column_settings_save("", last_load_profile);
-                    }
+                    if(!(await show_confirm_dialog(i18n_message("msg_pinned_column_close_confirm")))) return;
+                    stop_column_auto_reload(target_column.querySelector("div[opd_column_type]"));
+                    target_column.remove();
+                    append_object_css();
+                    update_side_rack_state();
+                    column_settings_save("", last_load_profile);
                 }
             })
         }
@@ -3340,13 +3337,13 @@ function run(settings){
             save_column_setting(false);
         });
         //カラム幅のカスタム入力
-        column_div.querySelector(".column_width_btn")?.addEventListener("click", function(){
+        column_div.querySelector(".column_width_btn")?.addEventListener("click", async function(){
             const now_width = effective_column_setting(column_div, "column_width", global_settings);
-            const setting_width = prompt(i18n_message("msg_column_width_prompt"), now_width);
+            const setting_width = await show_prompt_dialog(i18n_message("msg_column_width_prompt"), String(now_width));
             if(setting_width === null) return;
             const setting_width_num = Number(setting_width);
             if(!Number.isFinite(setting_width_num) || setting_width_num < COLUMN_WIDTH_MIN_REM || setting_width_num > COLUMN_WIDTH_MAX_REM){
-                alert(i18n_message("msg_invalid_value_alert"));
+                await show_alert_dialog(i18n_message("msg_invalid_value_alert"));
                 return;
             }
             column_div.setAttribute("opd_column_width", String(setting_width_num));
@@ -3363,7 +3360,7 @@ function run(settings){
             save_column_setting(false);
         });
         //自動更新間隔の入力欄。下限・上限を外れた値は受け付けず、変更前の実効値へ戻す
-        column_div.querySelector(".opd_a_reload_time_setting")?.addEventListener("change", function(){
+        column_div.querySelector(".opd_a_reload_time_setting")?.addEventListener("change", async function(){
             //readonly (全体設定に従う) のあいだは値を実効値へ戻して受け付けない
             if(this.readOnly){
                 this.value = String(effective_column_setting(column_div, "auto_reload_time", global_settings) / 1000);
@@ -3371,9 +3368,9 @@ function run(settings){
             }
             const input_time_ms = Number(this.value) * 1000;
             if(Number.isFinite(input_time_ms) && input_time_ms >= AUTO_RELOAD_TIME_MIN_MS && input_time_ms <= AUTO_RELOAD_TIME_MAX_MS){
-                alert(i18n_message("msg_auto_reload_set", [this.value]));
+                await show_alert_dialog(i18n_message("msg_auto_reload_set", [this.value]));
             }else{
-                alert(i18n_message("msg_global_settings_invalid_interval"));
+                await show_alert_dialog(i18n_message("msg_global_settings_invalid_interval"));
                 this.value = String(effective_column_setting(column_div, "auto_reload_time", global_settings) / 1000);
             }
             column_div.setAttribute("opd_setting_auto_reload_time", String(Number(this.value) * 1000));
@@ -3389,9 +3386,9 @@ function run(settings){
         bind_bar_toggle(".opd_banner", "banner");
         bind_bar_toggle(".opd_top_bar", "top_visible");
         //カラムバーのピン止めトグル
-        column_div.querySelector(".opd_pinned_btn")?.addEventListener("click", function(){
+        column_div.querySelector(".opd_pinned_btn")?.addEventListener("click", async function(){
             const is_pinned = effective_column_setting(column_div, "pinned", global_settings) === true;
-            if(!confirm(is_pinned ? i18n_message("msg_explore_unpin_confirm") : i18n_message("msg_explore_pin_confirm"))){
+            if(!(await show_confirm_dialog(is_pinned ? i18n_message("msg_explore_unpin_confirm") : i18n_message("msg_explore_pin_confirm")))){
                 //取り消した場合は表示を実効値へ戻す
                 this.checked = is_pinned;
                 return;
@@ -3596,6 +3593,116 @@ function run(settings){
             apply_column_iframe_styles(column_div);
         });
         column_settings_save("", last_load_profile);
+    }
+    //通知・確認・入力ダイアログ (ブラウザの alert / confirm / prompt の代替) を開き、閉じたときに結果で解決する Promise を返す
+    //mode: "alert" (OK のみ) / "confirm" (キャンセルと OK) / "prompt" (入力欄 + キャンセルと OK)
+    //解決する値は OK が prompt なら入力文字列・それ以外は true、キャンセル (キャンセルボタン / Esc / 背景クリック) が prompt なら null・それ以外は false
+    //呼び出しごとに #opd_main_element の直下へオーバーレイ (class "opd_dialog_overlay opd_message_dialog_overlay") を 1 つ作るため、開いているあいだに呼ばれても互いに影響しない
+    //本文は textContent で入れる (改行は CSS の white-space: pre-wrap で折り返す)。見出しは持たず、本文をダイアログと入力欄のラベルにする
+    //閉じるときは inert を解除し、開く前にフォーカスされていた要素へ戻す (その要素が既に取り除かれていれば動かさない)
+    //フォーカストラップ・inert は get_dialog_focusable_elements / create_dialog_keydown_handler / set_inert_except を使う
+    //Esc と Tab は捕捉フェーズで受け取って伝播を止め、背後のダイアログ (リスト選択ダイアログ等) が document に登録したハンドラより先に処理する
+    function open_message_dialog(mode, message, default_value){
+        const is_prompt = mode === "prompt";
+        //キャンセル (キャンセルボタン / Esc / 背景クリック) で解決する値。alert は戻り値を使わない
+        const cancel_value = is_prompt ? null : false;
+        const main_element = document.getElementById("opd_main_element");
+        //デッキ本体が無いあいだはダイアログを出せないため、キャンセルと同じ値で解決する
+        if(main_element === null) return Promise.resolve(cancel_value);
+        return new Promise(function(resolve){
+            const previous_focus_element = document.activeElement;
+            const body_id = `opd_message_dialog_body_${create_random_id()}`;
+            const overlay = document.createElement("div");
+            overlay.className = "opd_dialog_overlay opd_message_dialog_overlay";
+            const input_html = is_prompt ? `<input class="opd_input opd_message_dialog_input" type="text" aria-labelledby="${body_id}">` : "";
+            const cancel_btn_html = mode === "alert" ? "" : `<button type="button" class="opd_btn opd_message_dialog_cancel_btn">${i18n_message("ui_dialog_cancel")}</button>`;
+            overlay.innerHTML = `<div class="opd_dialog opd_message_dialog" role="${mode === "alert" ? "alertdialog" : "dialog"}" aria-modal="true" aria-labelledby="${body_id}">
+        <p class="opd_message_dialog_body" id="${body_id}"></p>
+        ${input_html}
+        <div class="opd_dialog_actions">${cancel_btn_html}<button type="button" class="opd_btn opd_btn_primary opd_message_dialog_ok_btn">${i18n_message("ui_dialog_ok")}</button></div>
+        </div>`;
+            main_element.appendChild(overlay);
+            //ダイアログを開いているあいだは背景を操作対象から外す
+            const release_inert = set_inert_except(main_element, overlay);
+
+            const dialog = overlay.querySelector(".opd_message_dialog");
+            const body = overlay.querySelector(".opd_message_dialog_body");
+            const input = overlay.querySelector(".opd_message_dialog_input");
+            const ok_btn = overlay.querySelector(".opd_message_dialog_ok_btn");
+            const cancel_btn = overlay.querySelector(".opd_message_dialog_cancel_btn");
+            //背景クリック判定用。押下と離上の両方が背景で起きたときだけ閉じる
+            let is_overlay_mousedown = false;
+            let is_overlay_mouseup = false;
+
+            body.textContent = message;
+            if(input !== null) input.value = default_value;
+
+            //ダイアログを閉じ、背景の inert を解除してフォーカスを戻し、result で解決する
+            function close_dialog(result){
+                document.removeEventListener("keydown", on_dialog_keydown, true);
+                release_inert();
+                overlay.remove();
+                if(previous_focus_element?.isConnected) previous_focus_element.focus?.();
+                resolve(result);
+            }
+            //キャンセルとして閉じる (キャンセルボタン / Esc / 背景クリック)
+            function cancel_dialog(){
+                close_dialog(cancel_value);
+            }
+            //OK として閉じる (OK ボタン / 入力欄の Enter)
+            function accept_dialog(){
+                close_dialog(is_prompt ? input.value : true);
+            }
+            const handle_dialog_keydown = create_dialog_keydown_handler(dialog, cancel_dialog);
+            //Esc と Tab はこのダイアログだけで処理し、背後のダイアログのハンドラへ渡さない。それ以外のキーは入力欄まで届ける
+            function on_dialog_keydown(event){
+                if(event.key !== "Escape" && event.key !== "Tab") return;
+                event.stopPropagation();
+                handle_dialog_keydown(event);
+            }
+
+            ok_btn.addEventListener("click", accept_dialog);
+            cancel_btn?.addEventListener("click", cancel_dialog);
+            //入力欄の Enter は OK と同じ。IME の変換確定は除く
+            input?.addEventListener("keydown", function(event){
+                if(event.key !== "Enter" || event.isComposing) return;
+                event.preventDefault();
+                accept_dialog();
+            });
+            //背景(オーバーレイ自身)の上で押して離してクリックされたときだけ閉じる
+            overlay.addEventListener("mousedown", function(event){
+                is_overlay_mousedown = event.target === overlay;
+            });
+            overlay.addEventListener("mouseup", function(event){
+                is_overlay_mouseup = event.target === overlay;
+            });
+            overlay.addEventListener("click", function(event){
+                const is_background_click = is_overlay_mousedown && is_overlay_mouseup && event.target === overlay;
+                is_overlay_mousedown = false;
+                is_overlay_mouseup = false;
+                if(is_background_click) cancel_dialog();
+            });
+            document.addEventListener("keydown", on_dialog_keydown, true);
+            //prompt は入力欄 (既定値は選択状態)、それ以外は OK ボタンから始める
+            if(input !== null){
+                input.focus();
+                input.select();
+            }else{
+                ok_btn.focus();
+            }
+        });
+    }
+    //通知ダイアログを開く。OK / Esc / 背景クリックのいずれでも閉じる
+    async function show_alert_dialog(message){
+        await open_message_dialog("alert", message, "");
+    }
+    //確認ダイアログを開く。OK なら true、キャンセル / Esc / 背景クリックなら false を返す
+    function show_confirm_dialog(message){
+        return open_message_dialog("confirm", message, "");
+    }
+    //入力ダイアログを開く。OK なら入力文字列、キャンセル / Esc / 背景クリックなら null を返す
+    function show_prompt_dialog(message, default_value = ""){
+        return open_message_dialog("prompt", message, default_value);
     }
     //全体設定ダイアログを開く。opener_element: 閉じたときにフォーカスを戻す要素
     //#opd_main_element の直下にオーバーレイ #opd_global_settings_overlay (class "opd_dialog_overlay opd_global_settings_overlay") を 1 つだけ生成する (既に開いていればそこへフォーカスを移す)

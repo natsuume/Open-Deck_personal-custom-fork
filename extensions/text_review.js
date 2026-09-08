@@ -18,19 +18,41 @@ class OpdExtTextReview {
                 [opd_hide]{
                     display: none !important;
                 }
+                .opd_post_functions, .opd_text_review_panel{
+                    --opd-radius-sm: 6px;
+                    --opd-radius-md: 10px;
+                    --opd-radius-full: 9999px;
+                    --opd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, Arial, sans-serif;
+                    --opd-surface-soft: rgba(15, 20, 25, 0.05);
+                    --opd-border-soft: rgba(15, 20, 25, 0.13);
+                    font-family: var(--opd-font);
+                    color: inherit;
+                }
+                @media (prefers-color-scheme: dark){
+                    .opd_post_functions, .opd_text_review_panel{
+                        --opd-surface-soft: rgba(231, 233, 234, 0.06);
+                        --opd-border-soft: rgba(231, 233, 234, 0.16);
+                    }
+                }
                 .opd_post_functions{
                     display: flex;
                     flex-direction: row;
-                    margin-left: -8px;
+                    margin-left: -0.5rem;
                 }
                 .opd_text_review_loader {
-                    width: 40px;
-                    height: 40px;
-                    border: 4px solid #ddd;
-                    border-top-color: #3498db;
-                    border-radius: 50%;
-                    animation: opd_text_review_loader_spin 1s linear infinite;
-                    margin: 20px auto;
+                    width: 2rem;
+                    height: 2rem;
+                    border: 3px solid rgba(15, 20, 25, 0.15);
+                    border-top-color: currentColor;
+                    border-radius: var(--opd-radius-full);
+                    animation: opd_text_review_loader_spin 0.8s linear infinite;
+                    margin: 1rem auto;
+                }
+                @media (prefers-color-scheme: dark){
+                    .opd_text_review_loader{
+                        border-color: rgba(231, 233, 234, 0.15);
+                        border-top-color: currentColor;
+                    }
                 }
 
                 @keyframes opd_text_review_loader_spin {
@@ -41,11 +63,13 @@ class OpdExtTextReview {
                 .opd_function_btn{
                     width:34px;
                     height:34px;
-                    margin:0 4px;
+                    margin:0 0.25rem;
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    cursor: pointer; 
+                    cursor: pointer;
+                    border-radius: var(--opd-radius-full);
+                    transition: background-color 0.15s ease;
                 }
                 .opd_text_review_btn_icon{
                     display: block;
@@ -61,37 +85,47 @@ class OpdExtTextReview {
                 }
                 .opd_function_btn[disabled]{
                 opacity: 0.5;
+                cursor: default;
                 }
                 .opd_text_review_panel{
                     display: flex;
                     flex-direction: column;
-                    align-items: center;
-                    border-radius: 5px;
+                    align-items: stretch;
+                    margin-top: 0.5rem;
+                    padding: 0.75rem;
+                    border-radius: var(--opd-radius-md);
+                    border: 1px solid var(--opd-border-soft);
                 }
                 .opd_text_review_panel, .opd_text_review_result{
                     width: 100%;
                 }
                 .opd_text_review_result_preview{
                     white-space: pre-wrap;
-                    padding: 5px;
+                    padding: 0.5rem;
+                    margin-top: 0.5rem;
                     max-height: 10rem;
                     overflow: hidden auto;
                     scrollbar-width: thin;
-                    background: #c9c9c940;
+                    background: var(--opd-surface-soft);
+                    border: 1px solid var(--opd-border-soft);
+                    border-radius: var(--opd-radius-sm);
                 }
                 .opd_text_review_indication_switcher{
                     max-height: 8rem;
                     overflow: hidden auto;
                     scrollbar-width: thin;
-                    padding:5px;
+                    padding: 0.5rem 0;
                 }
                 .opd_text_review_indication_switch{
                     display: flex;
                     flex-direction: row;
-                    padding: 5px;
-                    border-radius: 5px;
-                    margin: 5px;
-                    background: #00000012;
+                    align-items: flex-start;
+                    gap: 0.5rem;
+                    padding: 0.5rem;
+                    border-radius: var(--opd-radius-sm);
+                    margin: 0.375rem 0;
+                    background: var(--opd-surface-soft);
+                    border: 1px solid var(--opd-border-soft);
                     scrollbar-width: thin;
                 }
                 span[opd_text_review_indication_hidden]{
@@ -100,21 +134,33 @@ class OpdExtTextReview {
                 .opd_text_review_indication_apply_panel{
                     display: flex;
                     flex-direction: row;
-                    justify-content: space-evenly;
+                    justify-content: center;
+                    gap: 0.5rem;
+                    padding-top: 0.5rem;
                 }
                 .opd_text_review_indication_apply_panel button{
-                    border-radius: 100px;
-                    width: 5rem;
+                    height: 2.125rem;
+                    padding: 0 1rem;
+                    border-radius: var(--opd-radius-full);
                     display: flex;
                     justify-content: center;
-                    border: #0000005e 1px solid;
-                    margin: 2px;
-                    font-size: 0.8rem;
+                    align-items: center;
+                    border: 1px solid var(--opd-border-soft);
+                    background: transparent;
+                    color: inherit;
+                    font-family: var(--opd-font);
+                    font-size: 0.8125rem;
+                    font-weight: 600;
                     cursor: pointer;
-                    
+                    transition: background-color 0.15s ease;
                 }
                 .opd_text_review_indication_apply_panel button:hover{
-                    opacity: 0.8;
+                    background: var(--opd-surface-soft);
+                }
+                .opd_text_review_indication_apply_panel button:focus-visible,
+                .opd_function_btn:focus-visible{
+                    outline: 2px solid currentColor;
+                    outline-offset: 2px;
                 }
             </style>`);
             //機能のボタン類を束ねる
@@ -182,7 +228,7 @@ class OpdExtTextReview {
                 if (btnAddTarget && !function_panel) {
                     //テーマカラー取得&ボタンカラー設定
                     const theme_color = this.CssChecker(getComputedStyle(column_window.document.querySelector('div[data-testid="progressBar-bar"]')).backgroundColor);
-                    column_window.document.head.insertAdjacentHTML("beforeend", `<style opd_post_textreview_theme_css>.opd_functions_btn_icon_color{background-color:${theme_color};}.opd_function_btn:not([disabled]):hover{border-radius: 100px;transition-duration: 0.2s;background-color:${theme_color.replace(")", ", 0.1)")};}.opd_text_review_panel{background-color:${theme_color.replace(")", ", 0.1)")};}</style>`);
+                    column_window.document.head.insertAdjacentHTML("beforeend", `<style opd_post_textreview_theme_css>.opd_functions_btn_icon_color{background-color:${theme_color};}.opd_function_btn:not([disabled]):hover{background-color:${theme_color.replace(")", ", 0.1)")};}.opd_text_review_panel{background-color:${theme_color.replace(")", ", 0.1)")};border-color:${theme_color.replace(")", ", 0.35)")};}</style>`);
                     //校正ボタンパネル追加
                     btnAddTarget.insertAdjacentHTML('afterend', `<div class="opd_post_functions">${function_btns.join("")}</div><div class="opd_text_review_panel"></div>`);
                     //校正ボタン動作追加
@@ -254,9 +300,9 @@ class OpdExtTextReview {
                 const id = this.CreateRandomID();
                 let suggest_elem = "";
                 if(review.params?.suggests != null){
-                    suggest_elem = `<span style="background:#14ff0063;">${this.EscapeHTML(review.params?.suggests?.at(-1))}</span>`;
+                    suggest_elem = `<span style="background:rgba(0,186,124,0.25);">${this.EscapeHTML(review.params?.suggests?.at(-1))}</span>`;
                 }
-                result.push(`<div class="opd_text_review_indication_switch"><input id="opd_text_review_iid_${id}" type="checkbox" opd_indication_id="${id}"><div><span style="font-size: 0.8em;">(${this.EscapeHTML(review.message)})</span><div><span style="text-decoration: line-through;background:#ff000054;">${this.EscapeHTML(review.relevant_part.problem)}</span>${suggest_elem}${this.EscapeHTML(review.relevant_part.after)}</div></div></div>`);
+                result.push(`<div class="opd_text_review_indication_switch"><input id="opd_text_review_iid_${id}" type="checkbox" opd_indication_id="${id}"><div><span style="font-size: 0.8em;">(${this.EscapeHTML(review.message)})</span><div><span style="text-decoration: line-through;background:rgba(244,33,46,0.25);">${this.EscapeHTML(review.relevant_part.problem)}</span>${suggest_elem}${this.EscapeHTML(review.relevant_part.after)}</div></div></div>`);
                 indication_id.push(id);
                 indications_fix_enabled.push(false);
             });
@@ -325,10 +371,10 @@ class OpdExtTextReview {
 
                 let suggest_elem = "";
                 if(suggest !== ""){
-                    suggest_elem = `<span style="padding:3px;border-radius:3px;background:#14ff0063;">${this.EscapeHTML(suggest)}</span>`;
+                    suggest_elem = `<span style="padding:3px;border-radius:3px;background:rgba(0,186,124,0.25);">${this.EscapeHTML(suggest)}</span>`;
                 }
 
-                html += `<span class="patch" data-offset="${start}" data-length="${length}"><span id="opd_text_review_problem_id_${indication_ids[i]}" style="padding:3px;border-radius:3px;text-decoration: line-through;background:#ff000054;">${this.EscapeHTML(text.slice(start, end))}</span>${suggest_elem}</span>`;
+                html += `<span class="patch" data-offset="${start}" data-length="${length}"><span id="opd_text_review_problem_id_${indication_ids[i]}" style="padding:3px;border-radius:3px;text-decoration: line-through;background:rgba(244,33,46,0.25);">${this.EscapeHTML(text.slice(start, end))}</span>${suggest_elem}</span>`;
 
                 cur = end;
             }
