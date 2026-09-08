@@ -1131,6 +1131,10 @@ function run(settings){
     }
     /*リストカラム複数追加ダイアログ*/
     .opd_list_picker_overlay{
+        /*iframe 内の選択表示へ JS が getComputedStyle で読み出して注入する色 (var() は計算値で解決される)*/
+        --opd-list-picker-accent: var(--opd-accent);
+        --opd-list-picker-accent-text: var(--opd-on-accent);
+        --opd-list-picker-accent-background: var(--opd-accent-soft);
         --opd-frame-surface: var(--opd-surface);
         --opd-frame-skeleton: var(--opd-skeleton);
     }

@@ -62,21 +62,25 @@ class OpdExtTextReview {
                 }
                 .opd_text_review_btn_icon{
                     display: block;
-                    -webkit-mask: url(${chrome.runtime.getURL(icons.text_review)}) no-repeat center;
-                    mask: url(${chrome.runtime.getURL(icons.text_review)}) no-repeat center;
+                    -webkit-mask: url(${chrome.runtime.getURL(icons.text_review)}) center / contain no-repeat;
+                    mask: url(${chrome.runtime.getURL(icons.text_review)}) center / contain no-repeat;
                     width: 18px;
                     height: 18px;
                 }
                 .opd_hashtag_restore_btn_icon{
                     display: block;
-                    -webkit-mask: url(${chrome.runtime.getURL(icons.hashtag_restore)}) no-repeat center;
-                    mask: url(${chrome.runtime.getURL(icons.hashtag_restore)}) no-repeat center;
+                    -webkit-mask: url(${chrome.runtime.getURL(icons.hashtag_restore)}) center / contain no-repeat;
+                    mask: url(${chrome.runtime.getURL(icons.hashtag_restore)}) center / contain no-repeat;
                     width: 18px;
                     height: 18px;
                 }
                 .opd_function_btn[disabled]{
                 opacity: 0.5;
                 cursor: default;
+                }
+                /* 校正結果が無いあいだは枠を出さない */
+                .opd_text_review_panel:empty{
+                    display: none;
                 }
                 .opd_text_review_panel{
                     display: flex;
