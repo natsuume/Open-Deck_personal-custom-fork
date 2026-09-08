@@ -486,37 +486,26 @@ function run(settings){
         resize: vertical;
         line-height: 1.4;
     }
-    /*トグルスイッチ (checkbox を appearance:none で描く)*/
+    /*トグルスイッチ (checkbox を appearance:none で描く)。knob は input の擬似要素を描画しないエンジン (Gecko) でも出るよう背景画像で描き、位置で状態を伝える*/
     .opd_switch{
         appearance: none;
         -webkit-appearance: none;
-        position: relative;
         flex: none;
         width: 2.5rem;
         height: 1.375rem;
         margin: 0;
         border-radius: var(--opd-radius-full);
-        background: var(--opd-border);
+        background-color: var(--opd-border);
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%23ffffff'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-size: 1rem 1rem;
+        background-position: left 0.1875rem center;
         cursor: pointer;
-        transition: background-color 0.2s;
-    }
-    .opd_switch::before{
-        content: "";
-        position: absolute;
-        top: 0.1875rem;
-        left: 0.1875rem;
-        width: 1rem;
-        height: 1rem;
-        border-radius: 50%;
-        background: var(--opd-surface);
-        box-shadow: var(--opd-shadow-sm);
-        transition: transform 0.2s;
+        transition: background-color 0.2s, background-position 0.2s;
     }
     .opd_switch:checked{
-        background: var(--opd-accent);
-    }
-    .opd_switch:checked::before{
-        transform: translateX(1.125rem);
+        background-color: var(--opd-accent);
+        background-position: right 0.1875rem center;
     }
     .opd_checkbox{
         width: 1rem;
@@ -826,7 +815,7 @@ function run(settings){
         gap: 0.125rem;
         width: 100%;
         min-height: 2.25rem;
-        padding: 0.25rem 0.375rem;
+        padding: 0.25rem;
         overflow: hidden;
         background: var(--opd-surface);
         border-bottom: 1px solid var(--opd-border-soft);
@@ -918,7 +907,7 @@ function run(settings){
     .dsp_column_empty_area{
         flex: 1 1 auto;
         align-self: stretch;
-        min-width: 0;
+        min-width: 0.5rem;
         cursor: pointer;
     }
     .dsp_column_close_btn_wrap{
