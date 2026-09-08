@@ -1543,6 +1543,36 @@ function run(settings){
             animation: none;
         }
     }
+    /*強制配色 (Windows のハイコントラスト等) では background-color が Canvas 色に置き換わり mask アイコンが消えるため、システム色で塗り直す。トグルスイッチは枠と塗りで状態を示す*/
+    @media (forced-colors: active){
+        .opd_icon,
+        .dsp_btn_parent > div:not(.dsp_btn_change_profile_btn),
+        .dsp_column_move_icon,
+        .dsp_column_settings_btn,
+        .dsp_column_close_btn,
+        .dsp_column_banner_btn,
+        .dsp_column_top_btn,
+        .dsp_column_pin_btn,
+        .media_viewer_icon_close,
+        .media_viewer_icon_forward,
+        .media_viewer_icon_next,
+        .media_viewer_icon_download{
+            forced-color-adjust: none;
+            background-color: CanvasText;
+        }
+        #open_post_form .dsp_btn_post_form_img,
+        .opd_media_viewer_func_btn_icon_color{
+            background-color: ButtonText;
+        }
+        .opd_switch{
+            forced-color-adjust: none;
+            border: 2px solid ButtonText;
+            background-color: Canvas;
+        }
+        .opd_switch:checked{
+            background-color: Highlight;
+        }
+    }
     </style>`);
     //カラム要素作成-挿入
     let default_element_bar = `<span class="dsp_column_btn"><label class="dsp_column_settings_btn opd_ui_icon_color" title="${i18n_message("ui_column_settings_title")}"><input class="opd_settings_btn" type="button" value="S"></label></span><span class="dsp_column_btn"><input class="opd_banner" type="checkbox" title="${i18n_message("ui_column_banner_toggle_title")}" %column_banner_ch%><label class="dsp_column_banner_btn opd_ui_icon_color"></label></span><span class="dsp_column_btn"><input class="opd_top_bar" type="checkbox" title="${i18n_message("ui_column_top_toggle_title")}" %column_top_bar_ch%><label class="dsp_column_top_btn opd_ui_icon_color"></label></span>`;
