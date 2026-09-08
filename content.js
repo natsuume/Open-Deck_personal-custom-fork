@@ -918,7 +918,7 @@ function run(settings){
     .dsp_column_empty_area{
         flex: 1 1 auto;
         align-self: stretch;
-        min-width: 0.5rem;
+        min-width: 0;
         cursor: pointer;
     }
     .dsp_column_close_btn_wrap{
@@ -3395,11 +3395,10 @@ function run(settings){
         //カラムバーのピン止めトグル
         column_div.querySelector(".opd_pinned_btn")?.addEventListener("click", async function(){
             const is_pinned = effective_column_setting(column_div, "pinned", global_settings) === true;
-            if(!(await show_confirm_dialog(is_pinned ? i18n_message("msg_explore_unpin_confirm") : i18n_message("msg_explore_pin_confirm")))){
-                //取り消した場合は表示を実効値へ戻す
-                this.checked = is_pinned;
-                return;
-            }
+            //確認が済むまでは表示を実効値のままにする (クリックで先に反転した状態を戻す)
+            this.checked = is_pinned;
+            if(!(await show_confirm_dialog(is_pinned ? i18n_message("msg_explore_unpin_confirm") : i18n_message("msg_explore_pin_confirm")))) return;
+            this.checked = !is_pinned;
             column_div.setAttribute("opd_setting_pinned", String(!is_pinned));
             reconcile_column_pinned(column_div);
             save_column_setting(false);
