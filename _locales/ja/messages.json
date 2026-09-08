@@ -44,6 +44,12 @@
   "ui_toggle_second_rack_title": {
     "message": "カラム段切り替え"
   },
+  "ui_add_target_main_title": {
+    "message": "カラム追加先: メインラック (クリックでサイドラックに切替)"
+  },
+  "ui_add_target_side_title": {
+    "message": "カラム追加先: サイドラック (クリックでメインラックに切替)"
+  },
   "ui_profile_save_title": {
     "message": "プロファイル保存"
   },
@@ -55,6 +61,9 @@
   },
   "ui_second_empty_column_message": {
     "message": "1段目のカラムが配置できます"
+  },
+  "ui_side_empty_column_message": {
+    "message": "サイドラック: ここにカラムが追加されます"
   },
   "ui_column_post_title": {
     "message": "Post"
@@ -314,6 +323,9 @@
   "msg_profile_desc_second_row_end": {
     "message": "<!-2段目終了-!>"
   },
+  "msg_profile_desc_main_rack_end": {
+    "message": "<!-メインラック終了 (以降はサイドラック)-!>"
+  },
   "label_api_timeline": {
     "message": "タイムライン:"
   },
@@ -343,6 +355,15 @@
   },
   "ui_global_settings_pinned_label": {
     "message": "Explore / リストカラムのピン止め"
+  },
+  "ui_global_settings_side_rack_position_label": {
+    "message": "サイドラックの位置"
+  },
+  "ui_side_rack_position_left": {
+    "message": "左"
+  },
+  "ui_side_rack_position_right": {
+    "message": "右"
   },
   "ui_global_settings_banner_label": {
     "message": "バナー表示"

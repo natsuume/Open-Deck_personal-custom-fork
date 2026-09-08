@@ -3329,7 +3329,9 @@ function run(settings){
                 return;
             }
             status_area.textContent = "";
+            //ダイアログに無い項目 (side_rack_position 等) は現在の値を引き継ぐ
             global_settings = clone_global_settings({
+                ...global_settings,
                 banner: banner_checkbox.checked,
                 top_visible: top_visible_checkbox.checked,
                 tw_view_mode: view_mode_select.value,
@@ -3598,6 +3600,44 @@ function set_title_favicon(){
     head_favicon_observer.observe(document.head, { childList: true });
 }
 
+//===== サイドラック (side rack) =====
+//サイドラックは画面の左または右に固定して表示するカラム列で、カラム一覧 (メインラック) と重ならずに並ぶ。
+//メインラックの幅はサイドラックの描画幅ぶんだけ狭まり、サイドラックの幅は所属カラムの幅の合計で決まる。
+//
+//DOM 契約:
+//  #opd_main_element                拡張の最上位要素。サイドラックの状態を属性と CSS カスタムプロパティで持つ
+//    opd_side_rack_position         "left" | "right"。サイドラックを置く側 (global_settings.side_rack_position を反映する)
+//    opd_add_target_rack            "main" | "side"。サイドバーのカラム追加系ボタンの追加先 (run() ごとの一時状態。既定 "main"、プロファイルには保存しない)
+//    --opd_side_rack_width          サイドラックの現在の描画幅 (px 値。非表示のあいだは 0px)。#main_rack_element の width と left の計算に使う
+//  #main_rack_element               メインラックの横スクロールコンテナ。直下の #first_rack_element (flex row、高さは常に 100%) にメインラックのカラムが並ぶ
+//  #side_rack_element               サイドラック (position:fixed、flex row、高さ 100vh)。非表示のあいだは hidden 属性を付ける (display:flex の指定に負けないよう CSS で [hidden]{display:none} を明示する)
+//  .dsp_column_side_emptycolumn     サイドラックの案内カラム (div[opd_column_type="side_empty_column"])。#side_rack_element の末尾に常に 1 つあり、追加先が "side" のときだけ hidden 属性を外す
+//  .dsp_column_emptycolumn          メインラックの案内カラム (div[opd_column_type="empty_column"])。保存形式ではメインラックの終了マーカーを兼ねる
+//DOM 順序: #opd_main_element の中身は サイドバー → #main_rack_element (> #first_rack_element) → #side_rack_element の順に並べる。
+//column_settings_save は #opd_main_element div[opd_column_type] を DOM 順に走査するため、この順序が「メインラックのカラム → empty_column → サイドラックのカラム」という保存順を保証する。
+//
+//保存形式: opd_profile_store[n].profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック。
+//  side_empty_column 型のカラムは保存しない (案内カラムはプロファイル由来ではなく run() が常に 1 つ生成する)。column_settings_save は opd_column_type="side_empty_column" の div をスキップする。
+//  empty_column マーカーはちょうど 1 つに正規化する (normalize_profile_store の構造復旧)。マーカーが無いプロファイルの既存カラムはすべてメインラック扱いになる。
+//  サイドラックを置く側は global_settings.side_rack_position ("left" | "right"、既定 "right") に持つ。カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない。
+//
+//run() スコープの関数 (サイドラックの状態はこの 3 つを通して読み書きする):
+//  get_add_target_column(insert_first)
+//    新しいカラムを insertAdjacentHTML("beforebegin") で入れる基準要素を、opd_add_target_rack の値に応じて返す。
+//    追加先が "main" なら #first_rack_element、"side" なら #side_rack_element を見て、insert_first が真ならそのラックの先頭カラム (最初の section.dsp_column_draggable_true)、偽または先頭カラムが無ければそのラック末尾の案内カラムを返す。
+//    カラム設定パネルのホバー中は draggable 属性が一時的に "false" になるため、先頭カラムの判定には draggable 属性ではなく .dsp_column_draggable_true クラスを使う。
+//    カラム追加の 5 経路 (タイムライン追加 / 通知追加 / Explore 追加 / リストカラム追加 / リスト複数追加ダイアログ) はすべてこの関数で基準要素を決める。
+//  update_side_rack_state()
+//    サイドラックの表示状態を現在の状態から決めて反映する。#side_rack_element は「サイドラックに section.dsp_column_draggable_true が 1 つ以上ある」または「追加先が "side"」のときに表示し、それ以外は hidden 属性を付ける。
+//    案内カラム (.dsp_column_side_emptycolumn) は追加先が "side" のときだけ表示する。反映の直後に --opd_side_rack_width も同期で 1 回更新する (通常の更新は #side_rack_element を border-box で監視する ResizeObserver が行う)。
+//    起動時の初期構築後・カラム追加後・カラムを閉じた後・ドラッグ移動の drop 後・追加先の切替後に呼ぶ。
+//  apply_side_rack_position()
+//    #opd_main_element の opd_side_rack_position 属性を global_settings.side_rack_position の値にする。run() の初期構築で innerHTML を挿入した直後と、全体設定ダイアログでサイドラックの位置を適用した後に呼ぶ。
+//
+//column_dd (カラムのドラッグ & ドロップ) はサイドラックに合わせて 2 点を守る:
+//  イベントを登録する対象を両ラック直下のカラム (#first_rack_element > .dsp_column, #side_rack_element > .dsp_column) に限り、メインバーの section を drop 先にしない。
+//  dragover の挿入位置表示は box-shadow (inset) で描き、border は使わない。border はカラムの幅を変えるため、サイドラックでは ResizeObserver がその増分を拾ってメインラックの幅が揺れる。
+
 //===== 全体設定 (global settings) =====
 //全体設定はプロファイルごと (opd_profile_store[n].global_settings) に持つ既定設定で、
 //各カラムの設定値が null (= 全体設定に従う) になっている項目に適用される。
@@ -3606,8 +3646,9 @@ function set_title_favicon(){
 //  opd_profile_store[n] = {
 //    name, profile: [column...],
 //    settings_schema_version: SETTINGS_SCHEMA_VERSION,
-//    global_settings: {banner, top_visible, tw_view_mode, column_width, auto_reload, auto_reload_time, pinned}
+//    global_settings: {banner, top_visible, tw_view_mode, column_width, auto_reload, auto_reload_time, pinned, side_rack_position}
 //  }
+//  profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック。side_empty_column 型のカラムは保存しない
 //  column = {
 //    type, column_save_path, column_save_title,
 //    banner: boolean|null, top_visible: boolean|null, tw_view_mode: "0"|"1"|"2"|null,
@@ -3654,6 +3695,7 @@ const GLOBAL_SETTINGS_DEFAULT = Object.freeze({
     auto_reload: false,
     auto_reload_time: 10000,
     pinned: false,
+    side_rack_position: "right",
 });
 //カラム幅の下限・上限 (rem) と自動更新間隔の下限・上限 (ms、上限は 24 時間)
 const COLUMN_WIDTH_MIN_REM = 12;
@@ -3698,6 +3740,9 @@ function to_boolean_or_null(value){
 function to_view_mode_or_null(value){
     return (value === "0" || value === "1" || value === "2") ? value : null;
 }
+function to_side_rack_position_or_null(value){
+    return (value === "left" || value === "right") ? value : null;
+}
 function to_number_or_null(value){
     return (typeof value === "number" && Number.isFinite(value)) ? value : null;
 }
@@ -3739,6 +3784,7 @@ function normalize_global_settings(global_settings){
     if(to_boolean_or_null(normalized.auto_reload) === null) normalized.auto_reload = GLOBAL_SETTINGS_DEFAULT.auto_reload;
     if(to_number_in_range_or_null(normalized.auto_reload_time, AUTO_RELOAD_TIME_MIN_MS, AUTO_RELOAD_TIME_MAX_MS) === null) normalized.auto_reload_time = GLOBAL_SETTINGS_DEFAULT.auto_reload_time;
     if(to_boolean_or_null(normalized.pinned) === null) normalized.pinned = GLOBAL_SETTINGS_DEFAULT.pinned;
+    if(to_side_rack_position_or_null(normalized.side_rack_position) === null) normalized.side_rack_position = GLOBAL_SETTINGS_DEFAULT.side_rack_position;
     return normalized;
 }
 //既定プロファイルのカラム配列を新しく作って返す (呼び出しごとに別の配列・別のカラムオブジェクトになる)

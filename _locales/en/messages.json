@@ -44,6 +44,12 @@
   "ui_toggle_second_rack_title": {
     "message": "Toggle multi-row layout"
   },
+  "ui_add_target_main_title": {
+    "message": "Add columns to: main rack (click to switch to the side rack)"
+  },
+  "ui_add_target_side_title": {
+    "message": "Add columns to: side rack (click to switch to the main rack)"
+  },
   "ui_profile_save_title": {
     "message": "Save profile"
   },
@@ -55,6 +61,9 @@
   },
   "ui_second_empty_column_message": {
     "message": "You can place first-row columns here"
+  },
+  "ui_side_empty_column_message": {
+    "message": "Side rack: new columns are added here"
   },
   "ui_column_post_title": {
     "message": "Post"
@@ -314,6 +323,9 @@
   "msg_profile_desc_second_row_end": {
     "message": "<!-End of second row-!>"
   },
+  "msg_profile_desc_main_rack_end": {
+    "message": "<!-End of main rack (side rack follows)-!>"
+  },
   "label_api_timeline": {
     "message": "Timeline:"
   },
@@ -343,6 +355,15 @@
   },
   "ui_global_settings_pinned_label": {
     "message": "Pin Explore / list columns"
+  },
+  "ui_global_settings_side_rack_position_label": {
+    "message": "Side rack position"
+  },
+  "ui_side_rack_position_left": {
+    "message": "Left"
+  },
+  "ui_side_rack_position_right": {
+    "message": "Right"
   },
   "ui_global_settings_banner_label": {
     "message": "Show banner"
