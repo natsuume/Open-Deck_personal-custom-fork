@@ -43,8 +43,8 @@ const ui_icon_define = {
     add_explore_column:"icon/exp_column.svg",
     add_list_column:"icon/list_column.svg",
     add_list_multi_column:"icon/list_column_multi.svg",
-    column_single_rack:"icon/single_view.svg",
-    column_second_rack:"icon/second_view.svg",
+    add_target_main:"icon/add_target_main.svg",
+    add_target_side:"icon/add_target_side.svg",
     profile_save:"icon/profile_save.svg",
     profile_delete:"icon/profile_delete.svg",
     text_review:"icon/text_review.svg",
@@ -300,8 +300,7 @@ function run(settings){
         }
     });
     //CSSタグ追加
-    document.querySelector("head").insertAdjacentHTML("afterbegin", `<style second_column_css></style>
-    <style opd_default_css>
+    document.querySelector("head").insertAdjacentHTML("afterbegin", `<style opd_default_css>
     html{
         overflow-y:hidden !important;
     }
@@ -364,24 +363,50 @@ function run(settings){
     .profile_val_now:hover{
         background-color: #d5d5d5;
     }
+    #opd_main_element{
+        --opd_side_rack_width: 0px;
+    }
     #main_rack_element{
         position: fixed;
-        left:60px;
-        height:100vh;
-        max-width:calc(100vw - 60px);
-        width:calc(100vw - 60px);
-        overflow:scroll hidden;
+        top: 0;
+        left: 60px;
+        height: 100vh;
+        width: calc(100vw - 60px - var(--opd_side_rack_width));
+        max-width: calc(100vw - 60px - var(--opd_side_rack_width));
+        overflow: scroll hidden;
     }
-    #first_rack_element{
-        /*overflow: hidden;*/
+    #opd_main_element[opd_side_rack_position="left"] #main_rack_element{
+        left: calc(60px + var(--opd_side_rack_width));
     }
-    #second_rack_element{
-        /*overflow: hidden;*/
+    #side_rack_element{
+        position: fixed;
+        top: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: row;
+        width: max-content;
+        max-width: calc(100vw - 60px - ${COLUMN_WIDTH_MIN_REM}rem);
+        overflow: auto hidden;
+        scrollbar-width: none;
+        z-index: 998;
+    }
+    #opd_main_element[opd_side_rack_position="left"] #side_rack_element{
+        left: 60px;
+    }
+    #opd_main_element[opd_side_rack_position="right"] #side_rack_element{
+        right: 0;
+    }
+    #side_rack_element > section.dsp_column{
+        flex: 0 0 auto;
+    }
+    #side_rack_element[hidden],
+    .dsp_column_side_emptycolumn[hidden]{
+        display: none;
     }
     .dsp_column_emptycolumn p{
         text-align: center;
     }
-    .dsp_column_second_emptycolumn p{
+    .dsp_column_side_emptycolumn p{
         text-align: center;
     }
     .dsp_btn_parent{
@@ -458,11 +483,11 @@ function run(settings){
         height: 69%;
         width: 69%;
     }
-    .dsp_btn_second_rack_img{
+    .dsp_btn_add_target_img{
         filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
         background-size: cover;
         background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.column_second_rack)});
+        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_target_main)});
         height: 69%;
         width: 69%;
     }
@@ -1000,7 +1025,7 @@ function run(settings){
 
         & .dsp_column_draggable_false,
         & #first_rack_element,
-        & #second_rack_element,
+        & #side_rack_element,
         & #main_bar_empty_column {
             background-color: black !important;
             color: white;
@@ -1018,7 +1043,7 @@ function run(settings){
         & .dsp_btn_add_list_img,
         & .dsp_btn_add_list_multi_img,
         & .dsp_btn_global_settings_img,
-        & .dsp_btn_second_rack_img,
+        & .dsp_btn_add_target_img,
         & .dsp_btn_profile_add_img,
         & .dsp_btn_profile_delete_img,
         & .dsp_column_move_icon,
@@ -1063,7 +1088,7 @@ function run(settings){
             }
         }
 
-        & #main_bar_empty_column, div[opd_column_type="empty_column"], div[opd_column_type="second_empty_column"] {
+        & #main_bar_empty_column, div[opd_column_type="empty_column"], div[opd_column_type="side_empty_column"] {
             filter: brightness(0.7);
         }
 
@@ -1180,22 +1205,23 @@ function run(settings){
     let default_element = {
         /*main_bar_empty_column:{html:`<!--<section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" opd_column_width="%column_width_num%" id="main_bar_empty_column" style="height:100%;min-width: 70px;"></div></section>-->`},*/
         empty_column:{html:`<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_emptycolumn"><div opd_column_type="empty_column" opd_column_width="%column_width_attr%" style="height: 100%;min-width: 30rem;display: flex;align-items: center;justify-content: center;"><div><img src="${chrome.runtime.getURL(ui_icon_define.column_add_1)}" style="filter: brightness(0) saturate(100%) invert(61%) sepia(13%) saturate(13%) hue-rotate(335deg) brightness(89%) contrast(79%);"><p>左のバーからカラムを追加</p></div></div></section>`},
-        second_empty_column:{html:`<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_second_emptycolumn"><div opd_column_type="second_empty_column" opd_column_width="%column_width_attr%" style="height:100%;min-width: 30rem;overflow: hidden;display: flex;align-items: center;justify-content: center;"><div><img src="${chrome.runtime.getURL(ui_icon_define.column_add_2)}" style="filter: brightness(0) saturate(100%) invert(61%) sepia(13%) saturate(13%) hue-rotate(335deg) brightness(89%) contrast(79%);"><p>1段目のカラムが配置できます</p></div></div></section>`},
         home:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="home" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Timeline</span></div></span>${default_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${home_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com/home" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
         notification:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="notification" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Notifications</span></div></span>${default_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${notification_settings_panel}<iframe allow="fullscreen" src="https://x.com/notifications" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
         explore:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="explore" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_setting_pinned="%column_setting_pinned%" opd_explore_path="%column_save_path%" opd_explore_title="%column_save_title%" opd_pinned_path="%column_pinned_save_path%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span class="dsp_explore_column_title">%column_title%</span></div></span>${default_element_bar}<span class="dsp_column_btn"><input class="opd_pinned_btn" type="checkbox" title="ピン止め切り替え" %column_pinned_ch%><label class="dsp_column_pin_btn opd_ui_icon_color"></label></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${explore_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com%column_save_path%" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`}
     };
+    //サイドラックの案内カラム。プロファイルには保存せず、run() ごとに #side_rack_element の末尾へ 1 つ作る
+    const side_empty_column_template = `<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_side_emptycolumn"><div opd_column_type="side_empty_column" opd_column_width="%column_width_attr%" style="height: 100%;min-width: 30rem;display: flex;align-items: center;justify-content: center;"><div><img src="${chrome.runtime.getURL(ui_icon_define.column_add_2)}" style="filter: brightness(0) saturate(100%) invert(61%) sepia(13%) saturate(13%) hue-rotate(335deg) brightness(89%) contrast(79%);"><p>${i18n_message("ui_side_empty_column_message")}</p></div></div></section>`;
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;background: white;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_toggle_second_rack_title")}" id="second_rack"><div class="dsp_btn_second_rack_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
+    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" id="add_target_toggle" tabindex="0" role="button" aria-pressed="false" title="${i18n_message("ui_add_target_main_title")}"><div class="dsp_btn_add_target_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
     //let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 100px;text-align: center;background-color: white;"><div><p style="margin-top:0;padding-top:1em;">Open-Deck<br>Prototype<br>v${manifest.version}</p><hr><p>Debug<br><input type="button" id="init_settings" value="init settings"/><br><input type="button" id="profile_load_save" value="Profile Load"/><br><input type="button" id="dnr_reload" value="dNR_Reload"/><br><input type="button" id="ext_reload" value="Ext_Reload"/></p><hr><p><input type="button" id="add_timeline" value="Add TimeLine"/> <div class="dsp_btn_parent"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_explr_img"></div></div> </p><p><input type="button" id="add_notify" value="Add Notification"/></p><p><input type="button" id="add_explore" value="Add Explore"/><hr><input type="button" id="second_rack" value="Second Rack"/><hr><input type="button" id="profile_save" value="Profile_Save"/><br><input type="button" id="profile_delete" value="Profile_Delete"/><br>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 110px;"></div></section>`;
     let main_column_html = ``;
-    let second_column_html = ``;
-    //設定2段
-    let first_column_end = false;
-    let second_column_end = false;
-    let second_rack_mode = false;
+    let side_column_html = ``;
+    //カラム配列の empty_column より後をサイドラックへ振り分けるための検出状態
+    let is_main_rack_end = false;
+    //カラム追加系ボタンの追加先ラック ("main" | "side")
+    let add_target_rack = "main";
     //スクロール検出用
     let scroll_block = true;
     //
@@ -1247,27 +1273,32 @@ function run(settings){
                     column_pinned_save_path: init_pinned_path,
                     column_save_path: init_column_save_path,
                 });
-                //一段目終了検出にもかかわらず設定が存在していた場合2段目の変数に保存
-                if(first_column_end == true){
-                    second_column_html += column_html;
+                //メインラック終了マーカーより後のカラムはサイドラックへ積む
+                if(is_main_rack_end == true){
+                    side_column_html += column_html;
                 }else{
                     main_column_html += column_html;
                 }
-                //一段目読込終了検出
-                if(first_column_end == false && settings.column_settings[index].type == "empty_column"){
-                    first_column_end = true;
-                }
-                //二段目読込終了検出
-                if(second_column_end == false && settings.column_settings[index].type == "second_empty_column"){
-                    second_column_end = true;
+                //メインラック終了マーカー (empty_column) の検出
+                if(is_main_rack_end == false && settings.column_settings[index].type == "empty_column"){
+                    is_main_rack_end = true;
                 }
             }
         }
     }
-    //初期挿入HTML作成
-    ins_html.innerHTML = `${side_bar}<div id="main_rack_element" style=""><div id="first_rack_element" style="height: 100%;display:flex;flex-direction:row;">${main_column_html}</div><div id="second_rack_element" style="display:flex;flex-direction:row;">${second_column_html}</div></div>`;
+    //初期挿入HTML作成。サイドラックはメインラックの後に置き、末尾に案内カラムを 1 つ持たせる
+    const side_empty_column_html = fill_column_template(side_empty_column_template, {column_num: create_random_id(), column_width_attr: "inherit"});
+    ins_html.innerHTML = `${side_bar}<div id="main_rack_element"><div id="first_rack_element" style="height: 100%;display:flex;flex-direction:row;">${main_column_html}</div></div><div id="side_rack_element">${side_column_html}${side_empty_column_html}</div>`;
     //HTML挿入
     document.body.insertAdjacentElement("afterbegin", ins_html);
+    //サイドラックの位置と追加先ラックを属性へ反映する
+    apply_side_rack_position();
+    ins_html.setAttribute("opd_add_target_rack", add_target_rack);
+    //サイドラックの描画幅の変化を --opd_side_rack_width へ反映する
+    const side_rack_resize_observer = new ResizeObserver(function(){
+        update_side_rack_width();
+    });
+    side_rack_resize_observer.observe(document.getElementById("side_rack_element"), {box: "border-box"});
 
     //favicon・タイトルを設定
     set_title_favicon()
@@ -1307,25 +1338,47 @@ function run(settings){
             debug_menu_click_counter += 1;
         }
     });
-    //2段目が存在する場合の処理
-    if(first_column_end == true && second_column_end == true){
-        second_rack_mode = true;
-        document.querySelector("#first_rack_element").style.height = "50vh";
-        document.querySelector("#second_rack_element").style.height = "50vh";
-        /*for (let index = 0; index < document.querySelectorAll('.dsp_column[draggable="true"]').length; index++) {
-            document.querySelectorAll('.dsp_column[draggable="true"]')[index].style.height = "calc(100% - 25px)";
-        }*/
-
-        //document.querySelector("style[second_column_css]").textContent = `#second_rack_element .dsp_column[draggable="true"]{height:calc(100% - 25px)}`;
-
-        document.querySelector("#second_rack").value = "Single Rack";
-        document.querySelector(".dsp_btn_second_rack_img").style.backgroundImage = `url(${chrome.runtime.getURL(ui_icon_define.column_single_rack)})`;
-    }
     //
     create_profile_list_btn();
     column_dd();
     column_close();
     append_object_css();
+    update_side_rack_state();
+    //#opd_main_element の opd_side_rack_position 属性を全体設定のサイドラックの位置にする
+    function apply_side_rack_position(){
+        document.getElementById("opd_main_element")?.setAttribute("opd_side_rack_position", global_settings.side_rack_position);
+    }
+    //サイドラックの現在の描画幅を --opd_side_rack_width へ書く (非表示なら 0px。小数精度を保つため getBoundingClientRect を使う)
+    function update_side_rack_width(){
+        const main_element = document.getElementById("opd_main_element");
+        const side_rack = document.getElementById("side_rack_element");
+        if(main_element === null || side_rack === null) return;
+        main_element.style.setProperty("--opd_side_rack_width", `${side_rack.getBoundingClientRect().width}px`);
+    }
+    //サイドラックの表示状態を現在の状態から決めて反映する。カラムの追加・閉じる・ドラッグ移動・追加先切替・起動時に呼ぶ
+    //表示条件: サイドラックに section.dsp_column_draggable_true が 1 つ以上ある、または追加先が "side"
+    //案内カラム (.dsp_column_side_emptycolumn) は追加先が "side" のときだけ表示する
+    function update_side_rack_state(){
+        const side_rack = document.getElementById("side_rack_element");
+        if(side_rack === null) return;
+        const is_side_target = add_target_rack === "side";
+        const has_side_column = side_rack.querySelector(":scope > section.dsp_column_draggable_true") !== null;
+        side_rack.hidden = !(has_side_column || is_side_target);
+        const side_empty_column = side_rack.querySelector(".dsp_column_side_emptycolumn");
+        if(side_empty_column !== null) side_empty_column.hidden = !is_side_target;
+        //ResizeObserver の反映を待たずに幅を合わせる
+        update_side_rack_width();
+    }
+    //追加先ラックに応じて、新しいカラムを insertAdjacentHTML("beforebegin") で入れる基準要素を返す
+    //insert_first が真ならそのラックの先頭カラム (最初の section.dsp_column_draggable_true) の前、無ければ末尾の案内カラムの前
+    //設定パネルのホバー中は draggable 属性が一時的に "false" になるため、先頭カラムの判定にはクラスを使う
+    function get_add_target_column(insert_first){
+        const is_side_target = add_target_rack === "side";
+        const rack_element = document.getElementById(is_side_target ? "side_rack_element" : "first_rack_element");
+        const empty_column = rack_element?.querySelector(is_side_target ? ".dsp_column_side_emptycolumn" : ".dsp_column_emptycolumn");
+        const first_column = rack_element?.querySelector(":scope > section.dsp_column_draggable_true");
+        return (insert_first && first_column) ? first_column : empty_column;
+    }
     //プロファイルリスト切替イベント作成関数
     function create_profile_list_btn(){
         //プロファイルリスト切替イベント初期化
@@ -1344,11 +1397,7 @@ function run(settings){
                             preload_desc_count = 0;
                             break;
                         case "empty_column":
-                            preload_desc_array.push(i18n_message("msg_profile_desc_first_row_end"));
-                            preload_desc_count = 0;
-                            break;
-                        case "second_empty_column":
-                            preload_desc_array.push(i18n_message("msg_profile_desc_second_row_end"));
+                            preload_desc_array.push(i18n_message("msg_profile_desc_main_rack_end"));
                             preload_desc_count = 0;
                             break;
                         //post は復元されないカラム種別なので、説明にも番号にも含めない
@@ -1380,6 +1429,7 @@ function run(settings){
                     //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
                     get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
                     teardown_post_form_popover();
+                    side_rack_resize_observer.disconnect();
                     document.querySelector("#opd_main_element").remove();
                     last_load_profile = index;
                     chrome.storage.local.get("opd_settings", function(value){
@@ -1468,46 +1518,35 @@ function run(settings){
     document.querySelector("#main_rack_element").addEventListener("scrollend", function(){
         document.querySelector("#main_rack_element").scrollTop = 0;
     })
-    //二段表示
-    document.getElementById("second_rack").addEventListener("click", function(){
-        if(second_rack_mode == false){
-            //document.querySelector("#main_rack_element").style.height = "50vh";
-            document.querySelector("#first_rack_element").style.height = "50vh";
-            document.querySelector("#second_rack_element").style.height = "50vh";
-            //console.log(default_element.second_empty_column)
-            //const second_rack_empty_html = `<section draggable="false" id="column_%column_num%" class="dsp_column dsp_column_second_emptycolumn"><div opd_column_type="second_empty_column" style="height: calc(100% - 20px);min-width: 30rem;display: flex;align-items: center;justify-content: center;"><p>2段目<br>${i18n_message("ui_second_empty_column_message")}</p></div></section>`;
-            const second_rack_default_html = fill_column_template(default_element.second_empty_column.html, {column_num: create_random_id(), column_width_attr: "inherit"});
-            document.querySelector("#second_rack_element").insertAdjacentHTML("beforeend", second_rack_default_html);
-            /*for (let index = 0; index < document.querySelectorAll('.dsp_column[draggable="true"]').length; index++) {
-                document.querySelectorAll('.dsp_column[draggable="true"]')[index].style.height = "calc(100% - 25px)";
-            }*/
-            //document.querySelector("style[second_column_css]").textContent = `.dsp_column[draggable="true"]{height:calc(100% - 25px)}`;
-            //document.querySelector(".dsp_column_second_emptycolumn").scrollIntoView({behavior: "smooth",inline: "end"});
-            //append_object_css();
-            column_dd();
-            column_close();
-            column_settings_save("", last_load_profile);
-            second_rack_mode = true;
-            document.querySelector("#second_rack").value = "Single Rack";
-            document.querySelector(".dsp_btn_second_rack_img").style.backgroundImage = `url(${chrome.runtime.getURL(ui_icon_define.column_single_rack)})`;
-        }else{
-            if(confirm(i18n_message("msg_second_rack_to_single_confirm"))){
-                //破棄する二段目のカラムの自動更新を止める
-                document.querySelectorAll('#second_rack_element div[opd_column_type]').forEach((column_div) => stop_column_auto_reload(column_div));
-                document.querySelector("#second_rack_element").textContent = "";
-                document.querySelector("style[second_column_css]").textContent = ``;
-                document.querySelector("#first_rack_element").style.height = "100vh";
-                document.querySelector("#second_rack_element").style.height = "0";
-                document.querySelector("#second_rack_element").style.height = "0";
-                //append_object_css();
-                //column_dd();
-                column_settings_save("", last_load_profile);
-                second_rack_mode = false;
-                document.querySelector("#second_rack").value = "Second Rack";
-                document.querySelector(".dsp_btn_second_rack_img").style.backgroundImage = `url(${chrome.runtime.getURL(ui_icon_define.column_second_rack)})`;
+    document.querySelector("#side_rack_element").addEventListener("scrollend", function(){
+        document.querySelector("#side_rack_element").scrollTop = 0;
+    })
+    //カラム追加先ラックを next_target ("main" | "side") にし、属性・ボタンの表示・サイドラックの表示状態へ反映する
+    function set_add_target_rack(next_target){
+        add_target_rack = next_target;
+        const is_side_target = add_target_rack === "side";
+        document.getElementById("opd_main_element")?.setAttribute("opd_add_target_rack", add_target_rack);
+        const toggle_btn = document.getElementById("add_target_toggle");
+        if(toggle_btn !== null){
+            toggle_btn.setAttribute("aria-pressed", is_side_target ? "true" : "false");
+            toggle_btn.title = i18n_message(is_side_target ? "ui_add_target_side_title" : "ui_add_target_main_title");
+            const toggle_icon = toggle_btn.querySelector(".dsp_btn_add_target_img");
+            if(toggle_icon !== null){
+                toggle_icon.style.backgroundImage = `url(${chrome.runtime.getURL(is_side_target ? ui_icon_define.add_target_side : ui_icon_define.add_target_main)})`;
             }
         }
-        
+        update_side_rack_state();
+    }
+    //カラム追加先の切替
+    document.getElementById("add_target_toggle").addEventListener("click", function(){
+        set_add_target_rack(add_target_rack === "side" ? "main" : "side");
+    });
+    //ボタンとして振る舞わせるため、Enter と Space でも切り替える
+    document.getElementById("add_target_toggle").addEventListener("keydown", function(event){
+        if(event.repeat) return;
+        if(event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        set_add_target_rack(add_target_rack === "side" ? "main" : "side");
     });
     //プロファイルローダー
     document.getElementById("profile_load_save").addEventListener("click", function(){
@@ -1541,32 +1580,28 @@ function run(settings){
     });
     //タイムラインカラム追加
     document.getElementById("add_timeline").addEventListener("click", function(){
-        const empty_column = document.querySelector(".dsp_column_emptycolumn");
-        const first_column = empty_column?.closest('div')?.querySelector('section[draggable="true"]');
-        const add_target_column = (is_shift_pressed && first_column) ? first_column : empty_column;
-        
+        const add_target_column = get_add_target_column(is_shift_pressed);
         const new_column = fill_column_template(default_element["home"]["html"], inherit_column_template_values());
         add_target_column.insertAdjacentHTML("beforebegin", new_column);
-        add_target_column.scrollIntoView({behavior: "smooth",inline: "end"});
-        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview]');
+        add_target_column.previousElementSibling?.scrollIntoView({behavior: "smooth", inline: "nearest"});
+        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview], #side_rack_element iframe[opd_init_webview]');
         append_object_css("add_column", all_webview);
         column_dd();
         column_close();
+        update_side_rack_state();
         column_settings_save("", last_load_profile);
     });
     //通知カラム追加
     document.getElementById("add_notify").addEventListener("click", function(){
-        const empty_column = document.querySelector(".dsp_column_emptycolumn");
-        const first_column = empty_column?.closest('div')?.querySelector('section[draggable="true"]');
-        const add_target_column = (is_shift_pressed && first_column) ? first_column : empty_column;
-        
+        const add_target_column = get_add_target_column(is_shift_pressed);
         const new_column = fill_column_template(default_element["notification"]["html"], inherit_column_template_values());
         add_target_column.insertAdjacentHTML("beforebegin", new_column);
-        add_target_column.scrollIntoView({behavior: "smooth",inline: "end"});
-        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview]');
+        add_target_column.previousElementSibling?.scrollIntoView({behavior: "smooth", inline: "nearest"});
+        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview], #side_rack_element iframe[opd_init_webview]');
         append_object_css("add_column", all_webview);
         column_dd();
         column_close();
+        update_side_rack_state();
         column_settings_save("", last_load_profile);
     });
     //Explore系カラム追加(Explore本体・リストカラムの共通処理)。insert_first が真なら末尾ではなく先頭に追加する
@@ -1579,10 +1614,7 @@ function run(settings){
     //initial_paths が空の場合は何もしない
     function add_explore_columns(initial_paths, insert_first = is_shift_pressed){
         if(initial_paths.length === 0) return;
-        const empty_column = document.querySelector(".dsp_column_emptycolumn");
-        const first_column = empty_column?.closest('div')?.querySelector('section[draggable="true"]');
-        const add_target_column = (insert_first && first_column) ? first_column : empty_column;
-        
+        const add_target_column = get_add_target_column(insert_first);
         let new_columns = "";
         for (let index = 0; index < initial_paths.length; index++) {
             new_columns += fill_column_template(default_element["explore"]["html"], {
@@ -1592,11 +1624,12 @@ function run(settings){
             });
         }
         add_target_column.insertAdjacentHTML("beforebegin", new_columns);
-        add_target_column.scrollIntoView({behavior: "smooth",inline: "end"});
-        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview]');
+        add_target_column.previousElementSibling?.scrollIntoView({behavior: "smooth", inline: "nearest"});
+        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview], #side_rack_element iframe[opd_init_webview]');
         append_object_css("add_column", all_webview);
         column_dd();
         column_close();
+        update_side_rack_state();
         column_settings_save("", last_load_profile);
     }
     //リストカラム複数追加の選択ダイアログを開く
@@ -2442,8 +2475,9 @@ function run(settings){
     }
 
     //カラム移動
+    //イベントを登録する対象は両ラック直下のカラムに限る (メインバーの section を drop 先にしない)
     function column_dd(){
-        let column_class = document.querySelectorAll(".dsp_column");
+        let column_class = document.querySelectorAll("#first_rack_element > .dsp_column, #side_rack_element > .dsp_column");
         let column_copy_source = null;
         for (let index = 0; index < column_class.length; index++) {
             //既にイベントが登録済みのカラムはスキップ
@@ -2457,10 +2491,11 @@ function run(settings){
             });
             column_class[index].addEventListener("dragover", function(ev){
                 ev.preventDefault();
-                this.style.borderLeft = '15px solid #2e2e2e';
+                //挿入位置の表示はレイアウトへ影響しない box-shadow で描く (border はカラム幅を変え、サイドラックの幅を揺らす)
+                this.style.boxShadow = 'inset 15px 0 0 #2e2e2e';
             });
             column_class[index].addEventListener("dragleave", function(){
-                this.style.borderLeft = '';
+                this.style.boxShadow = '';
             });
             column_class[index].addEventListener("drop", function(ev){
                 ev.preventDefault();
@@ -2478,10 +2513,11 @@ function run(settings){
                         set_explore_column_title(dr_elem.querySelector("div"), reload_path);
                     }
                     this.parentNode.insertBefore(dr_elem, this);
-                    this.style.borderLeft = '';
+                    this.style.boxShadow = '';
+                    update_side_rack_state();
                     column_settings_save("", last_load_profile);
                 }else{
-                    this.style.borderLeft = '';
+                    this.style.boxShadow = '';
                 }
             })
         }
@@ -2500,12 +2536,14 @@ function run(settings){
                     stop_column_auto_reload(target_column.querySelector("div[opd_column_type]"));
                     target_column.remove();
                     append_object_css();
+                    update_side_rack_state();
                     column_settings_save("", last_load_profile);
                 }else{
                     if(confirm(i18n_message("msg_pinned_column_close_confirm"))){
                         stop_column_auto_reload(target_column.querySelector("div[opd_column_type]"));
                         target_column.remove();
                         append_object_css();
+                        update_side_rack_state();
                         column_settings_save("", last_load_profile);
                     }
                 }
@@ -3199,7 +3237,7 @@ function run(settings){
             }, 100);
         }, auto_reload_time);
     }
-    //自動更新 interval を止める。カラムを閉じる・二段目を破棄する・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
+    //自動更新 interval を止める。カラムを閉じる・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
     function stop_column_auto_reload(column_div){
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
@@ -3209,7 +3247,7 @@ function run(settings){
         column_frame.opd_auto_reload_interval_ms = null;
     }
     //全体設定の変更を全カラムへ反映する: 適用表の対象カラム (home / notification / explore) それぞれに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
-    //構造用カラム (main_bar_empty_column / empty_column / second_empty_column / dsp_column) には触れない
+    //構造用カラム (main_bar_empty_column / empty_column / side_empty_column / dsp_column) には触れない
     function apply_global_settings_to_columns(){
         get_settings_target_columns().forEach((column_div) => {
             apply_column_dom_state(column_div);
@@ -3220,10 +3258,10 @@ function run(settings){
     //全体設定ダイアログを開く。opener_element: 閉じたときにフォーカスを戻す要素
     //#opd_main_element の直下にオーバーレイ #opd_global_settings_overlay (class "opd_dialog_overlay opd_global_settings_overlay") を 1 つだけ生成する (既に開いていればそこへフォーカスを移す)
     //ダイアログ本体は role="dialog" aria-modal="true" aria-labelledby で、次のフォームを持つ:
-    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM) / 自動更新 checkbox / 自動更新間隔 number (秒、AUTO_RELOAD_TIME_MIN_MS 〜 AUTO_RELOAD_TIME_MAX_MS を秒に直した範囲)
+    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM) / 自動更新 checkbox / 自動更新間隔 number (秒、AUTO_RELOAD_TIME_MIN_MS 〜 AUTO_RELOAD_TIME_MAX_MS を秒に直した範囲) / サイドラックの位置 select (left / right)
     //  status 領域 (id 付き、role="status" aria-live="polite"、高さを予約) と 適用 / キャンセル ボタン
     //適用: 検証に失敗したら status 領域へ msg_global_settings_invalid_width / msg_global_settings_invalid_interval を表示し、該当欄へ aria-invalid と status 領域を指す aria-describedby を付けてフォーカスし、閉じない
-    //      成功したら該当欄の aria-invalid / aria-describedby を外し、global_settings を更新 → apply_global_settings_to_columns → 閉じる
+    //      成功したら該当欄の aria-invalid / aria-describedby を外し、global_settings を更新 → apply_global_settings_to_columns → apply_side_rack_position → 閉じる
     //閉じる: キャンセル / Esc / 背景クリック (オーバーレイ上で mousedown と mouseup が揃ったときのみ)。閉じるときは inert を解除し opener_element にフォーカスを戻す
     //オーバーレイが close_dialog を経由せず外された場合も MutationObserver が後始末を通す
     //フォーカストラップ・inert は get_dialog_focusable_elements / create_dialog_keydown_handler / set_inert_except を使う
@@ -3251,6 +3289,7 @@ function run(settings){
         <div class="opd_global_settings_row"><label for="opd_global_settings_column_width">${i18n_message("ui_global_settings_column_width_rem_label")}</label><input class="opd_global_settings_column_width opd_column_settings_input_text" id="opd_global_settings_column_width" type="number" min="${COLUMN_WIDTH_MIN_REM}" max="${COLUMN_WIDTH_MAX_REM}"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload">${i18n_message("ui_settings_auto_reload_label")}</label><input class="opd_global_settings_auto_reload" id="opd_global_settings_auto_reload" type="checkbox"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload_time">${i18n_message("ui_settings_auto_reload_interval_label")}</label><span><input class="opd_global_settings_auto_reload_time opd_column_settings_input_text" id="opd_global_settings_auto_reload_time" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}">${i18n_message("ui_settings_seconds_suffix")}</span></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_side_rack_position">${i18n_message("ui_global_settings_side_rack_position_label")}</label><select class="opd_global_settings_side_rack_position" id="opd_global_settings_side_rack_position"><option value="left">${i18n_message("ui_side_rack_position_left")}</option><option value="right">${i18n_message("ui_side_rack_position_right")}</option></select></div>
         <div class="opd_global_settings_status" id="opd_global_settings_status" role="status" aria-live="polite"></div>
         <div class="opd_global_settings_actions"><input class="opd_global_settings_apply_btn" type="button" value="${i18n_message("ui_global_settings_apply_button")}"><input class="opd_global_settings_cancel_btn" type="button" value="${i18n_message("ui_global_settings_cancel_button")}"></div>
         </div>`;
@@ -3272,6 +3311,7 @@ function run(settings){
         const column_width_input = overlay.querySelector(".opd_global_settings_column_width");
         const auto_reload_checkbox = overlay.querySelector(".opd_global_settings_auto_reload");
         const auto_reload_time_input = overlay.querySelector(".opd_global_settings_auto_reload_time");
+        const side_rack_position_select = overlay.querySelector(".opd_global_settings_side_rack_position");
         const status_area = overlay.querySelector(".opd_global_settings_status");
         const apply_btn = overlay.querySelector(".opd_global_settings_apply_btn");
         const cancel_btn = overlay.querySelector(".opd_global_settings_cancel_btn");
@@ -3287,6 +3327,7 @@ function run(settings){
         column_width_input.value = String(global_settings.column_width);
         auto_reload_checkbox.checked = global_settings.auto_reload;
         auto_reload_time_input.value = String(global_settings.auto_reload_time / 1000);
+        side_rack_position_select.value = global_settings.side_rack_position;
 
         //ダイアログを閉じ、背景の inert を解除してフォーカスを開いた要素へ戻す
         function close_dialog(){
@@ -3339,8 +3380,10 @@ function run(settings){
                 auto_reload: auto_reload_checkbox.checked,
                 auto_reload_time: auto_reload_time_ms,
                 pinned: pinned_checkbox.checked,
+                side_rack_position: side_rack_position_select.value,
             });
             apply_global_settings_to_columns();
+            apply_side_rack_position();
             close_dialog();
         }
 
@@ -3374,6 +3417,8 @@ function run(settings){
         for (let index = 0; index < column_divs.length; index++) {
             const column_div = column_divs[index];
             const column_type = column_div.getAttribute("opd_column_type");
+            //サイドラックの案内カラムは run() が常に 1 つ作るためプロファイルには保存しない
+            if(column_type == "side_empty_column") continue;
             let column_open_path = "";
             let column_pinned_save_path = "";
             let column_page_title = null;
@@ -3619,6 +3664,8 @@ function set_title_favicon(){
 //保存形式: opd_profile_store[n].profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック。
 //  side_empty_column 型のカラムは保存しない (案内カラムはプロファイル由来ではなく run() が常に 1 つ生成する)。column_settings_save は opd_column_type="side_empty_column" の div をスキップする。
 //  empty_column マーカーはちょうど 1 つに正規化する (normalize_profile_store の構造復旧)。マーカーが無いプロファイルの既存カラムはすべてメインラック扱いになる。
+//  保存値に second_empty_column 型の要素がある場合は normalize_profile_store が取り除き、empty_column より後のカラムをサイドラックのカラムとして読み込む。
+//  この復旧に SETTINGS_SCHEMA_VERSION の更新は要らない (欠損項目は既定値で補い、構造の復旧はスキーマ版に依らず行うため)。
 //  サイドラックを置く側は global_settings.side_rack_position ("left" | "right"、既定 "right") に持つ。カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない。
 //
 //run() スコープの関数 (サイドラックの状態はこの 3 つを通して読み書きする):
@@ -3671,7 +3718,7 @@ function set_title_favicon(){
 //カラムバーのトグル (.opd_banner / .opd_top_bar / .opd_pinned_btn) は実効状態を表示し、クリックで個別値 = !実効 を設定する。
 //カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
 //
-//項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / second_empty_column / dsp_column は対象外):
+//項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / side_empty_column / dsp_column は対象外):
 //  項目            home  notification  explore(リスト含む)
 //  バナー表示       ○     ○             ○
 //  トップ表示       ○     ○             ○ (リスト系ページ表示中の非表示はヘッダーをリスト名だけの専用バーに整形する)
@@ -3824,6 +3871,8 @@ function create_default_profile(){
 //  プロファイル要素がオブジェクトでない (null・配列・プリミティブ): create_default_profile() で置き換える
 //  profile が配列でない: create_default_profile_columns() で置き換える
 //  profile 内の要素がオブジェクトでない / type が文字列でない: その要素を取り除く
+//  profile 内の type が "second_empty_column" の要素: プロファイルに保存しない構造用カラムなので取り除く
+//  profile 内の empty_column マーカー (メインラックの終了マーカー): 最初の 1 つを残して 2 つ目以降を取り除き、1 つも無ければ配列末尾に補う
 //値の正規化:
 //  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 7 項目を null、column_pinned_path を "" にリセットし、version を更新する
 //  現在のスキーマ: global_settings は normalize_global_settings で欠損・型不正・範囲外を既定値へ戻す。
@@ -3848,14 +3897,41 @@ function normalize_profile_store(store){
             continue;
         }
         const profile = store[index];
-        //カラム配列が配列でなければ既定のカラム構成に戻し、オブジェクトでない要素と type が文字列でない要素は取り除く
+        //カラム配列が配列でなければ既定のカラム構成に戻し、オブジェクトでない要素・type が文字列でない要素・保存しない second_empty_column は取り除く
         if(!Array.isArray(profile.profile)){
             profile.profile = create_default_profile_columns();
             is_changed = true;
         }else{
-            const valid_columns = profile.profile.filter((column) => column !== null && typeof column === "object" && !Array.isArray(column) && typeof column.type === "string");
+            const valid_columns = profile.profile.filter((column) => column !== null && typeof column === "object" && !Array.isArray(column) && typeof column.type === "string" && column.type !== "second_empty_column");
             if(valid_columns.length !== profile.profile.length){
                 profile.profile = valid_columns;
+                is_changed = true;
+            }
+            //メインラックの終了マーカー (empty_column) をちょうど 1 つにする。2 つ目以降は取り除き、1 つも無ければ配列末尾に補う
+            const marker_count = profile.profile.filter((column) => column.type === "empty_column").length;
+            if(marker_count > 1){
+                let is_marker_kept = false;
+                profile.profile = profile.profile.filter((column) => {
+                    if(column.type !== "empty_column") return true;
+                    if(is_marker_kept) return false;
+                    is_marker_kept = true;
+                    return true;
+                });
+                is_changed = true;
+            }else if(marker_count === 0){
+                profile.profile.push({
+                    type: "empty_column",
+                    banner: null,
+                    top_visible: null,
+                    tw_view_mode: null,
+                    column_save_path: "",
+                    column_save_title: "",
+                    column_pinned_path: "",
+                    column_pinned_override: null,
+                    auto_reload: null,
+                    auto_reload_time: null,
+                    column_width: null,
+                });
                 is_changed = true;
             }
         }
@@ -4013,7 +4089,7 @@ function is_valid_screen_name(name){
 function get_login_screen_name(){
     const profile_link_selector = 'a[data-testid="AppTabBar_Profile_Link"]';
     const documents = [document];
-    document.querySelectorAll("#main_rack_element iframe").forEach((frame) => {
+    document.querySelectorAll("#main_rack_element iframe, #side_rack_element iframe").forEach((frame) => {
         try{
             if(frame.contentDocument) documents.push(frame.contentDocument);
         }catch(e){
