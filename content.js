@@ -919,12 +919,17 @@ function run(settings){
         color: var(--opd-danger);
     }
     /*カラム設定パネル (カラムバーの直下に開く)*/
+    /*縦に短いウィンドウでは iframe に押し潰されず、パネル内をスクロールして全項目に届く*/
     .dsp_column_settings_panel{
         display: none;
         position: relative;
         width: inherit;
         height: auto;
+        max-height: 60vh;
+        flex: 0 0 auto;
         flex-direction: column;
+        overflow-y: auto;
+        scrollbar-width: thin;
         background: var(--opd-surface-2);
         border-bottom: 1px solid var(--opd-border-soft);
     }
