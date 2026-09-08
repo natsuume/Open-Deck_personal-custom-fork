@@ -1066,13 +1066,6 @@ function run(settings){
         from{ opacity: 0; transform: translateY(6px) scale(0.98); }
         to{ opacity: 1; transform: none; }
     }
-    @media (prefers-reduced-motion: reduce){
-        .opd_dialog_overlay,
-        .opd_dialog,
-        .opd_frame_skeleton span{
-            animation: none;
-        }
-    }
     /*確認・入力・通知ダイアログ (confirm / prompt / alert の代替)*/
     .opd_message_dialog{
         width: 26rem;
@@ -1538,6 +1531,15 @@ function run(settings){
         height: 100%;
         -webkit-mask-size: 1rem;
         mask-size: 1rem;
+    }
+    /*動きを減らす設定では、ダイアログ・ポップオーバーの出現アニメーションと skeleton の流れる表示を止める (アニメーション定義より後に置いて同じ詳細度で上書きする)*/
+    @media (prefers-reduced-motion: reduce){
+        .opd_dialog_overlay,
+        .opd_dialog,
+        .opd_post_form_popover,
+        .opd_frame_skeleton span{
+            animation: none;
+        }
     }
     </style>`);
     //カラム要素作成-挿入
