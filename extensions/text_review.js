@@ -23,16 +23,11 @@ class OpdExtTextReview {
                     --opd-radius-md: 10px;
                     --opd-radius-full: 9999px;
                     --opd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, Arial, sans-serif;
-                    --opd-surface-soft: rgba(15, 20, 25, 0.05);
-                    --opd-border-soft: rgba(15, 20, 25, 0.13);
+                    /* X のテーマ (ライト / ダーク / ダークブルー) は OS の配色設定と独立に切り替わるため、面と境界線の色は X の文字色 (currentColor) から導く */
+                    --opd-surface-soft: color-mix(in srgb, currentColor 6%, transparent);
+                    --opd-border-soft: color-mix(in srgb, currentColor 16%, transparent);
                     font-family: var(--opd-font);
                     color: inherit;
-                }
-                @media (prefers-color-scheme: dark){
-                    .opd_post_functions, .opd_text_review_panel{
-                        --opd-surface-soft: rgba(231, 233, 234, 0.06);
-                        --opd-border-soft: rgba(231, 233, 234, 0.16);
-                    }
                 }
                 .opd_post_functions{
                     display: flex;
@@ -42,17 +37,11 @@ class OpdExtTextReview {
                 .opd_text_review_loader {
                     width: 2rem;
                     height: 2rem;
-                    border: 3px solid rgba(15, 20, 25, 0.15);
+                    border: 3px solid var(--opd-border-soft);
                     border-top-color: currentColor;
                     border-radius: var(--opd-radius-full);
                     animation: opd_text_review_loader_spin 0.8s linear infinite;
                     margin: 1rem auto;
-                }
-                @media (prefers-color-scheme: dark){
-                    .opd_text_review_loader{
-                        border-color: rgba(231, 233, 234, 0.15);
-                        border-top-color: currentColor;
-                    }
                 }
 
                 @keyframes opd_text_review_loader_spin {
