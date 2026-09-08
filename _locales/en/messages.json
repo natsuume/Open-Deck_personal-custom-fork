@@ -413,6 +413,12 @@
   "ui_settings_unpinned": {
     "message": "Unpinned"
   },
+  "ui_dialog_ok": {
+    "message": "OK"
+  },
+  "ui_dialog_cancel": {
+    "message": "Cancel"
+  },
   "msg_global_settings_invalid_width": {
     "message": "Enter a column width between 12 and 300"
   },

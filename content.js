@@ -20,6 +20,8 @@ let media_viewer_token = [];
 const column_auto_update_state = {
     text_focus: {date: 0, active: false},
     media_viewer: {active: false},
+    //開いているメッセージダイアログ (alert / confirm / prompt の代替) の数。1 以上のあいだは自動更新を止める
+    message_dialog: {open_count: 0},
 };
 //テキストフォーカスの状態 (自動更新の停止判定に使う) を更新する。解除するときは経過時間の判定に使う日時も戻す
 function set_text_focus_state(is_active){
@@ -117,7 +119,7 @@ function render_api_limit_status(){
     api_limit_description = API_LIMIT_CATEGORIES
         .filter(category => api_limit_description_by_key[category.key] != undefined)
         .map(category => api_limit_description_by_key[category.key])
-        .join("\r\n");
+        .join("\n");
     if(limit_percentages.length > 0){
         api_linit_status_btn.textContent = `${Math.floor(Math.min(...limit_percentages))}%`;
     }else if(has_expired_category){
@@ -270,7 +272,7 @@ function run(settings){
     for (let index = 0; index < profile_store.length; index++) {
         profile_list_btn_html += `<div class="dsp_btn_parent" title="${i18n_message("ui_profile_switch_title")}" id="userProfile-${index}"><div class="dsp_btn_change_profile_btn">P${index}</div></div>`;//<div class="profile_list"><input type="button" id="userProfile-${index}" value="P${index}"></div>
     }
-    profile_list_html = `<div class="profile_val_now" title="${i18n_message("ui_profile_current_title")}">${last_load_profile}</div><div class="dsp_profile_list"><div id="profile_btn_list">${profile_list_btn_html}</div>`;
+    profile_list_html = `<div class="profile_val_now" title="${i18n_message("ui_profile_current_title")}">${last_load_profile}</div><div class="dsp_profile_list"><div id="profile_btn_list">${profile_list_btn_html}</div></div>`;
     //console.log(profile_list_btn_html)
     //カラム全体のテキストフォーカスの状態で自動更新を制御できるようにする
     window.addEventListener('opd_post_focus', (e) => {
@@ -304,79 +306,420 @@ function run(settings){
     html{
         overflow-y:hidden !important;
     }
+    /*デザイントークン。色・余白・角丸・影・字形はすべてここで決め、各要素はこの変数だけを参照する。ダークモードは末尾の [opd-dsp-theme="dark"] で同じ変数を上書きする*/
+    #opd_main_element{
+        --opd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, Arial, sans-serif;
+        --opd-bg: #eff3f4;
+        --opd-surface: #ffffff;
+        --opd-surface-2: #f7f9f9;
+        --opd-surface-hover: rgba(15, 20, 25, 0.08);
+        --opd-surface-active: rgba(15, 20, 25, 0.14);
+        --opd-border: #cfd9de;
+        --opd-border-soft: #eff3f4;
+        --opd-text: #0f1419;
+        --opd-text-muted: #536471;
+        --opd-accent: #1d9bf0;
+        --opd-accent-hover: #1a8cd8;
+        --opd-accent-soft: rgba(29, 155, 240, 0.12);
+        --opd-on-accent: #ffffff;
+        --opd-danger: #f4212e;
+        --opd-danger-soft: rgba(244, 33, 46, 0.1);
+        --opd-skeleton: #e6ecf0;
+        --opd-skeleton-shine: #f7f9f9;
+        --opd-overlay: rgba(15, 20, 25, 0.45);
+        --opd-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23536471' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        --opd-radius-sm: 6px;
+        --opd-radius-md: 10px;
+        --opd-radius-lg: 16px;
+        --opd-radius-full: 9999px;
+        --opd-shadow-sm: 0 1px 2px rgba(15, 20, 25, 0.08);
+        --opd-shadow-lg: 0 16px 48px rgba(15, 20, 25, 0.28);
+        --opd-sidebar-width: 60px;
+        --opd-column-gap: 8px;
+        --opd-column-burn-in: 1;
+        --opd_side_rack_width: 0px;
+        font-family: var(--opd-font);
+        font-size: 0.875rem;
+        line-height: 1.4;
+        color: var(--opd-text);
+        background: var(--opd-bg) !important;
+        -webkit-font-smoothing: antialiased;
+    }
+    #opd_main_element *,
+    #opd_main_element *::before,
+    #opd_main_element *::after{
+        box-sizing: border-box;
+    }
+    #opd_main_element :focus-visible{
+        outline: 2px solid var(--opd-accent);
+        outline-offset: 2px;
+    }
+    #opd_main_element ::selection{
+        background: var(--opd-accent-soft);
+    }
+    /*アイコン。SVG を mask にして currentColor で塗るため、色はテーマの文字色・アクセント色にそのまま追従する*/
+    .opd_icon,
+    .dsp_btn_parent > div:not(.dsp_btn_change_profile_btn),
+    .dsp_column_move_icon,
+    .dsp_column_settings_btn,
+    .dsp_column_close_btn,
+    .dsp_column_banner_btn,
+    .dsp_column_top_btn,
+    .dsp_column_pin_btn,
+    .media_viewer_icon_close,
+    .media_viewer_icon_forward,
+    .media_viewer_icon_next,
+    .media_viewer_icon_download{
+        display: inline-block;
+        flex: none;
+        width: 1.375rem;
+        height: 1.375rem;
+        background-color: currentColor;
+        -webkit-mask: var(--opd-icon) center / contain no-repeat;
+        mask: var(--opd-icon) center / contain no-repeat;
+    }
+    .dsp_btn_post_form_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.post_form)}); }
+    .dsp_btn_add_tl_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_timeline_column)}); }
+    .dsp_btn_add_ntfc_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_notification_column)}); }
+    .dsp_btn_add_explr_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_explore_column)}); }
+    .dsp_btn_add_list_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_list_column)}); }
+    .dsp_btn_add_list_multi_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_list_multi_column)}); }
+    .dsp_btn_global_settings_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_settings)}); }
+    .dsp_btn_add_target_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_target_main)}); }
+    .dsp_btn_profile_add_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_save)}); }
+    .dsp_btn_profile_delete_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_delete)}); }
+    .dsp_column_move_icon{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_move)}); }
+    .dsp_column_settings_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_settings)}); }
+    .dsp_column_close_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_close)}); }
+    .dsp_column_banner_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.banner_hide)}); }
+    .dsp_column_top_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.top_bar_hide)}); }
+    .dsp_column_pin_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_pin)}); }
+    input:checked + .dsp_column_pin_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_pinned)}); }
+    .opd_icon_column_add_1{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_1)}); }
+    .opd_icon_column_add_2{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_2)}); }
+    .media_viewer_icon_close{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_close)}); }
+    .media_viewer_icon_forward{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.forward)}); }
+    .media_viewer_icon_next{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.next)}); }
+    .media_viewer_icon_download{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.download)}); }
+    /*ボタン primitive。<button> と <input type="button"> の両方に同じ見た目を与える*/
+    .opd_btn{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        min-height: 2.125rem;
+        padding: 0 1rem;
+        border: 1px solid var(--opd-border);
+        border-radius: var(--opd-radius-full);
+        background: var(--opd-surface);
+        color: var(--opd-text);
+        font: inherit;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+        transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .opd_btn:hover{
+        background: var(--opd-surface-hover);
+    }
+    .opd_btn:active{
+        background: var(--opd-surface-active);
+    }
+    .opd_btn_primary{
+        border-color: transparent;
+        background: var(--opd-accent);
+        color: var(--opd-on-accent);
+    }
+    .opd_btn_primary:hover{
+        background: var(--opd-accent-hover);
+    }
+    .opd_btn_primary:active{
+        background: var(--opd-accent-hover);
+    }
+    .opd_btn_sm{
+        min-height: 1.75rem;
+        padding: 0 0.75rem;
+        font-size: 0.75rem;
+    }
+    /*フォーム入力 primitive*/
+    .opd_input,
+    .opd_select,
+    .opd_textarea{
+        min-height: 2.125rem;
+        padding: 0 0.625rem;
+        border: 1px solid var(--opd-border);
+        border-radius: var(--opd-radius-sm);
+        background: var(--opd-surface);
+        color: var(--opd-text);
+        font: inherit;
+        font-size: 0.8125rem;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .opd_input:hover,
+    .opd_select:hover,
+    .opd_textarea:hover{
+        border-color: var(--opd-text-muted);
+    }
+    .opd_input:focus,
+    .opd_select:focus,
+    .opd_textarea:focus{
+        outline: none;
+        border-color: var(--opd-accent);
+        box-shadow: 0 0 0 3px var(--opd-accent-soft);
+    }
+    .opd_input[aria-invalid="true"]{
+        border-color: var(--opd-danger);
+        box-shadow: 0 0 0 3px var(--opd-danger-soft);
+    }
+    .opd_select{
+        padding-right: 1.75rem;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: var(--opd-select-arrow);
+        background-repeat: no-repeat;
+        background-position: right 0.5rem center;
+        cursor: pointer;
+    }
+    .opd_textarea{
+        padding: 0.5rem 0.625rem;
+        resize: vertical;
+        line-height: 1.4;
+    }
+    /*トグルスイッチ (checkbox を appearance:none で描く)。knob は input の擬似要素を描画しないエンジン (Gecko) でも出るよう背景画像で描き、位置で状態を伝える*/
+    .opd_switch{
+        appearance: none;
+        -webkit-appearance: none;
+        flex: none;
+        width: 2.5rem;
+        height: 1.375rem;
+        margin: 0;
+        border-radius: var(--opd-radius-full);
+        background-color: var(--opd-border);
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%23ffffff'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-size: 1rem 1rem;
+        background-position: left 0.1875rem center;
+        cursor: pointer;
+        transition: background-color 0.2s, background-position 0.2s;
+    }
+    .opd_switch:checked{
+        background-color: var(--opd-accent);
+        background-position: right 0.1875rem center;
+    }
+    .opd_checkbox{
+        width: 1rem;
+        height: 1rem;
+        margin: 0;
+        accent-color: var(--opd-accent);
+        cursor: pointer;
+    }
+    /*サイドバー*/
+    #opd_sidebar{
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 999;
+        height: 100%;
+    }
+    #opd_sidebar > div[opd_column_type="dsp_column"]{
+        display: flex;
+        flex-direction: column;
+        width: var(--opd-sidebar-width);
+        min-width: var(--opd-sidebar-width);
+        max-width: var(--opd-sidebar-width);
+        height: 100%;
+        overflow: hidden auto;
+        scrollbar-width: none;
+        background: var(--opd-surface);
+        border-right: 1px solid var(--opd-border-soft);
+    }
     .main_bar_functions{
         display: flex;
-        justify-content: center;
         flex-direction: column;
         align-items: center;
-        margin-top: 0.5rem;
+        gap: 0.25rem;
+        padding: 0.5rem 0 1rem;
     }
     .main_bar_functions hr{
-        width: 80%;
-        margin: 0;
+        width: 1.75rem;
+        height: 1px;
+        margin: 0.25rem 0;
+        border: 0;
+        background: var(--opd-border-soft);
+    }
+    .opd_ui_logo_parent{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.125rem;
+        width: 100%;
+        margin-bottom: 0.25rem;
+    }
+    .opd_ui_logo{
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: 50%;
+        background: url(${chrome.runtime.getURL("icon/logo_icon.svg")}) center / cover no-repeat;
+        cursor: pointer;
+        transition: transform 0.15s;
+    }
+    .opd_ui_logo:hover{
+        transform: scale(1.06);
     }
     .opd_version_span{
+        font-size: 0.625rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--opd-text-muted);
         cursor: pointer;
+        user-select: none;
     }
     .opd_debug_menu{
         display: none;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.25rem;
+        width: 100%;
+        padding: 0 0.25rem 0.25rem;
+        font-size: 0.625rem;
+        text-align: center;
+        color: var(--opd-text-muted);
     }
-    #opd_main_element{
-        background: #e4e4e4 !important;
-    }
-    div[opd_column_type="dsp_column"]{
-        overflow-x: scroll;
-        scrollbar-width: none;
-    }
-    #main_bar_empty_column{
-        background-color: white;
+    .opd_debug_menu .opd_btn{
+        min-height: 1.5rem;
+        padding: 0 0.25rem;
+        font-size: 0.5625rem;
+        white-space: normal;
     }
     #api_limit_status{
-        border-radius: 100px;
-        width: 50px;
-    }
-    #api_limit_status:hover{
-        background-color: #d5d5d5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.75rem;
+        height: 1.5rem;
+        padding: 0 0.375rem;
+        border-radius: var(--opd-radius-full);
+        background: var(--opd-surface-2);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--opd-text-muted);
         cursor: help;
     }
-    .opd_ui_logo_parent{
-        overflow: hidden;
-        display: flex;
-        width: 50px;
-        align-content: center;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
+    #api_limit_status:hover{
+        background: var(--opd-surface-hover);
+        color: var(--opd-text);
     }
-    .opd_ui_logo{
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL("icon/logo_icon.svg")});
-        height: 50px;
-        width: 50px;
+    .dsp_btn_parent{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: 50%;
+        color: var(--opd-text);
         cursor: pointer;
+        user-select: none;
+        transition: background-color 0.15s, color 0.15s;
+    }
+    .dsp_btn_parent:hover{
+        background: var(--opd-surface-hover);
+    }
+    .dsp_btn_parent:active{
+        background: var(--opd-surface-active);
+    }
+    .dsp_btn_parent:focus-visible{
+        outline: 2px solid var(--opd-accent);
+        outline-offset: -2px;
+    }
+    /*投稿ボタンはアクセント色の塗りで主操作として目立たせる*/
+    #open_post_form{
+        background: var(--opd-accent);
+        color: var(--opd-on-accent);
+        box-shadow: var(--opd-shadow-sm);
+    }
+    #open_post_form:hover,
+    #open_post_form[aria-expanded="true"]{
+        background: var(--opd-accent-hover);
+    }
+    /*追加先切替は押下状態 (サイドラック) をアクセント色で示す*/
+    #add_target_toggle[aria-pressed="true"]{
+        background: var(--opd-accent-soft);
+        color: var(--opd-accent);
+    }
+    #profile_delete:hover{
+        background: var(--opd-danger-soft);
+        color: var(--opd-danger);
     }
     .profile_val_now{
-        border-radius: 100px;
-        width: 55px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.75rem;
+        height: 1.25rem;
+        margin: 0.25rem 0;
+        padding: 0 0.5rem;
+        border-radius: var(--opd-radius-full);
+        background: var(--opd-accent);
+        color: var(--opd-on-accent);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        cursor: default;
     }
-    .profile_val_now:hover{
-        background-color: #d5d5d5;
+    .dsp_profile_list{
+        width: 100%;
+        max-height: 1000px;
+        overflow-y: auto;
+        scrollbar-width: none;
     }
-    #opd_main_element{
-        --opd_side_rack_width: 0px;
+    #profile_btn_list{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
     }
+    #profile_btn_list .dsp_btn_parent{
+        width: 2.5rem;
+        height: 1.75rem;
+        border-radius: var(--opd-radius-full);
+        border: 1px solid var(--opd-border);
+        background: var(--opd-surface);
+        color: var(--opd-text-muted);
+    }
+    #profile_btn_list .dsp_btn_parent:hover{
+        border-color: var(--opd-accent);
+        background: var(--opd-accent-soft);
+        color: var(--opd-accent);
+    }
+    .dsp_btn_change_profile_btn{
+        font-size: 0.6875rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+    }
+    /*ラック*/
     #main_rack_element{
         position: fixed;
         top: 0;
-        left: 60px;
+        left: var(--opd-sidebar-width);
         height: 100vh;
-        width: calc(100vw - 60px - var(--opd_side_rack_width));
-        max-width: calc(100vw - 60px - var(--opd_side_rack_width));
-        overflow: scroll hidden;
+        width: calc(100vw - var(--opd-sidebar-width) - var(--opd_side_rack_width));
+        max-width: calc(100vw - var(--opd-sidebar-width) - var(--opd_side_rack_width));
+        overflow: auto hidden;
+        scrollbar-width: thin;
+        scrollbar-color: var(--opd-border) transparent;
     }
     #opd_main_element[opd_side_rack_position="left"] #main_rack_element{
-        left: calc(60px + var(--opd_side_rack_width));
+        left: calc(var(--opd-sidebar-width) + var(--opd_side_rack_width));
+    }
+    #first_rack_element{
+        gap: var(--opd-column-gap);
+        padding: var(--opd-column-gap);
+    }
+    #first_rack_element > section.dsp_column{
+        flex: 0 0 auto;
     }
     #side_rack_element{
         position: fixed;
@@ -384,17 +727,22 @@ function run(settings){
         height: 100vh;
         display: flex;
         flex-direction: row;
+        gap: var(--opd-column-gap);
         width: max-content;
-        max-width: calc(100vw - 60px - ${COLUMN_WIDTH_MIN_REM}rem);
+        max-width: calc(100vw - var(--opd-sidebar-width) - ${COLUMN_WIDTH_MIN_REM}rem);
+        padding: var(--opd-column-gap);
         overflow: auto hidden;
         scrollbar-width: none;
         z-index: 998;
+        background: var(--opd-bg);
     }
     #opd_main_element[opd_side_rack_position="left"] #side_rack_element{
-        left: 60px;
+        left: var(--opd-sidebar-width);
+        border-right: 1px solid var(--opd-border);
     }
     #opd_main_element[opd_side_rack_position="right"] #side_rack_element{
         right: 0;
+        border-left: 1px solid var(--opd-border);
     }
     #side_rack_element > section.dsp_column{
         flex: 0 0 auto;
@@ -403,130 +751,55 @@ function run(settings){
     .dsp_column_side_emptycolumn[hidden]{
         display: none;
     }
-    .dsp_column_emptycolumn p{
-        text-align: center;
+    #main_bar_empty_column{
+        display: none;
     }
-    .dsp_column_side_emptycolumn p{
-        text-align: center;
-    }
-    .dsp_btn_parent{
-        overflow: hidden;
-        border-radius: 100px;
-        display: flex;
-        width: 50px;
-        height: 50px;
-        align-content: center;
-        justify-content: center;
-        align-items: center;
-    }
-    .dsp_btn_parent:hover{
-        background: #d5d5d5;
-        cursor: pointer;
-    }
-    .dsp_btn_parent:focus-visible{
-        outline: 2px solid currentColor;
-        outline-offset: -2px;
-    }
-    .dsp_btn_post_form_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.post_form)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_add_tl_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_timeline_column)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_add_ntfc_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_notification_column)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_add_explr_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_explore_column)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_add_list_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_list_column)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_add_list_multi_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_list_multi_column)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_global_settings_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.column_settings)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_add_target_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.add_target_main)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_profile_add_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.profile_save)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_profile_delete_img{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.profile_delete)});
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_btn_change_profile_btn{
-        display: flex;
-        font-size: 1.2rem;
-        justify-content: center;
-        align-items: center;
-        height: 69%;
-        width: 69%;
-    }
-    .dsp_profile_list{
-        max-height: 1000px;
-        overflow-y: scroll;
+    div[opd_column_type="dsp_column"]{
+        overflow-x: scroll;
         scrollbar-width: none;
     }
+    /*案内カラム (メインラック末尾・サイドラック末尾)*/
+    .dsp_column_emptycolumn,
+    .dsp_column_side_emptycolumn{
+        border: 2px dashed var(--opd-border);
+        border-radius: var(--opd-radius-lg);
+        color: var(--opd-text-muted);
+    }
+    .dsp_column_emptycolumn > div,
+    .dsp_column_side_emptycolumn > div{
+        height: 100%;
+        min-width: 30rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .dsp_column_emptycolumn > div > div,
+    .dsp_column_side_emptycolumn > div > div{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .dsp_column_emptycolumn .opd_icon,
+    .dsp_column_side_emptycolumn .opd_icon{
+        width: 3rem;
+        height: 3rem;
+        opacity: 0.6;
+    }
+    .dsp_column_emptycolumn p,
+    .dsp_column_side_emptycolumn p{
+        margin: 0.75rem 0 0;
+        text-align: center;
+        font-size: 0.875rem;
+    }
+    /*カラム*/
     .dsp_column_draggable_true{
-        border-left: solid 3px #0000002e;
-        border-right: solid 3px #0000002e;
-        border-bottom: solid 3px #0000002e;
-        /*overflow: hidden;*/
-        background-color: white;
-        border-radius: 6px 6px;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--opd-border-soft);
+        border-radius: var(--opd-radius-lg);
+        background: var(--opd-surface);
+        box-shadow: var(--opd-shadow-sm);
+        overflow: hidden;
     }
     .dsp_column_draggable_true div[opd_column_type]{
         display: flex;
@@ -535,191 +808,213 @@ function run(settings){
     .dsp_column iframe{
         border: 0;
     }
-    .dsp_column_btn{
-        width: 20px;
-        min-width: 20px;
-        border-radius: 2px;
-        overflow: hidden;
-        margin-right: 5px;
-    }
-    .dsp_column_btn:hover{
-        background: #d5d5d5;
-        cursor: pointer;
-    }
     .column_bar{
         display: flex;
         flex-direction: row;
+        align-items: center;
+        gap: 0.125rem;
         width: 100%;
-        min-height: 20px;
+        min-height: 2.25rem;
+        padding: 0.25rem;
         overflow: hidden;
-        border-top: solid #a0a0a073 1px !important;
-        border-bottom: solid #a0a0a073 1px !important;
-        border-radius: 4px 4px 0 0;
+        background: var(--opd-surface);
+        border-bottom: 1px solid var(--opd-border-soft);
     }
     .dsp_column_title{
-        width: auto;
-        background-color: white;
-        margin-right: 5px;
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        margin-right: 0.25rem;
+        cursor: grab;
+    }
+    .dsp_column_title:active{
+        cursor: grabbing;
     }
     .dsp_column_move_icon_parent{
-        max-height: 20px;
         display: flex;
         flex-direction: row;
         align-items: center;
+        gap: 0.125rem;
+        min-width: 0;
+        font-size: 0.8125rem;
+        font-weight: 700;
+    }
+    .dsp_column_move_icon_parent > span:not(.dsp_column_move_icon){
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        max-width: 12rem;
     }
     .dsp_column_move_icon{
-        display: block;
-        filter: brightness(0) saturate(100%) invert(61%) sepia(13%) saturate(13%) hue-rotate(335deg) brightness(89%) contrast(79%);
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.column_move)});
-        background-size: cover;
-        width: 15px;
-        height: 15px;   
+        width: 1rem;
+        height: 1rem;
+        color: var(--opd-text-muted);
     }
-    .dsp_column_settings_btn{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.column_settings)});
-        background-size: cover;
-        width: 20px;
-        height: 20px;    
-    }
-    .dsp_column_settings_btn:hover{
+    .dsp_column_btn{
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        width: 1.75rem;
+        min-width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 50%;
+        color: var(--opd-text-muted);
+        overflow: hidden;
         cursor: pointer;
+        transition: background-color 0.15s, color 0.15s;
     }
-    .dsp_column_settings_btn input{
-        display: none;
+    .dsp_column_btn:hover{
+        background: var(--opd-surface-hover);
+        color: var(--opd-text);
     }
-    .dsp_column_empty_area {
-    	width: 100%;
+    .dsp_column_btn:focus-within{
+        outline: 2px solid var(--opd-accent);
+        outline-offset: -2px;
     }
-    .dsp_column_close_btn{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.column_close)});
-        background-size: 15px;
-        background-repeat: no-repeat;
-        background-position: center;
-        width: 20px;
-        height: 20px;
-    }
-    .dsp_column_close_btn:hover{
+    .dsp_column_btn label{
+        width: 1rem;
+        height: 1rem;
         cursor: pointer;
-    }
-    .dsp_column_close_btn input{
-        display: none;
-    }
-
-    .dsp_column_banner_btn{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.banner_hide)});
-        transform: rotate(180deg);
-        background-size: cover;
-        width: 20px;
-        height: 20px;
-    }
-    input:checked + .dsp_column_banner_btn{
-        transform: rotate(0deg);
     }
     .dsp_column_btn input{
         opacity: 0;
         position: absolute;
+        inset: 0;
         z-index: 10;
+        width: 100%;
+        height: 100%;
         margin: 0;
-        width: 20px;
-        height: 20px;
         cursor: pointer;
     }
-    .dsp_column_top_btn{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.top_bar_hide)});
-        transform: rotate(180deg);
-        background-size: cover;
-        width: 20px;
-        height: 20px;
-        cursor: pointer;  
+    .dsp_column_settings_btn input,
+    .dsp_column_close_btn input{
+        display: none;
     }
+    .dsp_column_banner_btn,
+    .dsp_column_top_btn{
+        transform: rotate(180deg);
+        transition: transform 0.2s;
+    }
+    input:checked + .dsp_column_banner_btn,
     input:checked + .dsp_column_top_btn{
         transform: rotate(0deg);
     }
-    .dsp_column_top_btn input{
-        opacity: 0;
-        position: absolute;
-        z-index: 10;
-        margin: 0;
-        width: 20px;
-        height: 20px;
+    input:checked + .dsp_column_pin_btn{
+        color: var(--opd-accent);
+    }
+    .dsp_column_empty_area{
+        flex: 1 1 auto;
+        align-self: stretch;
+        min-width: 0.5rem;
+        cursor: pointer;
     }
     .dsp_column_close_btn_wrap{
         display: flex;
         justify-content: flex-end;
     }
-    .dsp_column_close_btn input{
-        display: none;
+    .dsp_column_close_btn_wrap .dsp_column_btn:hover{
+        background: var(--opd-danger-soft);
+        color: var(--opd-danger);
     }
-
-    .dsp_column_pin_btn{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.column_pin)});
-        background-size: cover;
-        width: 20px;
-        height: 20px;    
-    }
-    input:checked + .dsp_column_pin_btn{
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.column_pinned)});
-    }
-    .dsp_column_pin_btn input{
-        opacity: 0;
-        position: absolute;
-        z-index: 10;
-        margin: 0;
-        width: 20px;
-        height: 20px;
-    }
-
+    /*カラム設定パネル (カラムバーの直下に開く)*/
+    /*縦に短いウィンドウでは iframe に押し潰されず、パネル内をスクロールして全項目に届く*/
     .dsp_column_settings_panel{
         display: none;
         position: relative;
         width: inherit;
         height: auto;
-        background: #efefefeb;
-        border: 1px solid #a9a9a9eb;
+        max-height: 60vh;
+        flex: 0 0 auto;
         flex-direction: column;
-    }
-    .dsp_column_settings_panel h2{
-        /*margin: 0 0 0.2rem;*/
-        margin: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        background: var(--opd-surface-2);
+        border-bottom: 1px solid var(--opd-border-soft);
     }
     .dsp_column_settings_panel_content{
-        margin-left: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.625rem;
+        padding: 0.75rem;
     }
     .dsp_column_settings_panel_content h2{
-        font-size: 1.2rem;
-    }
-    .opd_column_settings_input_text{
-        width: 5rem;
-        margin-right: 0.2rem;
-    }
-    /* 入力を受け付けない状態 (readonly + aria-disabled)。フォーカスと tooltip は残す */
-    .opd_column_settings_input_text[aria-disabled="true"]{
-        opacity: 0.6;
-        cursor: not-allowed;
+        margin: 0;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--opd-text-muted);
     }
     .dsp_column_settings_list{
-        background: white;
-        border-radius: 5px;
-        margin: 0 0.5rem 0.5rem 0;
-        padding: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+        margin: 0;
+        padding: 0.25rem 0.625rem;
+        border: 1px solid var(--opd-border-soft);
+        border-radius: var(--opd-radius-md);
+        background: var(--opd-surface);
     }
     .dsp_column_settings_content_div{
-        margin-bottom: 0.1rem;
         display: flex;
+        flex-wrap: wrap;
+        align-items: center;
         justify-content: space-between;
+        gap: 0.25rem 0.75rem;
+        min-height: 2.25rem;
+        padding: 0.25rem 0;
+        font-size: 0.8125rem;
+    }
+    .dsp_column_settings_content_div + .dsp_column_settings_content_div{
+        border-top: 1px solid var(--opd-border-soft);
+    }
+    /*狭いカラムでは入力群が次の行へ折り返し、右寄せのまま収まる*/
+    .dsp_column_settings_content_div > span{
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.375rem;
+        flex: 1 1 auto;
+        margin-left: auto;
+        font-size: 0.75rem;
+        color: var(--opd-text-muted);
+    }
+    /*入力欄と単位の接尾辞は折り返しで離れないよう 1 つの塊にする*/
+    .opd_settings_input_group{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        white-space: nowrap;
+    }
+    .dsp_column_settings_content_div > span > label{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+    }
+    .dsp_column_settings_content_div .opd_select,
+    .dsp_column_settings_content_div .opd_input{
+        min-height: 1.75rem;
+        font-size: 0.75rem;
+    }
+    .opd_column_settings_input_text{
+        width: 4.5rem;
+    }
+    /*入力を受け付けない状態 (readonly + aria-disabled)。フォーカスと tooltip は残す*/
+    .opd_column_settings_input_text[aria-disabled="true"]{
+        opacity: 0.55;
+        cursor: not-allowed;
+        background: var(--opd-surface-2);
     }
     .dsp_column_settings_panel_close_btn_wrap{
         display: flex;
         flex-direction: row;
-        justify-content: center;
-        margin: 0 0.5rem 0.5rem 0;
+        justify-content: flex-end;
     }
-    /*モーダルダイアログ共通(リストカラム複数追加ダイアログ・全体設定ダイアログ)*/
+    /*モーダルダイアログ共通 (リストカラム複数追加・全体設定・確認 / 入力ダイアログ)*/
     .opd_dialog_overlay{
         position: fixed;
         inset: 0;
@@ -727,41 +1022,106 @@ function run(settings){
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(0, 0, 0, 0.5);
+        padding: 1rem;
+        background: var(--opd-overlay);
+        animation: opd_fade_in 0.12s ease-out;
     }
     .opd_dialog{
         position: relative;
         z-index: 1;
         display: flex;
         flex-direction: column;
-        max-width: 95%;
-        max-height: 92%;
-        box-sizing: border-box;
+        gap: 0.75rem;
+        max-width: 100%;
+        max-height: 100%;
         overflow-y: auto;
-        padding: 1rem;
-        background: #efefefeb;
-        border: 1px solid #a9a9a9eb;
-        color: black;
+        padding: 1.25rem;
+        border: 1px solid var(--opd-border-soft);
+        border-radius: var(--opd-radius-lg);
+        background: var(--opd-surface);
+        color: var(--opd-text);
+        box-shadow: var(--opd-shadow-lg);
+        scrollbar-width: thin;
+        animation: opd_dialog_in 0.16s ease-out;
+    }
+    .opd_dialog h2{
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+    .opd_dialog h3{
+        margin: 0;
+        font-size: 0.875rem;
+        font-weight: 700;
+    }
+    .opd_dialog label{
+        font-size: 0.8125rem;
+    }
+    .opd_dialog_actions{
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
+    }
+    @keyframes opd_fade_in{
+        from{ opacity: 0; }
+        to{ opacity: 1; }
+    }
+    @keyframes opd_dialog_in{
+        from{ opacity: 0; transform: translateY(6px) scale(0.98); }
+        to{ opacity: 1; transform: none; }
+    }
+    /*確認・入力・通知ダイアログ (confirm / prompt / alert の代替)*/
+    .opd_message_dialog{
+        width: 26rem;
+    }
+    .opd_message_dialog_body{
+        margin: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 0.875rem;
+        color: var(--opd-text);
+    }
+    .opd_message_dialog_input{
+        width: 100%;
     }
     /*全体設定ダイアログ*/
     .opd_global_settings_dialog{
-        gap: 0.5rem;
         width: 28rem;
+        gap: 0;
+    }
+    .opd_global_settings_dialog h2{
+        margin-bottom: 0.25rem;
     }
     .opd_global_settings_description{
-        margin: 0;
-        font-size: 0.85rem;
+        margin: 0 0 0.75rem;
+        font-size: 0.8125rem;
+        color: var(--opd-text-muted);
     }
     .opd_global_settings_row{
         display: flex;
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
-        gap: 0.5rem;
+        gap: 0.75rem;
+        min-height: 2.75rem;
+        padding: 0.25rem 0;
+        border-top: 1px solid var(--opd-border-soft);
+    }
+    .opd_global_settings_row > span{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.8125rem;
+        color: var(--opd-text-muted);
     }
     .opd_global_settings_status{
         min-height: 1.5rem;
-        font-size: 0.9rem;
+        margin-top: 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--opd-danger);
     }
     .opd_global_settings_actions{
         display: flex;
@@ -771,23 +1131,20 @@ function run(settings){
     }
     /*リストカラム複数追加ダイアログ*/
     .opd_list_picker_overlay{
-        --opd-list-picker-accent: #1d9bf0;
-        --opd-list-picker-accent-text: #ffffff;
-        --opd-list-picker-accent-background: rgba(29, 155, 240, 0.15);
-        --opd-list-picker-surface: #ffffff;
-        --opd-list-picker-skeleton: #bdbdbd;
-        --opd-list-picker-muted-text: #555555;
-        --opd-frame-surface: var(--opd-list-picker-surface);
-        --opd-frame-skeleton: var(--opd-list-picker-skeleton);
+        /*iframe 内の選択表示へ JS が getComputedStyle で読み出して注入する色 (var() は計算値で解決される)*/
+        --opd-list-picker-accent: var(--opd-accent);
+        --opd-list-picker-accent-text: var(--opd-on-accent);
+        --opd-list-picker-accent-background: var(--opd-accent-soft);
+        --opd-frame-surface: var(--opd-surface);
+        --opd-frame-skeleton: var(--opd-skeleton);
     }
     .opd_list_picker_dialog{
-        gap: 0.5rem;
         width: 72rem;
     }
     .opd_list_picker_body{
         display: flex;
         flex-direction: row;
-        gap: 1rem;
+        gap: 1.25rem;
         min-height: 0;
     }
     .opd_list_picker_browse{
@@ -804,16 +1161,30 @@ function run(settings){
         flex: 2 1 0;
         min-width: 0;
     }
+    .opd_list_picker_user_row{
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .opd_list_picker_user_row label{
+        flex: none;
+    }
+    .opd_list_picker_user_input{
+        flex: 1 1 auto;
+        min-width: 0;
+    }
     .opd_list_picker_status,
     .opd_list_picker_selection_status{
         min-height: 1.5rem;
-        font-size: 0.9rem;
+        font-size: 0.8125rem;
+        color: var(--opd-text-muted);
     }
     .opd_list_picker_frame_wrap{
         position: relative;
         height: clamp(12rem, 55vh, 34rem);
-        background: var(--opd-list-picker-surface);
-        border-radius: 5px;
+        background: var(--opd-frame-surface);
+        border: 1px solid var(--opd-border-soft);
+        border-radius: var(--opd-radius-md);
         overflow: hidden;
     }
     .opd_list_picker_frame{
@@ -824,53 +1195,61 @@ function run(settings){
     }
     .opd_list_picker_selection_hint{
         margin: 0;
-        font-size: 0.85rem;
-        color: var(--opd-list-picker-muted-text);
+        font-size: 0.8125rem;
+        color: var(--opd-text-muted);
     }
     .opd_list_picker_selected_wrap{
         position: relative;
         flex: 1 1 auto;
         min-height: 10rem;
         overflow-y: auto;
-        background: var(--opd-list-picker-surface);
-        border-radius: 5px;
+        scrollbar-width: thin;
+        background: var(--opd-surface-2);
+        border: 1px solid var(--opd-border-soft);
+        border-radius: var(--opd-radius-md);
     }
     .opd_list_picker_selected{
         list-style: none;
         margin: 0;
-        padding: 0.4rem;
+        padding: 0.375rem;
     }
     .opd_list_picker_selected_item{
         display: flex;
         align-items: center;
-        gap: 0.4rem;
-        padding: 0.3rem 0.4rem;
+        gap: 0.5rem;
+        padding: 0.375rem 0.5rem;
         border-top: 2px solid transparent;
         border-bottom: 2px solid transparent;
-        border-radius: 4px;
+        border-radius: var(--opd-radius-sm);
+        font-size: 0.8125rem;
         cursor: grab;
+        transition: background-color 0.15s;
+    }
+    .opd_list_picker_selected_item:hover{
+        background: var(--opd-surface-hover);
     }
     .opd_list_picker_selected_item:focus-visible{
-        outline: 2px solid var(--opd-list-picker-accent);
+        outline: 2px solid var(--opd-accent);
         outline-offset: -2px;
     }
     .opd_list_picker_selected_item.opd_list_picker_dragging{
         opacity: 0.5;
     }
     .opd_list_picker_selected_item.opd_list_picker_drop_before{
-        border-top-color: var(--opd-list-picker-accent);
+        border-top-color: var(--opd-accent);
     }
     .opd_list_picker_selected_item.opd_list_picker_drop_after{
-        border-bottom-color: var(--opd-list-picker-accent);
+        border-bottom-color: var(--opd-accent);
     }
     .opd_list_picker_drag_handle{
-        color: var(--opd-list-picker-muted-text);
+        color: var(--opd-text-muted);
         user-select: none;
     }
     .opd_list_picker_order{
         min-width: 1.8rem;
         text-align: right;
         font-variant-numeric: tabular-nums;
+        color: var(--opd-text-muted);
     }
     .opd_list_picker_selected_name{
         flex: 1 1 auto;
@@ -878,26 +1257,48 @@ function run(settings){
         overflow-wrap: anywhere;
     }
     .opd_list_picker_remove_btn{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         flex: none;
+        width: 1.5rem;
+        height: 1.5rem;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--opd-text-muted);
+        font: inherit;
+        font-size: 1rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .opd_list_picker_remove_btn:hover{
+        background: var(--opd-danger-soft);
+        color: var(--opd-danger);
     }
     .opd_list_picker_empty{
         margin: 0;
-        padding: 0.8rem;
-        color: var(--opd-list-picker-muted-text);
+        padding: 1rem;
+        text-align: center;
+        font-size: 0.8125rem;
+        color: var(--opd-text-muted);
     }
     .opd_list_picker_manual_row{
         display: flex;
         align-items: flex-start;
-        gap: 0.4rem;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
     }
     .opd_list_picker_manual{
         flex: 1 1 auto;
         min-width: 0;
         min-height: 3rem;
-        box-sizing: border-box;
     }
     .opd_list_picker_count{
         min-height: 1.5rem;
+        font-size: 0.8125rem;
+        color: var(--opd-text-muted);
     }
     .opd_list_picker_actions{
         display: flex;
@@ -922,43 +1323,44 @@ function run(settings){
         inset: 0;
         display: flex;
         flex-direction: column;
-        gap: 0.6rem;
-        padding: 0.8rem;
-        box-sizing: border-box;
+        gap: 0.75rem;
+        padding: 1rem;
         background: var(--opd-frame-surface);
     }
     .opd_frame_skeleton span{
         display: block;
         height: 3rem;
-        border-radius: 4px;
-        background: var(--opd-frame-skeleton);
+        border-radius: var(--opd-radius-md);
+        background: linear-gradient(90deg, var(--opd-frame-skeleton) 0%, var(--opd-skeleton-shine) 50%, var(--opd-frame-skeleton) 100%);
+        background-size: 200% 100%;
+        animation: opd_skeleton_shimmer 1.4s ease-in-out infinite;
+    }
+    @keyframes opd_skeleton_shimmer{
+        from{ background-position: 200% 0; }
+        to{ background-position: -200% 0; }
     }
     .opd_frame_skeleton[hidden]{
         display: none;
     }
     /*ポストフォームのポップオーバー (サイドバーの投稿ボタンの横に出る非モーダルの浮動パネル。z-index はサイドバーと同じ 999 で、DOM 順が後なのでサイドバーの上・モーダルダイアログ (1000) の下に重なる)*/
     .opd_post_form_popover{
-        --opd-post-form-surface: #ffffff;
-        --opd-post-form-border: #a9a9a9eb;
-        --opd-post-form-bar-background: #efefef;
-        --opd-post-form-text: black;
-        --opd-frame-surface: var(--opd-post-form-surface);
-        --opd-frame-skeleton: #bdbdbd;
+        --opd-frame-surface: var(--opd-surface);
+        --opd-frame-skeleton: var(--opd-skeleton);
         position: fixed;
-        left: calc(60px + 0.5rem);
+        left: calc(var(--opd-sidebar-width) + 0.5rem);
         top: 8px;
         z-index: 999;
         display: flex;
         flex-direction: column;
-        width: min(38rem, calc(100vw - 60px - 1.5rem));
+        width: min(38rem, calc(100vw - var(--opd-sidebar-width) - 1.5rem));
         height: min(80vh, 44rem);
-        box-sizing: border-box;
         overflow: hidden;
-        background: var(--opd-post-form-surface);
-        border: 1px solid var(--opd-post-form-border);
-        border-radius: 5px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-        color: var(--opd-post-form-text);
+        background: var(--opd-surface);
+        border: 1px solid var(--opd-border-soft);
+        border-radius: var(--opd-radius-lg);
+        box-shadow: var(--opd-shadow-lg);
+        color: var(--opd-text);
+        animation: opd_dialog_in 0.16s ease-out;
     }
     .opd_post_form_popover[hidden]{
         display: none;
@@ -969,31 +1371,43 @@ function run(settings){
         align-items: center;
         justify-content: space-between;
         gap: 0.5rem;
-        padding: 0.25rem 0.5rem;
-        background: var(--opd-post-form-bar-background);
-        border-bottom: 1px solid var(--opd-post-form-border);
+        padding: 0.5rem 0.5rem 0.5rem 1rem;
+        background: var(--opd-surface);
+        border-bottom: 1px solid var(--opd-border-soft);
     }
     .opd_post_form_title{
         margin: 0;
-        font-size: 0.9rem;
-        font-weight: 600;
+        font-size: 0.9375rem;
+        font-weight: 700;
     }
     .opd_post_form_close_btn{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         flex: 0 0 auto;
-        border: 0;
+        width: 2rem;
+        height: 2rem;
         padding: 0;
+        border: 0;
+        border-radius: 50%;
         background-color: transparent;
+        color: var(--opd-text-muted);
         cursor: pointer;
+        transition: background-color 0.15s, color 0.15s;
     }
-    .opd_post_form_close_btn:focus-visible{
-        outline: 2px solid currentColor;
-        outline-offset: 2px;
+    .opd_post_form_close_btn:hover{
+        background-color: var(--opd-surface-hover);
+        color: var(--opd-text);
+    }
+    .opd_post_form_close_btn .opd_icon{
+        width: 1.125rem;
+        height: 1.125rem;
     }
     .opd_post_form_frame_wrap{
         position: relative;
         flex: 1 1 auto;
         min-height: 0;
-        background: var(--opd-post-form-surface);
+        background: var(--opd-surface);
     }
     .opd_post_form_frame{
         display: block;
@@ -1001,79 +1415,43 @@ function run(settings){
         height: 100%;
         border: 0;
     }
-    .opd_ui_icon_color{
-        filter: brightness(0) saturate(100%) invert(11%) sepia(16%) saturate(13%) hue-rotate(322deg) brightness(107%) contrast(80%);
-    }
-    /*#main_rack_element section:first-child{
-        margin-left:110px
-    }*/
-    /*:root {color-scheme: light;}*/
-    /*#opd_main_element[opd-dsp-theme="dark"] {
-        color-scheme: dark;
-    }*/
     #opd_main_element[opd-dsp-theme="light"] {
         color-scheme: light;
     }
-    /*ダークモード検出時*/
+    /*ダークモード。トークンを差し替えるだけで全要素が追従する。焼付き軽減のためカラム内容は非ホバー時にわずかに暗くする*/
     #opd_main_element[opd-dsp-theme="dark"] {
         color-scheme: dark;
+        --opd-bg: #000000;
+        --opd-surface: #16181c;
+        --opd-surface-2: #1d1f23;
+        --opd-surface-hover: rgba(231, 233, 234, 0.1);
+        --opd-surface-active: rgba(231, 233, 234, 0.18);
+        --opd-border: #3e4144;
+        --opd-border-soft: #2f3336;
+        --opd-text: #e7e9ea;
+        --opd-text-muted: #8b98a5;
+        --opd-accent-soft: rgba(29, 155, 240, 0.2);
+        --opd-danger-soft: rgba(244, 33, 46, 0.2);
+        --opd-skeleton: #2f3336;
+        --opd-skeleton-shine: #3e4144;
+        --opd-overlay: rgba(91, 112, 131, 0.4);
+        --opd-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b98a5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        --opd-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --opd-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.7);
+        --opd-column-burn-in: 0.72;
 
         & #main_rack_element {
-            background-color: black !important;
-            scrollbar-color: auto;
+            scrollbar-color: var(--opd-border) transparent;
         }
 
-        & .dsp_column_draggable_false,
-        & #first_rack_element,
-        & #side_rack_element,
-        & #main_bar_empty_column {
-            background-color: black !important;
-            color: white;
-        }
-
-        & .dsp_column_draggable_true,
-        & .dsp_column_title {
-            background-color: #2e2e2e !important;
-        }
-
-        & .dsp_btn_post_form_img,
-        & .dsp_btn_add_tl_img,
-        & .dsp_btn_add_ntfc_img,
-        & .dsp_btn_add_explr_img,
-        & .dsp_btn_add_list_img,
-        & .dsp_btn_add_list_multi_img,
-        & .dsp_btn_global_settings_img,
-        & .dsp_btn_add_target_img,
-        & .dsp_btn_profile_add_img,
-        & .dsp_btn_profile_delete_img,
-        & .dsp_column_move_icon,
-        & .opd_ui_icon_color {
-            filter: brightness(0) saturate(100%) invert(48%) sepia(0%) saturate(93%) hue-rotate(266deg) brightness(93%) contrast(86%);
-        }
-
-        & #api_limit_status:hover,
-        & .dsp_btn_parent:hover,
-        & .dsp_column_btn:hover,
-        & .profile_val_now:hover {
-            background: #555555;
-        }
-
-        & .dsp_column_settings_panel {
-            background: #2e2e2e;
-            border: 1px solid #5d5d5d;
-        }
-
-        & .dsp_column_settings_list {
-            background: #474747;
-        }
-        
-        & .dsp_column_title {
-            background-color: transparent !important;
+        & .dsp_column_draggable_true {
+            background-color: #000000;
+            border-color: var(--opd-border-soft);
         }
 
         /* 焼付き軽減 */
         & div[opd_column_type="dsp_column"] {
-            filter: brightness(0.7);
+            filter: brightness(var(--opd-column-burn-in));
             transition: filter 0.3s;
             &:hover {
                 filter: brightness(1);
@@ -1089,27 +1467,7 @@ function run(settings){
         }
 
         & #main_bar_empty_column, div[opd_column_type="empty_column"], div[opd_column_type="side_empty_column"] {
-            filter: brightness(0.7);
-        }
-
-        & .opd_list_picker_overlay {
-            --opd-list-picker-surface: #474747;
-            --opd-list-picker-skeleton: #7a7a7a;
-            --opd-list-picker-muted-text: #c0c0c0;
-        }
-
-        & .opd_dialog {
-            background: #2e2e2e;
-            border: 1px solid #5d5d5d;
-            color: white;
-        }
-
-        & .opd_post_form_popover {
-            --opd-post-form-surface: #2e2e2e;
-            --opd-post-form-border: #5d5d5d;
-            --opd-post-form-bar-background: #474747;
-            --opd-post-form-text: white;
-            --opd-frame-skeleton: #7a7a7a;
+            filter: brightness(var(--opd-column-burn-in));
         }
     }
 
@@ -1121,78 +1479,104 @@ function run(settings){
         outline: none;
     }
     .opd_media_viewer_func_btn{
-        border: 0;
-        background: #00000000;
-        cursor: pointer;
-        outline: none;
-    }
-    .opd_media_viewer_func_btn.media_switch_btn{
-        width: 80px;
-        height: 80px;
-        margin: 10px;
-        border-radius: 10px;
         display: flex;
         justify-content: center;
         align-items: center;
-    }
-    .opd_media_viewer_func_btn_circle button{
         border: 0;
-        background: #00000000;
+        background: transparent;
+        color: #ffffff;
         cursor: pointer;
         outline: none;
-        border-radius: 10px;
+        transition: background-color 0.15s;
+    }
+    .opd_media_viewer_func_btn.media_switch_btn{
+        width: 3.5rem;
+        height: 3.5rem;
+        margin: 0.625rem;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.08);
+    }
+    .opd_media_viewer_func_btn_circle button{
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border: 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+        cursor: pointer;
+        outline: none;
+        transition: background-color 0.15s;
     }
     button[disabled].opd_media_viewer_func_btn{
         visibility: hidden;
     }
     .opd_media_viewer_func_btn_icon_color{
-        filter: brightness(0) saturate(100%) invert(96%) sepia(6%) saturate(0%) hue-rotate(285deg) brightness(115%) contrast(100%);
+        color: #ffffff;
     }
-    .opd_media_viewer_func_btn:hover{
-        background: #2f2f2fa3;
-    }
+    .opd_media_viewer_func_btn:hover,
     .opd_media_viewer_func_btn_circle button:hover{
-        background: #2f2f2fa3;
+        background: rgba(255, 255, 255, 0.22);
     }
-    .media_viewer_icon_close{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.column_close)});
-        background-size: 20px;
-        background-repeat: no-repeat;
-        background-position: center;
-        width: 40px;
-        height: 40px;
-        padding: 5px;
+    .opd_media_viewer_func_btn:focus-visible,
+    .opd_media_viewer_func_btn_circle button:focus-visible{
+        outline: 2px solid #ffffff;
+        outline-offset: 2px;
     }
-    .media_viewer_icon_forward{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.forward)});
-        background-size: 20px;
-        background-repeat: no-repeat;
-        background-position: center;
-        width: 30px;
-        height: 30px;
-        padding: 5px;
-    }
-    .media_viewer_icon_next{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.next)});
-        background-size: 20px;
-        background-repeat: no-repeat;
-        background-position: center;
-        width: 30px;
-        height: 30px;
-        padding: 5px;
-    }
+    .media_viewer_icon_close,
+    .media_viewer_icon_forward,
+    .media_viewer_icon_next,
     .media_viewer_icon_download{
-        display: block;
-        background-image: url(${chrome.runtime.getURL(ui_icon_define.download)});
-        background-size: 20px;
-        background-repeat: no-repeat;
-        background-position: center;
-        width: 30px;
-        height: 30px;
-        padding: 5px;
+        width: 1.5rem;
+        height: 1.5rem;
+    }
+    .opd_icon_close{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_close)}); }
+    .dsp_column_btn label{
+        width: 100%;
+        height: 100%;
+        -webkit-mask-size: 1rem;
+        mask-size: 1rem;
+    }
+    /*動きを減らす設定では、ダイアログ・ポップオーバーの出現アニメーションと skeleton の流れる表示を止める (アニメーション定義より後に置いて同じ詳細度で上書きする)*/
+    @media (prefers-reduced-motion: reduce){
+        .opd_dialog_overlay,
+        .opd_dialog,
+        .opd_post_form_popover,
+        .opd_frame_skeleton span{
+            animation: none;
+        }
+    }
+    /*強制配色 (Windows のハイコントラスト等) では background-color が Canvas 色に置き換わり mask アイコンが消えるため、システム色で塗り直す。トグルスイッチは枠と塗りで状態を示す*/
+    @media (forced-colors: active){
+        .opd_icon,
+        .dsp_btn_parent > div:not(.dsp_btn_change_profile_btn),
+        .dsp_column_move_icon,
+        .dsp_column_settings_btn,
+        .dsp_column_close_btn,
+        .dsp_column_banner_btn,
+        .dsp_column_top_btn,
+        .dsp_column_pin_btn,
+        .media_viewer_icon_close,
+        .media_viewer_icon_forward,
+        .media_viewer_icon_next,
+        .media_viewer_icon_download{
+            forced-color-adjust: none;
+            background-color: CanvasText;
+        }
+        #open_post_form .dsp_btn_post_form_img,
+        .opd_media_viewer_func_btn_icon_color{
+            background-color: ButtonText;
+        }
+        .opd_switch{
+            forced-color-adjust: none;
+            border: 2px solid ButtonText;
+            background-color: Canvas;
+        }
+        .opd_switch:checked{
+            background-color: Highlight;
+        }
     }
     </style>`);
     //カラム要素作成-挿入
@@ -1204,17 +1588,17 @@ function run(settings){
     let explore_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:true, pinned:true});
     let default_element = {
         /*main_bar_empty_column:{html:`<!--<section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" opd_column_width="%column_width_num%" id="main_bar_empty_column" style="height:100%;min-width: 70px;"></div></section>-->`},*/
-        empty_column:{html:`<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_emptycolumn"><div opd_column_type="empty_column" opd_column_width="%column_width_attr%" style="height: 100%;min-width: 30rem;display: flex;align-items: center;justify-content: center;"><div><img src="${chrome.runtime.getURL(ui_icon_define.column_add_1)}" style="filter: brightness(0) saturate(100%) invert(61%) sepia(13%) saturate(13%) hue-rotate(335deg) brightness(89%) contrast(79%);"><p>左のバーからカラムを追加</p></div></div></section>`},
-        home:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="home" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Timeline</span></div></span>${default_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${home_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com/home" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
-        notification:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="notification" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Notifications</span></div></span>${default_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${notification_settings_panel}<iframe allow="fullscreen" src="https://x.com/notifications" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
-        explore:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="explore" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_setting_pinned="%column_setting_pinned%" opd_explore_path="%column_save_path%" opd_explore_title="%column_save_title%" opd_pinned_path="%column_pinned_save_path%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span class="dsp_explore_column_title">%column_title%</span></div></span>${default_element_bar}<span class="dsp_column_btn"><input class="opd_pinned_btn" type="checkbox" title="ピン止め切り替え" %column_pinned_ch%><label class="dsp_column_pin_btn opd_ui_icon_color"></label></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="カラムを閉じる"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${explore_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com%column_save_path%" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`}
+        empty_column:{html:`<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_emptycolumn"><div opd_column_type="empty_column" opd_column_width="%column_width_attr%"><div><span class="opd_icon opd_icon_column_add_1" aria-hidden="true"></span><p>${i18n_message("ui_empty_column_message")}</p></div></div></section>`},
+        home:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="home" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Timeline</span></div></span>${default_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="${i18n_message("ui_column_close_title")}"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${home_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com/home" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
+        notification:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="notification" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span>Notifications</span></div></span>${default_element_bar}<div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="${i18n_message("ui_column_close_title")}"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${notification_settings_panel}<iframe allow="fullscreen" src="https://x.com/notifications" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
+        explore:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="explore" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_setting_pinned="%column_setting_pinned%" opd_explore_path="%column_save_path%" opd_explore_title="%column_save_title%" opd_pinned_path="%column_pinned_save_path%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;"><div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><div class="dsp_column_move_icon_parent"><span class="dsp_column_move_icon"></span><span class="dsp_explore_column_title">%column_title%</span></div></span>${default_element_bar}<span class="dsp_column_btn"><input class="opd_pinned_btn" type="checkbox" title="${i18n_message("ui_column_pin_toggle_title")}" %column_pinned_ch%><label class="dsp_column_pin_btn opd_ui_icon_color"></label></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn opd_ui_icon_color" title="${i18n_message("ui_column_close_title")}"><input type="button" class="column_close_btn" value="X"/></label></span></div></div>${explore_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com%column_save_path%" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`}
     };
     //サイドラックの案内カラム。プロファイルには保存せず、run() ごとに #side_rack_element の末尾へ 1 つ作る
-    const side_empty_column_template = `<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_side_emptycolumn"><div opd_column_type="side_empty_column" opd_column_width="%column_width_attr%" style="height: 100%;min-width: 30rem;display: flex;align-items: center;justify-content: center;"><div><img src="${chrome.runtime.getURL(ui_icon_define.column_add_2)}" style="filter: brightness(0) saturate(100%) invert(61%) sepia(13%) saturate(13%) hue-rotate(335deg) brightness(89%) contrast(79%);"><p>${i18n_message("ui_side_empty_column_message")}</p></div></div></section>`;
+    const side_empty_column_template = `<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_side_emptycolumn"><div opd_column_type="side_empty_column" opd_column_width="%column_width_attr%"><div><span class="opd_icon opd_icon_column_add_2" aria-hidden="true"></span><p>${i18n_message("ui_side_empty_column_message")}</p></div></div></section>`;
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
-    ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;background: white;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 60px;max-width: 60px;text-align: center;background-color: white;"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><p class="opd_debug_menu">${i18n_message("ui_debug_menu_label")}<br><input type="button" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><br><input type="button" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><br><input type="button" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><br><input type="button" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /><br><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" id="add_target_toggle" tabindex="0" role="button" aria-pressed="false" title="${i18n_message("ui_add_target_main_title")}"><div class="dsp_btn_add_target_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 60px;max-width: 60px;"></div></section>`;
+    ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;display: flex;flex-direction: row;overflow: hidden;";
+    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" id="add_target_toggle" tabindex="0" role="button" aria-pressed="false" title="${i18n_message("ui_add_target_main_title")}"><div class="dsp_btn_add_target_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
     //let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 100px;text-align: center;background-color: white;"><div><p style="margin-top:0;padding-top:1em;">Open-Deck<br>Prototype<br>v${manifest.version}</p><hr><p>Debug<br><input type="button" id="init_settings" value="init settings"/><br><input type="button" id="profile_load_save" value="Profile Load"/><br><input type="button" id="dnr_reload" value="dNR_Reload"/><br><input type="button" id="ext_reload" value="Ext_Reload"/></p><hr><p><input type="button" id="add_timeline" value="Add TimeLine"/> <div class="dsp_btn_parent"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_explr_img"></div></div> </p><p><input type="button" id="add_notify" value="Add Notification"/></p><p><input type="button" id="add_explore" value="Add Explore"/><hr><input type="button" id="second_rack" value="Second Rack"/><hr><input type="button" id="profile_save" value="Profile_Save"/><br><input type="button" id="profile_delete" value="Profile_Delete"/><br>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 110px;"></div></section>`;
     let main_column_html = ``;
     let side_column_html = ``;
@@ -1319,21 +1703,21 @@ function run(settings){
         { childList: true, subtree: false }
     );
     //APIリミット表示用
-    document.querySelector("#api_limit_status").addEventListener("click", function(){
+    document.querySelector("#api_limit_status").addEventListener("click", async function(){
         if(api_limit_obj != null){
-            alert(i18n_message("msg_api_limit_status_alert", [api_limit_description]))
+            await show_alert_dialog(i18n_message("msg_api_limit_status_alert", [api_limit_description]));
         }
     });
     //Open-Deckについて表示
     document.querySelector(".opd_ui_logo").addEventListener("click", function(){
-        window.open(chrome.runtime.getURL("about_opd.html"), "About Open-Deck", 'width=720, height=280');
+        window.open(chrome.runtime.getURL("about_opd.html"), "About Open-Deck", 'width=720, height=420');
     });
     //デバッグメニュー表示
     let debug_menu_click_counter = 0;
-    document.querySelector(".opd_version_span").addEventListener("click", function(){
+    document.querySelector(".opd_version_span").addEventListener("click", async function(){
         if(debug_menu_click_counter >= 7){
-            alert(i18n_message("msg_debug_menu_enabled"));
-            document.querySelector(".opd_debug_menu").style.display = "block";
+            await show_alert_dialog(i18n_message("msg_debug_menu_enabled"));
+            document.querySelector(".opd_debug_menu").style.display = "flex";
         }else{
             debug_menu_click_counter += 1;
         }
@@ -1383,7 +1767,7 @@ function run(settings){
     function create_profile_list_btn(){
         //プロファイルリスト切替イベント初期化
         for (let index = 0; index < profile_store.length; index++) {
-            document.querySelector(`#userProfile-${index}`).addEventListener("click",function(){
+            document.querySelector(`#userProfile-${index}`).addEventListener("click",async function(){
                 //console.log(profile_store[index].profile)
                 const preload_array = profile_store[index].profile;
                 let preload_desc_array = new Array(); 
@@ -1425,23 +1809,22 @@ function run(settings){
                     preload_desc_count += 1;
                 }
                 //console.log(preload_desc_array)
-                if(confirm(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\r\n")])}`)){
-                    //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
-                    get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
-                    teardown_post_form_popover();
-                    side_rack_resize_observer.disconnect();
-                    document.querySelector("#opd_main_element").remove();
-                    last_load_profile = index;
-                    chrome.storage.local.get("opd_settings", function(value){
-                        let load_setting = JSON.parse(value.opd_settings);
-                        load_setting.last_load_profile = index;
-                        chrome.storage.local.set({'opd_settings': JSON.stringify(load_setting)}, function () {
-                        });
+                if(!(await show_confirm_dialog(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\n")])}`))) return;
+                //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
+                get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
+                teardown_post_form_popover();
+                side_rack_resize_observer.disconnect();
+                document.querySelector("#opd_main_element").remove();
+                last_load_profile = index;
+                chrome.storage.local.get("opd_settings", function(value){
+                    let load_setting = JSON.parse(value.opd_settings);
+                    load_setting.last_load_profile = index;
+                    chrome.storage.local.set({'opd_settings': JSON.stringify(load_setting)}, function () {
                     });
-                    const column_settings = {column_settings:profile_store[index].profile, global_settings:profile_store[index].global_settings};
-                    //console.log(column_settings)
-                    run(column_settings, profile_store);
-                }
+                });
+                const column_settings = {column_settings:profile_store[index].profile, global_settings:profile_store[index].global_settings};
+                //console.log(column_settings)
+                run(column_settings, profile_store);
             })
         }
     }
@@ -1510,8 +1893,8 @@ function run(settings){
     }
     //メインバーイベント
     document.getElementById("init_settings").addEventListener("click", function(){
-        chrome.storage.local.remove("opd_settings", function(value){
-            alert(i18n_message("msg_settings_reset_completed"));
+        chrome.storage.local.remove("opd_settings", async function(value){
+            await show_alert_dialog(i18n_message("msg_settings_reset_completed"));
         });
     });
     //画像付きを開いた時の自動スクロール阻止
@@ -1532,7 +1915,7 @@ function run(settings){
             toggle_btn.title = i18n_message(is_side_target ? "ui_add_target_side_title" : "ui_add_target_main_title");
             const toggle_icon = toggle_btn.querySelector(".dsp_btn_add_target_img");
             if(toggle_icon !== null){
-                toggle_icon.style.backgroundImage = `url(${chrome.runtime.getURL(is_side_target ? ui_icon_define.add_target_side : ui_icon_define.add_target_main)})`;
+                toggle_icon.style.setProperty("--opd-icon", `url(${chrome.runtime.getURL(is_side_target ? ui_icon_define.add_target_side : ui_icon_define.add_target_main)})`);
             }
         }
         update_side_rack_state();
@@ -1553,19 +1936,17 @@ function run(settings){
         window.open(chrome.runtime.getURL("profile_debug.html"), "OPD-Profile-Loader", 'width=720, height=600');
     });
     //
-    document.getElementById("dnr_reload").addEventListener("click", function(){
-        if(confirm(i18n_message("msg_dnr_reload_confirm"))){
-            chrome.runtime.sendMessage({message: "dnr_upd"}).then((value)=>{
-                if(value == true){
-                    location.reload();
-                }
-            });
-        }
+    document.getElementById("dnr_reload").addEventListener("click", async function(){
+        if(!(await show_confirm_dialog(i18n_message("msg_dnr_reload_confirm")))) return;
+        chrome.runtime.sendMessage({message: "dnr_upd"}).then((value)=>{
+            if(value == true){
+                location.reload();
+            }
+        });
     });
-    document.getElementById("ext_reload").addEventListener("click", function(){
-        if(confirm(i18n_message("msg_extension_reload_confirm"))){
-            chrome.runtime.sendMessage({message: "ext_reload"});
-        }
+    document.getElementById("ext_reload").addEventListener("click", async function(){
+        if(!(await show_confirm_dialog(i18n_message("msg_extension_reload_confirm")))) return;
+        chrome.runtime.sendMessage({message: "ext_reload"});
     });
     //ポストフォームのポップオーバーを開閉する
     document.getElementById("open_post_form").addEventListener("click", function(){
@@ -1685,22 +2066,22 @@ function run(settings){
         <h2 id="opd_list_picker_title">${i18n_message("ui_list_picker_header")}</h2>
         <div class="opd_list_picker_body">
         <div class="opd_list_picker_browse">
-        <div><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label> <input class="opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"> <input class="opd_list_picker_show_btn" type="button" value="${i18n_message("ui_list_picker_show_button")}"></div>
+        <div class="opd_list_picker_user_row"><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label><input class="opd_input opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"><input class="opd_btn opd_btn_sm opd_list_picker_show_btn" type="button" value="${i18n_message("ui_list_picker_show_button")}"></div>
         <div class="opd_list_picker_status" role="status" aria-live="polite"></div>
         <div class="opd_list_picker_frame_wrap"><iframe class="opd_list_picker_frame" title="${i18n_message("ui_list_picker_frame_title")}"></iframe><div class="opd_list_picker_frame_skeleton opd_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div>
-        <div><input class="opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"></div>
+        <div><input class="opd_btn opd_btn_sm opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"></div>
         </div>
         <div class="opd_list_picker_selection">
         <h3 id="opd_list_picker_selection_title">${i18n_message("ui_list_picker_selection_header")}</h3>
         <p class="opd_list_picker_selection_hint" id="opd_list_picker_selection_hint">${i18n_message("ui_list_picker_selection_hint")}</p>
         <div class="opd_list_picker_selected_wrap"><ol class="opd_list_picker_selected" aria-labelledby="opd_list_picker_selection_title" aria-describedby="opd_list_picker_selection_hint"></ol><p class="opd_list_picker_empty">${i18n_message("ui_list_picker_empty_selection")}</p></div>
         <div class="opd_list_picker_selection_status" role="status" aria-live="polite"></div>
-        <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><div class="opd_list_picker_manual_row"><textarea class="opd_list_picker_manual" id="opd_list_picker_manual_input" rows="2"></textarea><input class="opd_list_picker_manual_add_btn" type="button" value="${i18n_message("ui_list_picker_manual_add_button")}"></div></div>
+        <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><div class="opd_list_picker_manual_row"><textarea class="opd_textarea opd_list_picker_manual" id="opd_list_picker_manual_input" rows="2"></textarea><input class="opd_btn opd_btn_sm opd_list_picker_manual_add_btn" type="button" value="${i18n_message("ui_list_picker_manual_add_button")}"></div></div>
         <div class="opd_list_picker_count" id="opd_list_picker_count"></div>
-        <div><input class="opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
+        <div><input class="opd_btn opd_btn_sm opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
         </div>
         </div>
-        <div class="opd_list_picker_actions"><input class="opd_list_picker_add_btn" type="button" aria-describedby="opd_list_picker_count" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
+        <div class="opd_list_picker_actions"><input class="opd_btn opd_btn_primary opd_list_picker_add_btn" type="button" aria-describedby="opd_list_picker_count" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_btn opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
         </div>`;
         main_element.appendChild(overlay);
         //ダイアログを開いているあいだは背景を操作対象から外す(元から inert のものは対象にしない)
@@ -2150,11 +2531,11 @@ function run(settings){
             }
         }
         //ユーザー名入力欄の値から表示を始める。リスト一覧ページのパスに解決できない入力は受け付けない
-        function start_frame_from_input(){
+        async function start_frame_from_input(){
             const resolved_path = resolve_list_column_path(user_input.value);
             const user_lists_match = (resolved_path ?? "").match(/^\/([A-Za-z0-9_]{1,15})\/lists$/);
             if(!user_lists_match){
-                alert(i18n_message("msg_list_picker_user_required"));
+                await show_alert_dialog(i18n_message("msg_list_picker_user_required"));
                 user_input.focus();
                 return;
             }
@@ -2184,14 +2565,14 @@ function run(settings){
         //Esc で閉じ、Tab はダイアログ内のフォーカス可能要素を循環させる
         const on_dialog_keydown = create_dialog_keydown_handler(dialog, close_dialog);
         //入力欄の各行を解釈して一覧の末尾へ追加する。解釈できない行があれば入力欄に残して知らせ、false を返す
-        function add_manual_entries(){
+        async function add_manual_entries(){
             const manual_entries = parse_manual_list_entries(manual_textarea.value);
             manual_entries.paths.forEach((list_path) => add_entry(list_path, ""));
             render_selection();
             mark_frame_cells();
             if(manual_entries.invalid.length > 0){
                 manual_textarea.value = manual_entries.invalid.join("\n");
-                alert(i18n_message("msg_list_picker_invalid_manual", [manual_entries.invalid.join("\n")]));
+                await show_alert_dialog(i18n_message("msg_list_picker_invalid_manual", [manual_entries.invalid.join("\n")]));
                 manual_textarea.focus();
                 return false;
             }
@@ -2199,15 +2580,15 @@ function run(settings){
             return true;
         }
         //一覧の並び順のままカラムをまとめて追加する。入力欄に未追加の文字列が残っていれば先に追加を試みる
-        function add_selected_columns(){
-            if(manual_textarea.value.trim() !== "" && !add_manual_entries()) return;
+        async function add_selected_columns(){
+            if(manual_textarea.value.trim() !== "" && !(await add_manual_entries())) return;
             if(selected_entries.length === 0){
-                alert(i18n_message("msg_list_picker_nothing_selected"));
+                await show_alert_dialog(i18n_message("msg_list_picker_nothing_selected"));
                 manual_textarea.focus();
                 return;
             }
             const paths = selected_entries.map((entry) => entry.path);
-            if(paths.length > many_columns_threshold && !confirm(i18n_message("msg_list_picker_many_columns_confirm", [String(paths.length)]))) return;
+            if(paths.length > many_columns_threshold && !(await show_confirm_dialog(i18n_message("msg_list_picker_many_columns_confirm", [String(paths.length)])))) return;
             close_dialog();
             add_explore_columns(paths, insert_first);
         }
@@ -2343,19 +2724,19 @@ function run(settings){
         add_explore_column("/explore");
     });
     //リストカラム追加(Exploreカラムの派生。ログインユーザーのリスト一覧を初期表示する)
-    document.getElementById("add_list").addEventListener("click", function(){
-        //prompt 表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
+    document.getElementById("add_list").addEventListener("click", async function(){
+        //ダイアログ表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
         const insert_first = is_shift_pressed;
         const screen_name = get_login_screen_name();
         let list_path = null;
         if(screen_name){
             list_path = `/${screen_name}/lists`;
         }else{
-            const input = prompt(i18n_message("msg_list_column_path_prompt"));
+            const input = await show_prompt_dialog(i18n_message("msg_list_column_path_prompt"));
             if(input === null) return;
             list_path = resolve_list_column_path(input);
             if(list_path === null){
-                alert(i18n_message("msg_invalid_value_alert"));
+                await show_alert_dialog(i18n_message("msg_invalid_value_alert"));
                 return;
             }
         }
@@ -2384,29 +2765,35 @@ function run(settings){
         open_global_settings_dialog(this);
     });
     //プロファイル保存ボタン
-    document.getElementById("profile_save").addEventListener("click", function(){
-        if(confirm(i18n_message("msg_profile_save_confirm"))){
-            let profile = column_settings_save("profile_out");
-            const save_object = {name:"user_profile", profile:profile.column_settings, settings_schema_version:SETTINGS_SCHEMA_VERSION, global_settings:profile.global_settings};
-            //console.log(profile)
-            profile_store.push(save_object);
-            //console.log(profile_store)
-            chrome.storage.local.set({'opd_profile_store': JSON.stringify(profile_store)}, function () {
-                let profile_list_btn_html = "";
-                //プロファイルリスト初期化
-                for (let index = 0; index < profile_store.length; index++) {
-                    profile_list_btn_html += `<div class="dsp_btn_parent" id="userProfile-${index}"><div class="dsp_btn_change_profile_btn">P${index}</div></div>`;
-                }
-                document.querySelector("#profile_btn_list").innerHTML = profile_list_btn_html;
-                create_profile_list_btn();
-            });
-        }
+    document.getElementById("profile_save").addEventListener("click", async function(){
+        if(!(await show_confirm_dialog(i18n_message("msg_profile_save_confirm")))) return;
+        let profile = column_settings_save("profile_out");
+        const save_object = {name:"user_profile", profile:profile.column_settings, settings_schema_version:SETTINGS_SCHEMA_VERSION, global_settings:profile.global_settings};
+        //console.log(profile)
+        profile_store.push(save_object);
+        //console.log(profile_store)
+        chrome.storage.local.set({'opd_profile_store': JSON.stringify(profile_store)}, function () {
+            let profile_list_btn_html = "";
+            //プロファイルリスト初期化
+            for (let index = 0; index < profile_store.length; index++) {
+                profile_list_btn_html += `<div class="dsp_btn_parent" id="userProfile-${index}"><div class="dsp_btn_change_profile_btn">P${index}</div></div>`;
+            }
+            document.querySelector("#profile_btn_list").innerHTML = profile_list_btn_html;
+            create_profile_list_btn();
+        });
     });
     //プロファイル削除ボタン
-    document.getElementById("profile_delete").addEventListener("click", function(){
-        const delete_num = Number(prompt(i18n_message("msg_profile_delete_number_prompt")));
+    document.getElementById("profile_delete").addEventListener("click", async function(){
+        const delete_input = await show_prompt_dialog(i18n_message("msg_profile_delete_number_prompt"));
+        if(delete_input === null) return;
+        const delete_num = Number(delete_input);
+        //整数かつ存在するプロファイル番号だけを受け付ける (NaN は splice(0, 1) になりプロファイル 0 を消してしまう)
+        if(delete_input.trim() === "" || !Number.isInteger(delete_num) || delete_num < 0 || delete_num >= profile_store.length){
+            await show_alert_dialog(i18n_message("msg_invalid_value_alert"));
+            return;
+        }
         if(last_load_profile != delete_num){
-            if(confirm(i18n_message("msg_profile_delete_confirm", [delete_num]))){
+            if(await show_confirm_dialog(i18n_message("msg_profile_delete_confirm", [delete_num]))){
                 let after_profile_num = null;
                 profile_store.splice(delete_num, 1);
                 //console.log(profile_store)
@@ -2441,7 +2828,7 @@ function run(settings){
                 });
             }
         }else{
-            alert(i18n_message("msg_profile_delete_current_alert"));
+            await show_alert_dialog(i18n_message("msg_profile_delete_current_alert"));
         }
     });
     //カラム拡張機能の初期化(カラム拡張機能の追加はここで行います)
@@ -2492,11 +2879,12 @@ function run(settings){
             column_class[index].addEventListener("dragover", function(ev){
                 ev.preventDefault();
                 //挿入位置の表示は outline で描く。outline はレイアウトへ影響せず (border はカラム幅を変え、サイドラックの幅を揺らす)、子要素 (不透明な iframe) より後に描かれるため隠れない
-                this.style.outline = '6px solid #2e2e2e';
-                this.style.outlineOffset = '-6px';
+                this.style.outline = '3px solid var(--opd-accent)';
+                this.style.outlineOffset = '-3px';
             });
             column_class[index].addEventListener("dragleave", function(){
                 this.style.outline = '';
+                this.style.outlineOffset = '';
             });
             column_class[index].addEventListener("drop", function(ev){
                 ev.preventDefault();
@@ -2515,10 +2903,12 @@ function run(settings){
                     }
                     this.parentNode.insertBefore(dr_elem, this);
                     this.style.outline = '';
+                    this.style.outlineOffset = '';
                     update_side_rack_state();
                     column_settings_save("", last_load_profile);
                 }else{
                     this.style.outline = '';
+                    this.style.outlineOffset = '';
                 }
             })
         }
@@ -2530,7 +2920,7 @@ function run(settings){
             //既にイベントが登録済みのカラムはスキップ
             if(close_btns[index].dataset.opd_close_initialized === "1") continue;
                 close_btns[index].dataset.opd_close_initialized = "1";
-                close_btns[index].addEventListener("click", function(){
+                close_btns[index].addEventListener("click", async function(){
                 const target_column = this.closest(".dsp_column");
                 const pin_checkbox = target_column.querySelector(".opd_pinned_btn")?.checked;
                 if(pin_checkbox == false || pin_checkbox == undefined){
@@ -2540,13 +2930,12 @@ function run(settings){
                     update_side_rack_state();
                     column_settings_save("", last_load_profile);
                 }else{
-                    if(confirm(i18n_message("msg_pinned_column_close_confirm"))){
-                        stop_column_auto_reload(target_column.querySelector("div[opd_column_type]"));
-                        target_column.remove();
-                        append_object_css();
-                        update_side_rack_state();
-                        column_settings_save("", last_load_profile);
-                    }
+                    if(!(await show_confirm_dialog(i18n_message("msg_pinned_column_close_confirm")))) return;
+                    stop_column_auto_reload(target_column.querySelector("div[opd_column_type]"));
+                    target_column.remove();
+                    append_object_css();
+                    update_side_rack_state();
+                    column_settings_save("", last_load_profile);
                 }
             })
         }
@@ -2765,7 +3154,7 @@ function run(settings){
             popover.hidden = true;
             popover.innerHTML = `<div class="opd_post_form_bar">
             <h2 class="opd_post_form_title" id="opd_post_form_title">${i18n_message("ui_post_form_header")}</h2>
-            <button type="button" class="dsp_column_close_btn opd_ui_icon_color opd_post_form_close_btn" title="${i18n_message("ui_post_form_close_button")}" aria-label="${i18n_message("ui_post_form_close_button")}"></button>
+            <button type="button" class="opd_post_form_close_btn" title="${i18n_message("ui_post_form_close_button")}" aria-label="${i18n_message("ui_post_form_close_button")}"><span class="opd_icon opd_icon_close" aria-hidden="true"></span></button>
             </div>
             <div class="opd_post_form_frame_wrap">
             <iframe class="opd_post_form_frame" title="${i18n_message("ui_post_form_frame_title")}" allow="fullscreen"></iframe>
@@ -2899,7 +3288,7 @@ function run(settings){
         }
         //inherit 選択肢を先頭に持つ select を組み立てる
         function settings_select(class_name, key, option_html){
-            return `<select class="${class_name}"><option value="inherit">${inherit_option_label(key)}</option>${option_html}</select>`;
+            return `<select class="opd_select ${class_name}"><option value="inherit">${inherit_option_label(key)}</option>${option_html}</select>`;
         }
         const visible_option_html = `<option value="true">${i18n_message("ui_settings_visible")}</option><option value="false">${i18n_message("ui_settings_hidden")}</option>`;
         let rows_html = "";
@@ -2907,19 +3296,19 @@ function run(settings){
             rows_html += settings_row(i18n_message("ui_settings_view_mode_label"), settings_select("opd_tw_view_mode", "tw_view_mode", `<option value="0">${i18n_message("ui_settings_view_mode_all")}</option><option value="1">${i18n_message("ui_settings_view_mode_text_only")}</option><option value="2">${i18n_message("ui_settings_view_mode_media_only")}</option>`));
         }
         rows_html += settings_row(i18n_message("ui_settings_column_width_label"), settings_select("opd_column_size_preset", "column_width", `<option value="0">${i18n_message("ui_settings_column_width_small")}</option><option value="1">${i18n_message("ui_settings_column_width_medium")}</option><option value="2">${i18n_message("ui_settings_column_width_large")}</option><option value="3">${i18n_message("ui_settings_column_width_custom")}</option>`));
-        rows_html += settings_row(i18n_message("ui_settings_column_width_custom_label"), `<input type="button" class="column_width_btn" value="${i18n_message("ui_settings_column_width_custom_button")}" style="vertical-align: text-top;font-size: 0.8rem;"/>`);
+        rows_html += settings_row(i18n_message("ui_settings_column_width_custom_label"), `<input type="button" class="opd_btn opd_btn_sm column_width_btn" value="${i18n_message("ui_settings_column_width_custom_button")}"/>`);
         if(options.iframe_styles){
             rows_html += settings_row(i18n_message("ui_settings_banner_label"), settings_select("opd_banner_mode", "banner", visible_option_html));
             rows_html += settings_row(i18n_message("ui_settings_top_label"), settings_select("opd_top_visible_mode", "top_visible", visible_option_html));
         }
         if(options.auto_reload){
             rows_html += settings_row(i18n_message("ui_settings_auto_reload_label"), settings_select("opd_a_reload_mode", "auto_reload", `<option value="true">${i18n_message("ui_settings_enabled")}</option><option value="false">${i18n_message("ui_settings_disabled")}</option>`));
-            rows_html += settings_row(i18n_message("ui_settings_auto_reload_interval_label"), `<label><input class="opd_a_reload_time_inherit" type="checkbox">${i18n_message("ui_settings_inherit_checkbox_label")}</label><input class="opd_column_settings_input_text opd_a_reload_time_setting" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}" value="%column_auto_reload_time%">${i18n_message("ui_settings_seconds_suffix")}`);
+            rows_html += settings_row(i18n_message("ui_settings_auto_reload_interval_label"), `<label><input class="opd_checkbox opd_a_reload_time_inherit" type="checkbox">${i18n_message("ui_settings_inherit_checkbox_label")}</label><span class="opd_settings_input_group"><input class="opd_input opd_column_settings_input_text opd_a_reload_time_setting" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}" value="%column_auto_reload_time%">${i18n_message("ui_settings_seconds_suffix")}</span>`);
         }
         if(options.pinned){
             rows_html += settings_row(i18n_message("ui_settings_pinned_label"), settings_select("opd_pinned_mode", "pinned", `<option value="true">${i18n_message("ui_settings_pinned")}</option><option value="false">${i18n_message("ui_settings_unpinned")}</option>`));
         }
-        return `<div class="dsp_column_settings_panel"><div class="dsp_column_settings_panel_content"><h2>${i18n_message("ui_settings_header")}</h2><div class="dsp_column_settings_list">${rows_html}</div><div class="dsp_column_settings_panel_close_btn_wrap"><input type="button" class="dsp_column_settings_panel_close_btn" value="${i18n_message("ui_settings_close_button")}" style="vertical-align: text-top;font-size: 0.8rem;"/></div></div></div>`;
+        return `<div class="dsp_column_settings_panel"><div class="dsp_column_settings_panel_content"><h2>${i18n_message("ui_settings_header")}</h2><div class="dsp_column_settings_list">${rows_html}</div><div class="dsp_column_settings_panel_close_btn_wrap"><input type="button" class="opd_btn opd_btn_sm dsp_column_settings_panel_close_btn" value="${i18n_message("ui_settings_close_button")}"/></div></div></div>`;
     }
     //カラム設定パネルとカラムバーのイベントを登録する。登録済み (data-opd_settings_initialized="1") なら何もしない
     //  select / 入力の change: 対応する属性を更新 → apply_column_dom_state → (iframe 項目なら) apply_column_iframe_styles → column_settings_save
@@ -2994,13 +3383,13 @@ function run(settings){
             save_column_setting(false);
         });
         //カラム幅のカスタム入力
-        column_div.querySelector(".column_width_btn")?.addEventListener("click", function(){
+        column_div.querySelector(".column_width_btn")?.addEventListener("click", async function(){
             const now_width = effective_column_setting(column_div, "column_width", global_settings);
-            const setting_width = prompt(i18n_message("msg_column_width_prompt"), now_width);
+            const setting_width = await show_prompt_dialog(i18n_message("msg_column_width_prompt"), String(now_width));
             if(setting_width === null) return;
             const setting_width_num = Number(setting_width);
             if(!Number.isFinite(setting_width_num) || setting_width_num < COLUMN_WIDTH_MIN_REM || setting_width_num > COLUMN_WIDTH_MAX_REM){
-                alert(i18n_message("msg_invalid_value_alert"));
+                await show_alert_dialog(i18n_message("msg_invalid_value_alert"));
                 return;
             }
             column_div.setAttribute("opd_column_width", String(setting_width_num));
@@ -3017,7 +3406,7 @@ function run(settings){
             save_column_setting(false);
         });
         //自動更新間隔の入力欄。下限・上限を外れた値は受け付けず、変更前の実効値へ戻す
-        column_div.querySelector(".opd_a_reload_time_setting")?.addEventListener("change", function(){
+        column_div.querySelector(".opd_a_reload_time_setting")?.addEventListener("change", async function(){
             //readonly (全体設定に従う) のあいだは値を実効値へ戻して受け付けない
             if(this.readOnly){
                 this.value = String(effective_column_setting(column_div, "auto_reload_time", global_settings) / 1000);
@@ -3025,9 +3414,9 @@ function run(settings){
             }
             const input_time_ms = Number(this.value) * 1000;
             if(Number.isFinite(input_time_ms) && input_time_ms >= AUTO_RELOAD_TIME_MIN_MS && input_time_ms <= AUTO_RELOAD_TIME_MAX_MS){
-                alert(i18n_message("msg_auto_reload_set", [this.value]));
+                await show_alert_dialog(i18n_message("msg_auto_reload_set", [this.value]));
             }else{
-                alert(i18n_message("msg_global_settings_invalid_interval"));
+                await show_alert_dialog(i18n_message("msg_global_settings_invalid_interval"));
                 this.value = String(effective_column_setting(column_div, "auto_reload_time", global_settings) / 1000);
             }
             column_div.setAttribute("opd_setting_auto_reload_time", String(Number(this.value) * 1000));
@@ -3043,13 +3432,12 @@ function run(settings){
         bind_bar_toggle(".opd_banner", "banner");
         bind_bar_toggle(".opd_top_bar", "top_visible");
         //カラムバーのピン止めトグル
-        column_div.querySelector(".opd_pinned_btn")?.addEventListener("click", function(){
+        column_div.querySelector(".opd_pinned_btn")?.addEventListener("click", async function(){
             const is_pinned = effective_column_setting(column_div, "pinned", global_settings) === true;
-            if(!confirm(is_pinned ? i18n_message("msg_explore_unpin_confirm") : i18n_message("msg_explore_pin_confirm"))){
-                //取り消した場合は表示を実効値へ戻す
-                this.checked = is_pinned;
-                return;
-            }
+            //確認が済むまでは表示を実効値のままにする (クリックで先に反転した状態を戻す)
+            this.checked = is_pinned;
+            if(!(await show_confirm_dialog(is_pinned ? i18n_message("msg_explore_unpin_confirm") : i18n_message("msg_explore_pin_confirm")))) return;
+            this.checked = !is_pinned;
             column_div.setAttribute("opd_setting_pinned", String(!is_pinned));
             reconcile_column_pinned(column_div);
             save_column_setting(false);
@@ -3251,6 +3639,123 @@ function run(settings){
         });
         column_settings_save("", last_load_profile);
     }
+    //通知・確認・入力ダイアログ (ブラウザの alert / confirm / prompt の代替) を開き、閉じたときに結果で解決する Promise を返す
+    //mode: "alert" (OK のみ) / "confirm" (キャンセルと OK) / "prompt" (入力欄 + キャンセルと OK)
+    //解決する値は OK が prompt なら入力文字列・それ以外は true、キャンセル (キャンセルボタン / Esc / 背景クリック) が prompt なら null・それ以外は false
+    //呼び出しごとに #opd_main_element の直下へオーバーレイ (class "opd_dialog_overlay opd_message_dialog_overlay") を 1 つ作るため、開いているあいだに呼ばれても互いに影響しない
+    //本文は textContent で入れる (改行は CSS の white-space: pre-wrap で折り返す)。見出しは持たず、本文をダイアログと入力欄のラベルにする
+    //閉じるときは inert を解除し、開く前にフォーカスされていた要素へ戻す (その要素が既に取り除かれていれば動かさない)
+    //フォーカストラップ・inert は get_dialog_focusable_elements / create_dialog_keydown_handler / set_inert_except を使う
+    //Esc と Tab は捕捉フェーズで受け取って伝播を止め、背後のダイアログ (リスト選択ダイアログ等) が document に登録したハンドラより先に処理する
+    function open_message_dialog(mode, message, default_value){
+        const is_prompt = mode === "prompt";
+        //キャンセル (キャンセルボタン / Esc / 背景クリック) で解決する値。alert は戻り値を使わない
+        const cancel_value = is_prompt ? null : false;
+        const main_element = document.getElementById("opd_main_element");
+        //デッキ本体が無いあいだはダイアログを出せないため、キャンセルと同じ値で解決する
+        if(main_element === null) return Promise.resolve(cancel_value);
+        return new Promise(function(resolve){
+            const previous_focus_element = document.activeElement;
+            const body_id = `opd_message_dialog_body_${create_random_id()}`;
+            const overlay = document.createElement("div");
+            overlay.className = "opd_dialog_overlay opd_message_dialog_overlay";
+            const input_html = is_prompt ? `<input class="opd_input opd_message_dialog_input" type="text" aria-labelledby="${body_id}">` : "";
+            const cancel_btn_html = mode === "alert" ? "" : `<button type="button" class="opd_btn opd_message_dialog_cancel_btn">${i18n_message("ui_dialog_cancel")}</button>`;
+            overlay.innerHTML = `<div class="opd_dialog opd_message_dialog" role="${mode === "alert" ? "alertdialog" : "dialog"}" aria-modal="true" aria-labelledby="${body_id}">
+        <p class="opd_message_dialog_body" id="${body_id}"></p>
+        ${input_html}
+        <div class="opd_dialog_actions">${cancel_btn_html}<button type="button" class="opd_btn opd_btn_primary opd_message_dialog_ok_btn">${i18n_message("ui_dialog_ok")}</button></div>
+        </div>`;
+            main_element.appendChild(overlay);
+            column_auto_update_state.message_dialog.open_count += 1;
+            //ダイアログを開いているあいだは背景を操作対象から外す
+            const release_inert = set_inert_except(main_element, overlay);
+
+            const dialog = overlay.querySelector(".opd_message_dialog");
+            const body = overlay.querySelector(".opd_message_dialog_body");
+            const input = overlay.querySelector(".opd_message_dialog_input");
+            const ok_btn = overlay.querySelector(".opd_message_dialog_ok_btn");
+            const cancel_btn = overlay.querySelector(".opd_message_dialog_cancel_btn");
+            //背景クリック判定用。押下と離上の両方が背景で起きたときだけ閉じる
+            let is_overlay_mousedown = false;
+            let is_overlay_mouseup = false;
+
+            body.textContent = message;
+            if(input !== null) input.value = default_value;
+
+            //ダイアログを閉じ、背景の inert を解除してフォーカスを戻し、result で解決する
+            function close_dialog(result){
+                document.removeEventListener("keydown", on_dialog_keydown, true);
+                release_inert();
+                overlay.remove();
+                column_auto_update_state.message_dialog.open_count -= 1;
+                if(previous_focus_element?.isConnected) previous_focus_element.focus?.();
+                resolve(result);
+            }
+            //キャンセルとして閉じる (キャンセルボタン / Esc / 背景クリック)
+            function cancel_dialog(){
+                close_dialog(cancel_value);
+            }
+            //OK として閉じる (OK ボタン / 入力欄の Enter)
+            function accept_dialog(){
+                close_dialog(is_prompt ? input.value : true);
+            }
+            const handle_dialog_keydown = create_dialog_keydown_handler(dialog, cancel_dialog);
+            //Esc と Tab はこのダイアログだけで処理し、背後のダイアログのハンドラへ渡さない。それ以外のキーは入力欄まで届ける
+            function on_dialog_keydown(event){
+                if(event.key !== "Escape" && event.key !== "Tab") return;
+                //IME の変換中の Esc は変換の取り消しであり、ダイアログのキャンセルではない
+                if(event.isComposing) return;
+                //最前面 (最後に開いた) のメッセージダイアログだけが処理する
+                const overlays = main_element.querySelectorAll(":scope > .opd_message_dialog_overlay");
+                if(overlays[overlays.length - 1] !== overlay) return;
+                event.stopPropagation();
+                handle_dialog_keydown(event);
+            }
+
+            ok_btn.addEventListener("click", accept_dialog);
+            cancel_btn?.addEventListener("click", cancel_dialog);
+            //入力欄の Enter は OK と同じ。IME の変換確定は除く
+            input?.addEventListener("keydown", function(event){
+                if(event.key !== "Enter" || event.isComposing) return;
+                event.preventDefault();
+                accept_dialog();
+            });
+            //背景(オーバーレイ自身)の上で押して離してクリックされたときだけ閉じる
+            overlay.addEventListener("mousedown", function(event){
+                is_overlay_mousedown = event.target === overlay;
+            });
+            overlay.addEventListener("mouseup", function(event){
+                is_overlay_mouseup = event.target === overlay;
+            });
+            overlay.addEventListener("click", function(event){
+                const is_background_click = is_overlay_mousedown && is_overlay_mouseup && event.target === overlay;
+                is_overlay_mousedown = false;
+                is_overlay_mouseup = false;
+                if(is_background_click) cancel_dialog();
+            });
+            document.addEventListener("keydown", on_dialog_keydown, true);
+            //prompt は入力欄 (既定値は選択状態)、それ以外は OK ボタンから始める
+            if(input !== null){
+                input.focus();
+                input.select();
+            }else{
+                ok_btn.focus();
+            }
+        });
+    }
+    //通知ダイアログを開く。OK / Esc / 背景クリックのいずれでも閉じる
+    async function show_alert_dialog(message){
+        await open_message_dialog("alert", message, "");
+    }
+    //確認ダイアログを開く。OK なら true、キャンセル / Esc / 背景クリックなら false を返す
+    function show_confirm_dialog(message){
+        return open_message_dialog("confirm", message, "");
+    }
+    //入力ダイアログを開く。OK なら入力文字列、キャンセル / Esc / 背景クリックなら null を返す
+    function show_prompt_dialog(message, default_value = ""){
+        return open_message_dialog("prompt", message, default_value);
+    }
     //全体設定ダイアログを開く。opener_element: 閉じたときにフォーカスを戻す要素
     //#opd_main_element の直下にオーバーレイ #opd_global_settings_overlay (class "opd_dialog_overlay opd_global_settings_overlay") を 1 つだけ生成する (既に開いていればそこへフォーカスを移す)
     //ダイアログ本体は role="dialog" aria-modal="true" aria-labelledby で、次のフォームを持つ:
@@ -3278,16 +3783,16 @@ function run(settings){
         overlay.innerHTML = `<div class="opd_dialog opd_global_settings_dialog" role="dialog" aria-modal="true" aria-labelledby="opd_global_settings_title">
         <h2 id="opd_global_settings_title">${i18n_message("ui_global_settings_header")}</h2>
         <p class="opd_global_settings_description">${i18n_message("ui_global_settings_description")}</p>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_pinned">${i18n_message("ui_global_settings_pinned_label")}</label><input class="opd_global_settings_pinned" id="opd_global_settings_pinned" type="checkbox"></div>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_banner">${i18n_message("ui_global_settings_banner_label")}</label><input class="opd_global_settings_banner" id="opd_global_settings_banner" type="checkbox"></div>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_top_visible">${i18n_message("ui_global_settings_top_label")}</label><input class="opd_global_settings_top_visible" id="opd_global_settings_top_visible" type="checkbox"></div>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_view_mode">${i18n_message("ui_settings_view_mode_label")}</label><select class="opd_global_settings_view_mode" id="opd_global_settings_view_mode"><option value="0">${i18n_message("ui_settings_view_mode_all")}</option><option value="1">${i18n_message("ui_settings_view_mode_text_only")}</option><option value="2">${i18n_message("ui_settings_view_mode_media_only")}</option></select></div>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_column_width">${i18n_message("ui_global_settings_column_width_rem_label")}</label><input class="opd_global_settings_column_width opd_column_settings_input_text" id="opd_global_settings_column_width" type="number" min="${COLUMN_WIDTH_MIN_REM}" max="${COLUMN_WIDTH_MAX_REM}"></div>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload">${i18n_message("ui_settings_auto_reload_label")}</label><input class="opd_global_settings_auto_reload" id="opd_global_settings_auto_reload" type="checkbox"></div>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload_time">${i18n_message("ui_settings_auto_reload_interval_label")}</label><span><input class="opd_global_settings_auto_reload_time opd_column_settings_input_text" id="opd_global_settings_auto_reload_time" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}">${i18n_message("ui_settings_seconds_suffix")}</span></div>
-        <div class="opd_global_settings_row"><label for="opd_global_settings_side_rack_position">${i18n_message("ui_global_settings_side_rack_position_label")}</label><select class="opd_global_settings_side_rack_position" id="opd_global_settings_side_rack_position"><option value="left">${i18n_message("ui_side_rack_position_left")}</option><option value="right">${i18n_message("ui_side_rack_position_right")}</option></select></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_pinned">${i18n_message("ui_global_settings_pinned_label")}</label><input class="opd_switch opd_global_settings_pinned" id="opd_global_settings_pinned" type="checkbox"></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_banner">${i18n_message("ui_global_settings_banner_label")}</label><input class="opd_switch opd_global_settings_banner" id="opd_global_settings_banner" type="checkbox"></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_top_visible">${i18n_message("ui_global_settings_top_label")}</label><input class="opd_switch opd_global_settings_top_visible" id="opd_global_settings_top_visible" type="checkbox"></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_view_mode">${i18n_message("ui_settings_view_mode_label")}</label><select class="opd_select opd_global_settings_view_mode" id="opd_global_settings_view_mode"><option value="0">${i18n_message("ui_settings_view_mode_all")}</option><option value="1">${i18n_message("ui_settings_view_mode_text_only")}</option><option value="2">${i18n_message("ui_settings_view_mode_media_only")}</option></select></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_column_width">${i18n_message("ui_global_settings_column_width_rem_label")}</label><input class="opd_input opd_global_settings_column_width opd_column_settings_input_text" id="opd_global_settings_column_width" type="number" min="${COLUMN_WIDTH_MIN_REM}" max="${COLUMN_WIDTH_MAX_REM}"></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload">${i18n_message("ui_settings_auto_reload_label")}</label><input class="opd_switch opd_global_settings_auto_reload" id="opd_global_settings_auto_reload" type="checkbox"></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload_time">${i18n_message("ui_settings_auto_reload_interval_label")}</label><span><input class="opd_input opd_global_settings_auto_reload_time opd_column_settings_input_text" id="opd_global_settings_auto_reload_time" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}">${i18n_message("ui_settings_seconds_suffix")}</span></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_side_rack_position">${i18n_message("ui_global_settings_side_rack_position_label")}</label><select class="opd_select opd_global_settings_side_rack_position" id="opd_global_settings_side_rack_position"><option value="left">${i18n_message("ui_side_rack_position_left")}</option><option value="right">${i18n_message("ui_side_rack_position_right")}</option></select></div>
         <div class="opd_global_settings_status" id="opd_global_settings_status" role="status" aria-live="polite"></div>
-        <div class="opd_global_settings_actions"><input class="opd_global_settings_apply_btn" type="button" value="${i18n_message("ui_global_settings_apply_button")}"><input class="opd_global_settings_cancel_btn" type="button" value="${i18n_message("ui_global_settings_cancel_button")}"></div>
+        <div class="opd_global_settings_actions"><input class="opd_btn opd_btn_primary opd_global_settings_apply_btn" type="button" value="${i18n_message("ui_global_settings_apply_button")}"><input class="opd_btn opd_global_settings_cancel_btn" type="button" value="${i18n_message("ui_global_settings_cancel_button")}"></div>
         </div>`;
         main_element.appendChild(overlay);
         //ダイアログを開いているあいだは背景を操作対象から外す
@@ -3469,6 +3974,10 @@ function run(settings){
         }
         //メディアビューワー表示中
         if(column_auto_update_state.media_viewer.active){
+            return false;
+        }
+        //メッセージダイアログ表示中
+        if(column_auto_update_state.message_dialog.open_count > 0){
             return false;
         }
         return true;

@@ -3,40 +3,167 @@
     <meta charset="UTF-8" >
     <title>Open-Deck Profile Loader</title>
     <script src="profile_debug.js" charset="UTF-8"></script>
+    <style>
+        :root{
+            --opd-bg: #eff3f4;
+            --opd-surface: #ffffff;
+            --opd-border: #cfd9de;
+            --opd-border-soft: #eff3f4;
+            --opd-text: #0f1419;
+            --opd-text-muted: #536471;
+            --opd-accent: #1d9bf0;
+            --opd-accent-hover: #1a8cd8;
+            --opd-accent-soft: rgba(29, 155, 240, 0.12);
+            --opd-on-accent: #ffffff;
+            --opd-radius-sm: 6px;
+            --opd-radius-lg: 16px;
+            --opd-shadow-sm: 0 1px 2px rgba(15, 20, 25, 0.08);
+            --opd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, Arial, sans-serif;
+        }
+        @media (prefers-color-scheme: dark){
+            :root{
+                --opd-bg: #000000;
+                --opd-surface: #16181c;
+                --opd-border: #3e4144;
+                --opd-border-soft: #2f3336;
+                --opd-text: #e7e9ea;
+                --opd-text-muted: #8b98a5;
+                --opd-accent-soft: rgba(29, 155, 240, 0.2);
+                --opd-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+            }
+        }
+        html{
+            color-scheme: light dark;
+        }
+        body{
+            margin: 0;
+            box-sizing: border-box;
+            min-height: 100vh;
+            padding: 1.5rem;
+            background: var(--opd-bg);
+            color: var(--opd-text);
+            font-family: var(--opd-font);
+        }
+        .opd_page{
+            max-width: 44rem;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        h1{
+            font-size: 1.5rem;
+            margin: 0;
+        }
+        .opd_intro{
+            margin: 0;
+            color: var(--opd-text-muted);
+            line-height: 1.6;
+        }
+        .opd_card{
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 1.25rem;
+            background: var(--opd-surface);
+            border: 1px solid var(--opd-border);
+            border-radius: var(--opd-radius-lg);
+            box-shadow: var(--opd-shadow-sm);
+        }
+        .opd_card h2{
+            font-size: 1.125rem;
+            margin: 0;
+        }
+        .opd_card h3{
+            font-size: 0.9375rem;
+            margin: 0.5rem 0 0;
+        }
+        .opd_card p{
+            margin: 0;
+            color: var(--opd-text-muted);
+            line-height: 1.6;
+        }
+        textarea{
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 40rem;
+            height: 10rem;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--opd-border);
+            border-radius: var(--opd-radius-sm);
+            background: var(--opd-surface);
+            color: var(--opd-text);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+            font-size: 0.875rem;
+            resize: vertical;
+        }
+        textarea:focus{
+            outline: none;
+            border-color: var(--opd-accent);
+            box-shadow: 0 0 0 3px var(--opd-accent-soft);
+        }
+        .opd_primary_btn{
+            align-self: flex-start;
+            height: 2.125rem;
+            padding: 0 1rem;
+            border: none;
+            border-radius: 9999px;
+            background: var(--opd-accent);
+            color: var(--opd-on-accent);
+            font-family: var(--opd-font);
+            font-size: 0.8125rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .opd_primary_btn:hover{
+            background: var(--opd-accent-hover);
+        }
+        .opd_checkbox_row{
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--opd-text);
+        }
+    </style>
 </head>
 <body>
-    <h1>Open-Deck Profile Loader</h1>
-    <p>カラム構成などのプロファイル読み込み/書き出しを行います。
-        <br>
-        試作版の新バージョン導入時などにお使いください。
-        <br>
-        入力/出力形式はJSON形式です。間違ったデータを入力した場合、正常に動作しません。
-        <br>
-        間違ったデータを入力してしまった際は「Debug」メニューの「init settings」クリックで初期化してください。
-    </p>
-    <section>
-        <h2>プロファイル書き出し</h2>
-        <p>「プロファイル書き出し」ボタンクリックでカラム設定を出力します。
+    <div class="opd_page">
+        <h1>Open-Deck Profile Loader</h1>
+        <p class="opd_intro">カラム構成などのプロファイル読み込み/書き出しを行います。
             <br>
-            ボタン下のテキストエリアに出力されるので、出力後はメモ帳などで保存してください。
+            試作版の新バージョン導入時などにお使いください。
             <br>
-            出力されたプロファイルは下のプロファイル読み込みできます。
+            入力/出力形式はJSON形式です。間違ったデータを入力した場合、正常に動作しません。
+            <br>
+            間違ったデータを入力してしまった際は「Debug」メニューの「init settings」クリックで初期化してください。
         </p>
-        <div style="margin-bottom: 1rem;"><input id="output_profile_btn" type="button" value="プロファイル書き出し"/></div>
-        <h3>出力結果</h3>
-        <div><textarea id="profile_output_area" style="width: 20rem;height: 10rem;"></textarea></div>
-    </section>
-    <hr>
-    <section>
-        <h2>プロファイル読み込み</h2>
-        <p>下のテキストエリアにプロファイルを張り付けて「読み込み」ボタンを押すことにより、
-            <br>
-            カラム情報などを
-        </p>
-        <h3>プロファイルをJSON形式で入力</h3>
-        <div><textarea id="profile_input_area" style="width: 20rem;height: 10rem; margin-bottom: 0;"></textarea></div>
-        <div>入力したプロファイルは試作版V1.0.5までのデータです<span><input type="checkbox" id="is_ver105"></span></div>
-        <div style="margin-top: 1rem;"><input id="input_profile_btn" type="button" value="プロファイル読み込み"/></div>
-    </section>
+        <section class="opd_card">
+            <h2>プロファイル書き出し</h2>
+            <p>「プロファイル書き出し」ボタンクリックでカラム設定を出力します。
+                <br>
+                ボタン下のテキストエリアに出力されるので、出力後はメモ帳などで保存してください。
+                <br>
+                出力されたプロファイルは下のプロファイル読み込みできます。
+            </p>
+            <div><input id="output_profile_btn" class="opd_primary_btn" type="button" value="プロファイル書き出し"/></div>
+            <h3>出力結果</h3>
+            <div><textarea id="profile_output_area"></textarea></div>
+        </section>
+        <section class="opd_card">
+            <h2>プロファイル読み込み</h2>
+            <p>下のテキストエリアにプロファイルを張り付けて「読み込み」ボタンを押すことにより、
+                <br>
+                カラム情報などを
+            </p>
+            <h3>プロファイルをJSON形式で入力</h3>
+            <div><textarea id="profile_input_area"></textarea></div>
+            <div class="opd_checkbox_row">
+                <input type="checkbox" id="is_ver105">
+                <label for="is_ver105">入力したプロファイルは試作版V1.0.5までのデータです</label>
+            </div>
+            <div><input id="input_profile_btn" class="opd_primary_btn" type="button" value="プロファイル読み込み"/></div>
+        </section>
+    </div>
 </body>
 </html>
