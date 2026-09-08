@@ -386,9 +386,6 @@
   "ui_settings_inherit_input_title": {
     "message": "「全体設定に従う」を外すと個別に設定できます"
   },
-  "ui_settings_auto_reload_interval_locked_title": {
-    "message": "自動更新を無効にすると変更できます"
-  },
   "ui_settings_banner_label": {
     "message": "バナー表示"
   },

@@ -3018,7 +3018,7 @@ function run(settings){
         });
         //自動更新間隔の入力欄。下限・上限を外れた値は受け付けず、変更前の実効値へ戻す
         column_div.querySelector(".opd_a_reload_time_setting")?.addEventListener("change", function(){
-            //readonly (全体設定に従う / 自動更新の実行中) のあいだは値を実効値へ戻して受け付けない
+            //readonly (全体設定に従う) のあいだは値を実効値へ戻して受け付けない
             if(this.readOnly){
                 this.value = String(effective_column_setting(column_div, "auto_reload_time", global_settings) / 1000);
                 return;
@@ -3107,23 +3107,18 @@ function run(settings){
         if(banner_checkbox !== null) banner_checkbox.checked = effective_column_setting(column_div, "banner", global_settings) === true;
         const top_visible_checkbox = column_div.querySelector(".opd_top_bar");
         if(top_visible_checkbox !== null) top_visible_checkbox.checked = effective_column_setting(column_div, "top_visible", global_settings) === true;
-        //自動更新間隔の入力欄 (秒)。全体設定に従うあいだと自動更新の実行中は readonly + aria-disabled にして入力を受け付けず、
+        //自動更新間隔の入力欄 (秒)。全体設定に従うあいだは readonly + aria-disabled にして入力を受け付けず、
         //フォーカスと tooltip は残して title で解除条件を示す (native disabled は tooltip が出ずタブ順からも外れるため使わない)
+        //自動更新の実行中でも編集できる (apply_column_auto_reload が実効間隔の変化を検出して interval を作り直す)
         const reload_time_input = column_div.querySelector(".opd_a_reload_time_setting");
         if(reload_time_input !== null){
             const is_time_inherit = read_column_setting(column_div, "auto_reload_time") === null;
-            const is_auto_reload_on = effective_column_setting(column_div, "auto_reload", global_settings) === true;
             const reload_time_inherit_checkbox = column_div.querySelector(".opd_a_reload_time_inherit");
             if(reload_time_inherit_checkbox !== null) reload_time_inherit_checkbox.checked = is_time_inherit;
             reload_time_input.value = String(effective_column_setting(column_div, "auto_reload_time", global_settings) / 1000);
-            const is_time_locked = is_time_inherit || is_auto_reload_on;
-            reload_time_input.readOnly = is_time_locked;
-            reload_time_input.setAttribute("aria-disabled", String(is_time_locked));
-            //ロックの理由ごとの解除条件を列挙する (両方でロックされていれば両方を示す)
-            const lock_reasons = [];
-            if(is_time_inherit) lock_reasons.push(i18n_message("ui_settings_inherit_input_title"));
-            if(is_auto_reload_on) lock_reasons.push(i18n_message("ui_settings_auto_reload_interval_locked_title"));
-            reload_time_input.title = lock_reasons.join("\n");
+            reload_time_input.readOnly = is_time_inherit;
+            reload_time_input.setAttribute("aria-disabled", String(is_time_inherit));
+            reload_time_input.title = is_time_inherit ? i18n_message("ui_settings_inherit_input_title") : "";
         }
         reconcile_column_pinned(column_div);
         apply_column_auto_reload(column_div);
