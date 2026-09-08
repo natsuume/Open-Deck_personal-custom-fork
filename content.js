@@ -20,6 +20,8 @@ let media_viewer_token = [];
 const column_auto_update_state = {
     text_focus: {date: 0, active: false},
     media_viewer: {active: false},
+    //開いているメッセージダイアログ (alert / confirm / prompt の代替) の数。1 以上のあいだは自動更新を止める
+    message_dialog: {open_count: 0},
 };
 //テキストフォーカスの状態 (自動更新の停止判定に使う) を更新する。解除するときは経過時間の判定に使う日時も戻す
 function set_text_focus_state(is_active){
@@ -117,7 +119,7 @@ function render_api_limit_status(){
     api_limit_description = API_LIMIT_CATEGORIES
         .filter(category => api_limit_description_by_key[category.key] != undefined)
         .map(category => api_limit_description_by_key[category.key])
-        .join("\r\n");
+        .join("\n");
     if(limit_percentages.length > 0){
         api_linit_status_btn.textContent = `${Math.floor(Math.min(...limit_percentages))}%`;
     }else if(has_expired_category){
@@ -331,7 +333,6 @@ function run(settings){
         --opd-radius-lg: 16px;
         --opd-radius-full: 9999px;
         --opd-shadow-sm: 0 1px 2px rgba(15, 20, 25, 0.08);
-        --opd-shadow-md: 0 6px 20px rgba(15, 20, 25, 0.16);
         --opd-shadow-lg: 0 16px 48px rgba(15, 20, 25, 0.28);
         --opd-sidebar-width: 60px;
         --opd-column-gap: 8px;
@@ -435,14 +436,6 @@ function run(settings){
     }
     .opd_btn_primary:active{
         background: var(--opd-accent-hover);
-    }
-    .opd_btn_danger{
-        border-color: transparent;
-        background: var(--opd-danger);
-        color: var(--opd-on-accent);
-    }
-    .opd_btn_danger:hover{
-        filter: brightness(0.92);
     }
     .opd_btn_sm{
         min-height: 1.75rem;
@@ -602,9 +595,6 @@ function run(settings){
         font-size: 0.625rem;
         text-align: center;
         color: var(--opd-text-muted);
-    }
-    .opd_debug_menu[open]{
-        display: flex;
     }
     .opd_debug_menu .opd_btn{
         min-height: 1.5rem;
@@ -794,6 +784,12 @@ function run(settings){
         align-items: center;
         justify-content: center;
     }
+    .dsp_column_emptycolumn > div > div,
+    .dsp_column_side_emptycolumn > div > div{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
     .dsp_column_emptycolumn .opd_icon,
     .dsp_column_side_emptycolumn .opd_icon{
         width: 3rem;
@@ -884,7 +880,7 @@ function run(settings){
         background: var(--opd-surface-hover);
         color: var(--opd-text);
     }
-    .dsp_column_btn:has(:focus-visible){
+    .dsp_column_btn:focus-within{
         outline: 2px solid var(--opd-accent);
         outline-offset: -2px;
     }
@@ -1437,7 +1433,6 @@ function run(settings){
         --opd-overlay: rgba(91, 112, 131, 0.4);
         --opd-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b98a5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
         --opd-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-        --opd-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.5);
         --opd-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.7);
         --opd-column-burn-in: 0.72;
 
@@ -1560,7 +1555,7 @@ function run(settings){
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" id="add_target_toggle" tabindex="0" role="button" aria-pressed="false" title="${i18n_message("ui_add_target_main_title")}"><div class="dsp_btn_add_target_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
+    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" id="add_target_toggle" tabindex="0" role="button" aria-pressed="false" title="${i18n_message("ui_add_target_main_title")}"><div class="dsp_btn_add_target_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
     //let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 100px;text-align: center;background-color: white;"><div><p style="margin-top:0;padding-top:1em;">Open-Deck<br>Prototype<br>v${manifest.version}</p><hr><p>Debug<br><input type="button" id="init_settings" value="init settings"/><br><input type="button" id="profile_load_save" value="Profile Load"/><br><input type="button" id="dnr_reload" value="dNR_Reload"/><br><input type="button" id="ext_reload" value="Ext_Reload"/></p><hr><p><input type="button" id="add_timeline" value="Add TimeLine"/> <div class="dsp_btn_parent"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_explr_img"></div></div> </p><p><input type="button" id="add_notify" value="Add Notification"/></p><p><input type="button" id="add_explore" value="Add Explore"/><hr><input type="button" id="second_rack" value="Second Rack"/><hr><input type="button" id="profile_save" value="Profile_Save"/><br><input type="button" id="profile_delete" value="Profile_Delete"/><br>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 110px;"></div></section>`;
     let main_column_html = ``;
     let side_column_html = ``;
@@ -1672,7 +1667,7 @@ function run(settings){
     });
     //Open-Deckについて表示
     document.querySelector(".opd_ui_logo").addEventListener("click", function(){
-        window.open(chrome.runtime.getURL("about_opd.html"), "About Open-Deck", 'width=720, height=280');
+        window.open(chrome.runtime.getURL("about_opd.html"), "About Open-Deck", 'width=720, height=420');
     });
     //デバッグメニュー表示
     let debug_menu_click_counter = 0;
@@ -1771,7 +1766,7 @@ function run(settings){
                     preload_desc_count += 1;
                 }
                 //console.log(preload_desc_array)
-                if(!(await show_confirm_dialog(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\r\n")])}`))) return;
+                if(!(await show_confirm_dialog(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\n")])}`))) return;
                 //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
                 get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
                 teardown_post_form_popover();
@@ -2749,6 +2744,11 @@ function run(settings){
         const delete_input = await show_prompt_dialog(i18n_message("msg_profile_delete_number_prompt"));
         if(delete_input === null) return;
         const delete_num = Number(delete_input);
+        //整数かつ存在するプロファイル番号だけを受け付ける (NaN は splice(0, 1) になりプロファイル 0 を消してしまう)
+        if(delete_input.trim() === "" || !Number.isInteger(delete_num) || delete_num < 0 || delete_num >= profile_store.length){
+            await show_alert_dialog(i18n_message("msg_invalid_value_alert"));
+            return;
+        }
         if(last_load_profile != delete_num){
             if(await show_confirm_dialog(i18n_message("msg_profile_delete_confirm", [delete_num]))){
                 let after_profile_num = null;
@@ -2841,6 +2841,7 @@ function run(settings){
             });
             column_class[index].addEventListener("dragleave", function(){
                 this.style.outline = '';
+                this.style.outlineOffset = '';
             });
             column_class[index].addEventListener("drop", function(ev){
                 ev.preventDefault();
@@ -2859,10 +2860,12 @@ function run(settings){
                     }
                     this.parentNode.insertBefore(dr_elem, this);
                     this.style.outline = '';
+                    this.style.outlineOffset = '';
                     update_side_rack_state();
                     column_settings_save("", last_load_profile);
                 }else{
                     this.style.outline = '';
+                    this.style.outlineOffset = '';
                 }
             })
         }
@@ -3622,6 +3625,7 @@ function run(settings){
         <div class="opd_dialog_actions">${cancel_btn_html}<button type="button" class="opd_btn opd_btn_primary opd_message_dialog_ok_btn">${i18n_message("ui_dialog_ok")}</button></div>
         </div>`;
             main_element.appendChild(overlay);
+            column_auto_update_state.message_dialog.open_count += 1;
             //ダイアログを開いているあいだは背景を操作対象から外す
             const release_inert = set_inert_except(main_element, overlay);
 
@@ -3642,6 +3646,7 @@ function run(settings){
                 document.removeEventListener("keydown", on_dialog_keydown, true);
                 release_inert();
                 overlay.remove();
+                column_auto_update_state.message_dialog.open_count -= 1;
                 if(previous_focus_element?.isConnected) previous_focus_element.focus?.();
                 resolve(result);
             }
@@ -3657,6 +3662,9 @@ function run(settings){
             //Esc と Tab はこのダイアログだけで処理し、背後のダイアログのハンドラへ渡さない。それ以外のキーは入力欄まで届ける
             function on_dialog_keydown(event){
                 if(event.key !== "Escape" && event.key !== "Tab") return;
+                //最前面 (最後に開いた) のメッセージダイアログだけが処理する
+                const overlays = main_element.querySelectorAll(":scope > .opd_message_dialog_overlay");
+                if(overlays[overlays.length - 1] !== overlay) return;
                 event.stopPropagation();
                 handle_dialog_keydown(event);
             }
@@ -3922,6 +3930,10 @@ function run(settings){
         }
         //メディアビューワー表示中
         if(column_auto_update_state.media_viewer.active){
+            return false;
+        }
+        //メッセージダイアログ表示中
+        if(column_auto_update_state.message_dialog.open_count > 0){
             return false;
         }
         return true;
