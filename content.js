@@ -2491,11 +2491,12 @@ function run(settings){
             });
             column_class[index].addEventListener("dragover", function(ev){
                 ev.preventDefault();
-                //挿入位置の表示はレイアウトへ影響しない box-shadow で描く (border はカラム幅を変え、サイドラックの幅を揺らす)
-                this.style.boxShadow = 'inset 15px 0 0 #2e2e2e';
+                //挿入位置の表示は outline で描く。outline はレイアウトへ影響せず (border はカラム幅を変え、サイドラックの幅を揺らす)、子要素 (不透明な iframe) より後に描かれるため隠れない
+                this.style.outline = '6px solid #2e2e2e';
+                this.style.outlineOffset = '-6px';
             });
             column_class[index].addEventListener("dragleave", function(){
-                this.style.boxShadow = '';
+                this.style.outline = '';
             });
             column_class[index].addEventListener("drop", function(ev){
                 ev.preventDefault();
@@ -2513,11 +2514,11 @@ function run(settings){
                         set_explore_column_title(dr_elem.querySelector("div"), reload_path);
                     }
                     this.parentNode.insertBefore(dr_elem, this);
-                    this.style.boxShadow = '';
+                    this.style.outline = '';
                     update_side_rack_state();
                     column_settings_save("", last_load_profile);
                 }else{
-                    this.style.boxShadow = '';
+                    this.style.outline = '';
                 }
             })
         }
@@ -3683,7 +3684,7 @@ function set_title_favicon(){
 //
 //column_dd (カラムのドラッグ & ドロップ) はサイドラックに合わせて 2 点を守る:
 //  イベントを登録する対象を両ラック直下のカラム (#first_rack_element > .dsp_column, #side_rack_element > .dsp_column) に限り、メインバーの section を drop 先にしない。
-//  dragover の挿入位置表示は box-shadow (inset) で描き、border は使わない。border はカラムの幅を変えるため、サイドラックでは ResizeObserver がその増分を拾ってメインラックの幅が揺れる。
+//  dragover の挿入位置表示は outline (負の outline-offset で枠内に描く) で描き、border は使わない。border はカラムの幅を変えるため、サイドラックでは ResizeObserver がその増分を拾ってメインラックの幅が揺れる。outline は子要素より後に描かれるため、不透明な iframe に隠れない。
 
 //===== 全体設定 (global settings) =====
 //全体設定はプロファイルごと (opd_profile_store[n].global_settings) に持つ既定設定で、
