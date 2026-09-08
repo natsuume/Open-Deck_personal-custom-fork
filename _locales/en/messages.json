@@ -386,9 +386,6 @@
   "ui_settings_inherit_input_title": {
     "message": "Uncheck \"Follow global settings\" to set this column individually"
   },
-  "ui_settings_auto_reload_interval_locked_title": {
-    "message": "Turn auto-load off to change the interval"
-  },
   "ui_settings_banner_label": {
     "message": "Banner"
   },
