@@ -947,29 +947,42 @@ function run(settings){
         flex-direction: column;
         gap: 0.125rem;
         margin: 0;
-        padding: 0.25rem 0.75rem;
+        padding: 0.25rem 0.625rem;
         border: 1px solid var(--opd-border-soft);
         border-radius: var(--opd-radius-md);
         background: var(--opd-surface);
     }
     .dsp_column_settings_content_div{
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 0.75rem;
+        gap: 0.25rem 0.75rem;
         min-height: 2.25rem;
+        padding: 0.25rem 0;
         font-size: 0.8125rem;
     }
     .dsp_column_settings_content_div + .dsp_column_settings_content_div{
         border-top: 1px solid var(--opd-border-soft);
     }
+    /*狭いカラムでは入力群が次の行へ折り返し、右寄せのまま収まる*/
     .dsp_column_settings_content_div > span{
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
+        justify-content: flex-end;
         gap: 0.375rem;
-        flex: none;
+        flex: 1 1 auto;
+        margin-left: auto;
         font-size: 0.75rem;
         color: var(--opd-text-muted);
+    }
+    /*入力欄と単位の接尾辞は折り返しで離れないよう 1 つの塊にする*/
+    .opd_settings_input_group{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        white-space: nowrap;
     }
     .dsp_column_settings_content_div > span > label{
         display: inline-flex;
@@ -3255,7 +3268,7 @@ function run(settings){
         }
         if(options.auto_reload){
             rows_html += settings_row(i18n_message("ui_settings_auto_reload_label"), settings_select("opd_a_reload_mode", "auto_reload", `<option value="true">${i18n_message("ui_settings_enabled")}</option><option value="false">${i18n_message("ui_settings_disabled")}</option>`));
-            rows_html += settings_row(i18n_message("ui_settings_auto_reload_interval_label"), `<label><input class="opd_checkbox opd_a_reload_time_inherit" type="checkbox">${i18n_message("ui_settings_inherit_checkbox_label")}</label><input class="opd_input opd_column_settings_input_text opd_a_reload_time_setting" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}" value="%column_auto_reload_time%">${i18n_message("ui_settings_seconds_suffix")}`);
+            rows_html += settings_row(i18n_message("ui_settings_auto_reload_interval_label"), `<label><input class="opd_checkbox opd_a_reload_time_inherit" type="checkbox">${i18n_message("ui_settings_inherit_checkbox_label")}</label><span class="opd_settings_input_group"><input class="opd_input opd_column_settings_input_text opd_a_reload_time_setting" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}" value="%column_auto_reload_time%">${i18n_message("ui_settings_seconds_suffix")}</span>`);
         }
         if(options.pinned){
             rows_html += settings_row(i18n_message("ui_settings_pinned_label"), settings_select("opd_pinned_mode", "pinned", `<option value="true">${i18n_message("ui_settings_pinned")}</option><option value="false">${i18n_message("ui_settings_unpinned")}</option>`));
@@ -3656,6 +3669,8 @@ function run(settings){
             //Esc と Tab はこのダイアログだけで処理し、背後のダイアログのハンドラへ渡さない。それ以外のキーは入力欄まで届ける
             function on_dialog_keydown(event){
                 if(event.key !== "Escape" && event.key !== "Tab") return;
+                //IME の変換中の Esc は変換の取り消しであり、ダイアログのキャンセルではない
+                if(event.isComposing) return;
                 //最前面 (最後に開いた) のメッセージダイアログだけが処理する
                 const overlays = main_element.querySelectorAll(":scope > .opd_message_dialog_overlay");
                 if(overlays[overlays.length - 1] !== overlay) return;
