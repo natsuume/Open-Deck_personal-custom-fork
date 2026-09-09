@@ -11,7 +11,7 @@
 //
 //先頭保持 (keep_top):
 //  開始条件: keep_top が true で、更新関数を呼ぶ直前の window.scrollY が 1 以下で、更新関数を取得して呼べた (更新関数が無い・呼び出しが例外のときは始めない)
-//  保持中: window の scroll で scrollY が 0 より大きくなったとき、直前 KEEP_TOP_MUTATION_WINDOW_MS 以内に DOM の childList の変化 (新着の挿入) があれば
+//  保持中: window の scroll で scrollY が 0 より大きくなったとき、直前 KEEP_TOP_MUTATION_WINDOW_MS 以内にタイムライン側 (div[data-testid="primaryColumn"]、無ければ document 全体) の childList の変化 (新着の挿入) があれば
 //          新着挿入に伴う位置合わせと見なして scrollTo({top:0, behavior:"instant"}) で先頭へ戻す (開始から同じ時間内の scroll も更新関数自身による位置変更と見なして戻す)。
 //          どちらでもなければユーザ操作によるスクロール (スクロールバーのドラッグ等) と見なして保持を終える
 //  終了条件: 開始から KEEP_TOP_WATCH_MS 経過 / 戻した回数が KEEP_TOP_MAX_CORRECTIONS に達した / ユーザ操作 (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知、または上記の DOM 変化を伴わない scroll) があった
@@ -209,7 +209,8 @@
         keep_top_corrections = 0;
         //開始直後の scroll は更新関数自身による位置変更と見なすため、開始時刻を最初の観測時刻にする
         keep_top_last_mutation_at = performance.now();
-        keep_top_mutation_observer.observe(document.documentElement, { childList: true, subtree: true });
+        //観測はタイムラインのある primaryColumn に絞り、無関係な領域の再描画で判定が濁らないようにする
+        keep_top_mutation_observer.observe(document.querySelector('div[data-testid="primaryColumn"]') ?? document.documentElement, { childList: true, subtree: true });
         keep_top_timer = setTimeout(() => {
             if (generation !== keep_top_generation) return;
             stop_keep_top();

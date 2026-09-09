@@ -21,11 +21,12 @@ const column_auto_update_state = {
     //開いているメッセージダイアログ (alert / confirm / prompt の代替) の数。1 以上のあいだは自動更新を止める
     message_dialog: {open_count: 0},
 };
-//フォーカスの連鎖の末端がテキスト入力欄なら true (自動更新の停止条件。契約は「自動更新」節)
+//フォーカスの連鎖が iframe の中に入り、その末端がテキスト入力欄なら true (自動更新の停止条件。契約は「自動更新」節)
 //document.activeElement から、iframe なら contentDocument.activeElement、shadow host なら shadowRoot.activeElement を辿って末端の要素を得る。
-//別オリジンなどで中身を読めない iframe は入力中と見なさない
+//別オリジンなどで中身を読めない iframe は入力中と見なさない。deck 自身 (親 document) の入力欄 (設定パネルやダイアログの欄) は iframe を通らないため対象にしない
 function is_text_input_focused(){
     let element = document.activeElement;
+    let is_inside_iframe = false;
     for (let depth = 0; depth < 16 && element; depth++) {
         let inner_element = null;
         if(element.tagName === "IFRAME"){
@@ -34,12 +35,14 @@ function is_text_input_focused(){
             }catch(e){
                 return false;
             }
+            if(inner_element !== null) is_inside_iframe = true;
         }else if(element.shadowRoot){
             inner_element = element.shadowRoot.activeElement;
         }
         if(inner_element === null || inner_element === element) break;
         element = inner_element;
     }
+    if(!is_inside_iframe) return false;
     return is_text_input_element(element);
 }
 //編集できるテキスト欄かどうか。isContentEditable、TEXTAREA、テキスト系 INPUT を対象にし、readOnly / disabled の欄と非テキスト型の INPUT は対象外
@@ -4739,7 +4742,8 @@ function main_dsp(react_root){
 //
 //停止条件 (is_auto_update。全カラム共通):
 //  テキスト入力中          イベントで追わず、判定のたびに document.activeElement からフォーカスの連鎖 (iframe なら contentDocument.activeElement、shadow host なら shadowRoot.activeElement) を末端まで辿り、
-//                          末端が編集できるテキスト欄 (isContentEditable、TEXTAREA、テキスト系 INPUT。readOnly / disabled の欄と button・checkbox 等の非テキスト型は除く) なら停止する (is_text_input_focused)。
+//                          連鎖が iframe の中に入っていて、末端が編集できるテキスト欄 (isContentEditable、TEXTAREA、テキスト系 INPUT。readOnly / disabled の欄と button・checkbox 等の非テキスト型は除く) なら停止する (is_text_input_focused)。
+//                          deck 自身 (親 document) の入力欄 (カラム設定パネル・ダイアログの欄) にフォーカスがあっても停止しない (iframe 内の入力面だけが対象)。
 //                          別オリジンなどで中身を読めない iframe は入力中と見なさない。ウィンドウが非フォーカスでも activeElement は残るため、入力欄にカーソルを置いたままなら停止し続ける
 //  メディアビューア表示中  column_auto_update_state.media_viewer.active
 //  メッセージダイアログ中  column_auto_update_state.message_dialog.open_count > 0
