@@ -1662,7 +1662,7 @@ function run(settings){
                 const effective_pinned = saved_pinned ?? global_settings.pinned;
                 let init_pinned_path = "";
                 let init_column_save_path = column_setting.column_save_path;
-                //保存したタイトルが無いプロファイルでは空文字にし、テンプレートへ "undefined" を埋めない
+                //保存したタイトルが無いプロファイルでは空文字にし、テンプレートへ "undefined" を埋めない (保存したタイトルは読み取り時に整えた形なのでそのまま使う)
                 let init_column_save_title = column_setting.column_save_title ?? "";
                 //Exproleピン止め。実効ピン止め中はピン止めしたパスを開き直す (記録が無い場合は reconcile_column_pinned が現在のパスで補う)
                 //保存したパスと違うページを開くときは保存したタイトルを使わず、読み込み後に取り込むまで見出しには種別の名称を出す
@@ -1965,13 +1965,14 @@ function run(settings){
         if(subbar !== null) subbar.hidden = true;
         column_div.removeAttribute("opd_column_detail");
     }
-    //カラムの iframe が今表示しているページの href と、見出しに出す形に整えたページタイトルを読む
+    //カラムの iframe が今表示しているページの href と、見出しに出す形に整えたページタイトル (リスト系ページではリスト名だけ) を読む
     //中身を読めない (別オリジン等) 場合は null を返す
     function read_column_frame_page(column_frame){
         try{
+            const frame_location = column_frame.contentWindow.location;
             return {
-                href: column_frame.contentWindow.location.href,
-                page_title: normalize_column_page_title(column_frame.contentWindow.document.title),
+                href: frame_location.href,
+                page_title: normalize_column_page_title(column_frame.contentWindow.document.title, frame_location.pathname),
             };
         }catch(e){
             //別オリジンなどで中身を読めないあいだは表示中のページを追えない
@@ -1979,7 +1980,7 @@ function run(settings){
         }
     }
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
-    //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)。タイトルが仮タイトル "X" か空のあいだは記録しない
+    //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)。タイトルが空 (読み込み中の仮タイトル) のあいだは記録しない
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル。ポスト単体のページではパスだけ更新し、タイトルは残す (見出しは元のページのまま薄く表示するため)
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page){
@@ -1990,7 +1991,7 @@ function run(settings){
         const frame_path = `${frame_url.pathname}${frame_url.search}`;
         if(match_post_page_path(frame_url.pathname) === null){
             column_div.setAttribute("opd_column_return_path", frame_path);
-            if(frame_page.page_title !== "X" && frame_page.page_title !== "") column_div.setAttribute("opd_column_return_title", frame_page.page_title);
+            if(frame_page.page_title !== "") column_div.setAttribute("opd_column_return_title", frame_page.page_title);
         }
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
         column_div.setAttribute("opd_explore_path", frame_path);
@@ -2028,7 +2029,8 @@ function run(settings){
     }
     //カラムの iframe 内のページ内遷移を MutationObserver で検知し、表示中のページを属性・見出し・副見出しへ反映する
     //X はページを切り替えた後に document.title を書き換えるため、href とページタイトルのどちらが変わっても反映し直す
-    //explore カラムでは表示中のパスとページタイトルを保存し、iframe 内 CSS も選び直す (表示パスでトップ非表示の CSS が変わるため)
+    //タイトルは title 要素のテキストノードの書き換えで変わることがあるため、childList に加えて characterData も観察する
+    //explore カラムでは表示中のパスとページタイトルを保存する
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2058,10 +2060,9 @@ function run(settings){
                 update_column_heading(column_div);
                 update_column_subbar(column_div);
                 if(column_div.getAttribute("opd_column_type") !== "explore") return;
-                apply_column_iframe_styles(column_div);
                 column_settings_save("", last_load_profile);
             });
-            navigation_observer.observe(frame_document, {childList: true, subtree: true});
+            navigation_observer.observe(frame_document, {childList: true, subtree: true, characterData: true});
         });
     }
     //メインバーイベント
@@ -3649,14 +3650,14 @@ function run(settings){
                 }
                 try{
                     const frame_window = column_frame.contentWindow;
-                    const clicked_title = normalize_column_page_title(frame_window.document.title);
+                    const clicked_title = normalize_column_page_title(frame_window.document.title, frame_window.location.pathname);
                     //X のルーターが履歴エントリに持たせている state はそのまま引き継ぎ、popstate にも同じ state を載せる
                     const history_state = frame_window.history.state;
                     frame_window.history.replaceState(history_state, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate", {state: history_state}));
                     //X が popstate に応じなかった場合の保険。1.5 秒後もパスが戻り先のままで、ページタイトルが戻り先ページのものになっていなければ読み込み直して戻す
                     //X は画面を切り替えるとページタイトルを書き換えるため、記録した戻り先ページのタイトルになっていることを遷移できた印とみなす (未読数の変化だけで変わったとみなさないよう正規化して比べる)
-                    //切り替え中は仮タイトル "X" や空のことがあり、切り替えが遅いとクリック時のタイトルのままのこともあるため、そのときは判定を保留して同じ間隔でもう一度確かめる (確かめ直しは 2 回まで。それでも戻り先のタイトルになっていなければ読み込み直す)
+                    //切り替え中はタイトルが空 (読み込み中の仮タイトル) のことがあり、切り替えが遅いとクリック時のタイトルのままのこともあるため、そのときは判定を保留して同じ間隔でもう一度確かめる (確かめ直しは 2 回まで。それでも戻り先のタイトルになっていなければ読み込み直す)
                     //その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
                     const fallback_interval_ms = 1500;
                     let fallback_rechecks_left = 2;
@@ -3664,8 +3665,8 @@ function run(settings){
                         column_div.opd_subbar_fallback_timer = null;
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
-                            const current_title = normalize_column_page_title(frame_window.document.title);
-                            if((current_title === "X" || current_title === "" || current_title === clicked_title) && fallback_rechecks_left > 0){
+                            const current_title = normalize_column_page_title(frame_window.document.title, frame_window.location.pathname);
+                            if((current_title === "" || current_title === clicked_title) && fallback_rechecks_left > 0){
                                 fallback_rechecks_left--;
                                 column_div.opd_subbar_fallback_timer = setTimeout(check_return_navigation, fallback_interval_ms);
                                 return;
@@ -3734,16 +3735,13 @@ function run(settings){
     }
     //iframe 内 head に style 要素 (style[opd_banner_css] / style[opd_top_visible_css] / style[opd_tw_view_mode_css]) を用意し、実効値に応じて COLUMN_IFRAME_CSS の文字列を設定する
     //iframe の contentWindow.document.head が読めない (未生成・クロスオリジン) 場合は何もしない (次回 load で再適用される)
-    //トップ非表示の CSS はカラム種別と iframe が現在表示しているパスで選ぶ: home カラムは top_hidden_home、explore カラムでリスト系ページを表示中は top_hidden_list (リスト名の見出しを残す)、それ以外は top_hidden
-    //explore カラムはページ内遷移で表示パスが変わるため、watch_column_navigation の URL 変化検知からも呼ばれる
+    //トップ非表示の CSS はカラム種別で選ぶ: home カラムは top_hidden_home、それ以外は top_hidden (リスト系ページの見出しも隠し、リスト名はカラム見出しに出す)
     function apply_column_iframe_styles(column_div){
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
         let frame_head = null;
-        let frame_path = null;
         try{
             frame_head = column_frame.contentWindow?.document?.head ?? null;
-            frame_path = column_frame.contentWindow?.location?.pathname ?? null;
         }catch(e){
             //別オリジンなどで中身を読めない場合は次回の load で適用し直す
             return;
@@ -3769,8 +3767,6 @@ function run(settings){
             top_visible_style.textContent = ``;
         }else if(column_type === "home"){
             top_visible_style.textContent = COLUMN_IFRAME_CSS.top_hidden_home;
-        }else if(column_type === "explore" && is_list_page_path(frame_path)){
-            top_visible_style.textContent = COLUMN_IFRAME_CSS.top_hidden_list;
         }else{
             top_visible_style.textContent = COLUMN_IFRAME_CSS.top_hidden;
         }
@@ -4465,7 +4461,7 @@ function set_title_favicon(){
 //適用経路は 3 つに分ける:
 //  bind_column_events(column_div)        パネル・カラムバーのイベント登録 (data-opd_settings_initialized で二重登録を防ぐ)
 //  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・パネル表示・ピン止め reconcile・自動更新 interval)
-//  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード)。iframe の load ごとと explore カラムのページ内遷移ごとに実行し、head 未生成時は何もしない
+//  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード)。iframe の load ごとに実行し、head 未生成時は何もしない
 //起動時 (run() の初期化でプロファイルからカラムを組み立てたとき) とカラム追加時は、挿入直後に bind_column_events と apply_column_dom_state を同期で呼ぶ (追加時はその後 column_settings_save する)。
 //全体設定の変更時は、その項目が inherit の全カラムに対して apply_column_dom_state と apply_column_iframe_styles を呼び直す。
 const SETTINGS_SCHEMA_VERSION = 2;
@@ -4494,22 +4490,10 @@ const COLUMN_INHERITABLE_SETTINGS = Object.freeze({
     auto_reload_time: "opd_setting_auto_reload_time",
     pinned: "opd_setting_pinned",
 });
-//iframe 内へ注入する CSS の正本 (初回 load・再 load・設定変更・ページ内遷移のどの経路でも同じ文字列を使う)
-//top_hidden_list はリスト系ページ向けで、トップヘッダーをリスト名だけの専用バーに整形する: ヘッダーの高さ・背景・sticky は X 標準のまま残し、
-//ボタン (戻る・共有・メニュー)・見出し直後のオーナー行・見出し (h2[role="heading"]) 内のアイコン (非公開リストの鍵) を display:none で余白ごと除き、見出しを親の幅いっぱいに広げて text-align:center でバー中央に置く (:has() を使わず、Firefox ESR115 でも中央揃えが効くようにする)。
-//ボタンはリンク・入力欄・role=button/link/tab の要素とまとめて display:none にし、列挙に無い操作要素がヘッダーに残らないようにする (ヘッダー配下の「新しいポスト」のピルのボタンもこれで隠れる)。
-//ヘッダー本体には visibility:hidden を当てない (X がヘッダー内側の要素に持たせている背景色・背景ぼかしまで描画されなくなり、スクロール時にリスト名だけが投稿の上に浮いて帯にならないため)
-//リスト名専用バーと投稿の境界は、ヘッダー本体の ::after 疑似要素 (pointer-events:none の全面オーバーレイ) に LIST_TITLE_BAR_STYLE の薄い帯色と下境界線を持たせて示す。
-//X の背景色は内側の要素が持つため、ヘッダー本体の background では覆われて見えない。オーバーレイなら内側の構造に依存せず、X の背景 (ライト / ダーク) の上に同じ量だけ重なる。
-//::after の位置決め基準にするため、ヘッダー本体を position:sticky (top:0) と明示する (X 標準の sticky と同じ配置で、帯として固定される挙動は変えない)
-//リスト名専用バーの配色。テーマ (ライト / ダーク) に依存しない半透明の無彩色で、X の背景の上に重ねて使う
-const LIST_TITLE_BAR_STYLE = Object.freeze({
-    background_tint: "rgba(128, 128, 128, 0.12)",
-    bottom_border: "rgba(128, 128, 128, 0.4)",
-});
+//iframe 内へ注入する CSS の正本 (初回 load・再 load・設定変更のどの経路でも同じ文字列を使う)
+//トップ非表示ではリスト系ページの見出し (リスト名) も他のページと同じく隠す。リスト名はカラム見出しに出す
 const COLUMN_IFRAME_CSS = Object.freeze({
     banner_hidden: `header[role="banner"]{display:none}`,
-    top_hidden_list: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) :is(button, a, input, [role="button"], [role="link"], [role="tab"]){display: none;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2[role="heading"] + div{display: none;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2[role="heading"] svg{display: none;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2[role="heading"]{width: 100%;text-align: center;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){position: sticky;top: 0;}div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1)::after{content: "";position: absolute;inset: 0;pointer-events: none;background: ${LIST_TITLE_BAR_STYLE.background_tint};box-shadow: inset 0 -1px 0 ${LIST_TITLE_BAR_STYLE.bottom_border};}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     top_hidden: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     top_hidden_home: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;} div[role="progressbar"] + div{display:none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     tw_view_text_only: `div[data-testid="cellInnerDiv"]:has(div[aria-labelledby]){visibility: hidden; height: 0;}`,
@@ -4825,11 +4809,16 @@ function match_post_page_path(path){
     return is_valid_screen_name(post_match[1]) ? post_match[1] : null;
 }
 //X のページタイトルから、先頭の未読数 ("(3) " と上限付きの "(20+) ") と末尾の " / X" を落として、カラム見出しに出す形にする
+//X が読み込み中に出す仮タイトル (末尾の " / X" を持たない "X" だけのタイトル) は空文字にし、読み込み中の印は空文字だけにする ("@所有者/X / X" のように名前が "X" のリストと区別する)
+//page_path がリスト系ページなら、X がタイトルに付ける先頭の所有者 "@screen_name/" も落としてリスト名だけにする
 //未読数は文字列だけでは見分けられないため、"(1) " のような括弧付き数字で始まるページ名もその部分が落ちる
-function normalize_column_page_title(document_title){
-    const page_title = (document_title ?? "").replace(/^\(\d+\+?\)\s*/, "");
+function normalize_column_page_title(document_title, page_path = null){
+    let page_title = (document_title ?? "").replace(/^\(\d+\+?\)\s*/, "");
+    if(page_title === "X") return "";
     const x_title_suffix = " / X";
-    return page_title.endsWith(x_title_suffix) ? page_title.slice(0, -x_title_suffix.length) : page_title;
+    if(page_title.endsWith(x_title_suffix)) page_title = page_title.slice(0, -x_title_suffix.length);
+    if(is_list_page_path(page_path)) page_title = page_title.replace(/^@[A-Za-z0-9_]{1,15}\//, "");
+    return page_title;
 }
 //カラムの戻り先パス (副見出しの ✕ で開き直すページ) の初期値
 //explore カラムは初期表示するパスをそのまま使い、それがポスト単体のページなら検索のトップを指す
@@ -4841,14 +4830,14 @@ function initial_column_return_path(column_type, column_path){
 }
 //カラム見出しに出す文脈ラベル (上段) とタイトル (下段) を決める
 //  home / notification: ラベル = "@" + ログイン中の screen_name (取得できないあいだは空文字)、タイトル = カラム種別の名称
-//  explore: ラベル = リスト系ページなら「リスト」、それ以外は「検索」、タイトル = X のページタイトル (空か、X が読み込み中に出す仮タイトル "X" ならラベルと同じ語)
+//  explore: ラベル = リスト系ページなら「リスト」、それ以外は「検索」、タイトル = X のページタイトル (空 (読み込み中の仮タイトルを含む) ならラベルと同じ語)
 //column_path: explore カラムが表示しているパス、column_page_title: そのページのタイトル、login_screen_name: ログイン中の screen_name (不明なら null)
 //見出しを持たないカラム種別 (構造用カラム) には null を返す
 function build_column_heading(column_type, column_path, column_page_title, login_screen_name = null){
     if(column_type === "explore"){
         const explore_label = i18n_message(is_list_page_path(column_path) ? "ui_column_list_title" : "ui_column_explore_title");
         const page_title = column_page_title ?? "";
-        return {label: explore_label, name: (page_title === "" || page_title === "X") ? explore_label : page_title};
+        return {label: explore_label, name: page_title === "" ? explore_label : page_title};
     }
     if(column_type !== "home" && column_type !== "notification") return null;
     return {
