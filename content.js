@@ -2725,8 +2725,9 @@ function run(settings){
             render_lists();
             mark_frame_cells();
             const located = locate_entry(key);
-            if(located === null) return;
-            selection_status_area.textContent = i18n_message("ui_column_manager_moved", [display_name_of(located.entry), rack_name_of(located.rack_id), String(located.index + 1)]);
+            if(located === null || located.entry.order === null) return;
+            //読み上げる番号は行に表示している通し番号 (両ラックを通した番号、閉じる印の行は数えない) と同じにする
+            selection_status_area.textContent = i18n_message("ui_column_manager_moved", [display_name_of(located.entry), rack_name_of(located.rack_id), String(located.entry.order)]);
         }
         //追加した行を描き直し、追加先を知らせる
         function announce_added(added){
@@ -3195,11 +3196,11 @@ function run(settings){
             const next_item = next_entry === undefined ? null : find_item(next_entry.key);
             (next_item === null ? manual_textarea : next_item.querySelector(".opd_column_manager_action_btn")).focus();
         });
-        //行にフォーカスした状態の Alt+↑ / Alt+↓ で 1 段ずつ動かす (ラックの端では隣のラックへ移る)
+        //行にフォーカスした状態の Alt+↑ / Alt+↓ で 1 段ずつ動かす (ラックの端では隣のラックへ移る)。閉じる印の付いた行はドラッグと同様に動かさない
         racks_wrap.addEventListener("keydown", function(event){
             if(!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
             const item = event.target instanceof Element ? event.target.closest(item_selector) : null;
-            if(item === null) return;
+            if(item === null || item.hasAttribute("data-pending-close")) return;
             event.preventDefault();
             const located = locate_entry(item.getAttribute("data-key"));
             if(located === null) return;

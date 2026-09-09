@@ -264,7 +264,7 @@
     "message": "$1 を残す (閉じるのをやめる)"
   },
   "ui_column_manager_moved": {
-    "message": "「$1」を$2の $3 番目に移動しました"
+    "message": "「$1」を$2へ移動しました ($3 番)"
   },
   "ui_column_manager_added": {
     "message": "「$1」を$2の末尾に追加しました"

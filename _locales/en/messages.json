@@ -264,7 +264,7 @@
     "message": "Keep $1 (do not close)"
   },
   "ui_column_manager_moved": {
-    "message": "Moved “$1” to position $3 in the $2"
+    "message": "Moved “$1” to the $2 (row $3)"
   },
   "ui_column_manager_added": {
     "message": "Added “$1” to the end of the $2"
