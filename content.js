@@ -3640,8 +3640,10 @@ function run(settings){
                 }
                 try{
                     const frame_window = column_frame.contentWindow;
-                    frame_window.history.replaceState({}, "", return_path);
-                    frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate"));
+                    //X のルーターが履歴エントリに持たせている state はそのまま引き継ぎ、popstate にも同じ state を載せる
+                    const history_state = frame_window.history.state;
+                    frame_window.history.replaceState(history_state, "", return_path);
+                    frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate", {state: history_state}));
                     //X が popstate に応じなかった場合の保険。1.5 秒後もパスが戻り先のままで、ページタイトルが戻り先ページのものになっていなければ読み込み直して戻す
                     //X は画面を切り替えるとページタイトルを書き換える (切り替え中は仮タイトル "X" のことがある) ため、記録した戻り先ページのタイトルか仮タイトルになっていることを遷移できた印とみなす
                     //未読数の変化だけで変わったとみなさないよう正規化して比べる。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
