@@ -1897,8 +1897,9 @@ function run(settings){
                     apply_column_frame_page(opd_column_div, read_column_frame_page(column_object[index]));
                     update_column_heading(opd_column_div);
                     update_column_subbar(opd_column_div);
-                    //ログイン中の screen_name は X のナビゲーションが読み込まれるまで取れないため、読み込みのたびに全 home / notification カラムのラベルを取り直す
-                    update_login_dependent_headings();
+                    //ログイン中の screen_name は X のナビゲーションが読み込まれるまで取れないため、読み込みのたびに取り直して全 home / notification カラムのラベルへ反映する
+                    //取れないあいだは他のカラムのラベルを空に戻さない (このカラムのラベルは上の組み立て直しで空になり、遷移監視の取り直しで埋まる)
+                    if(get_login_screen_name() !== null) update_login_dependent_headings();
                 });
             }
             apply_column_iframe_styles(opd_column_div);
@@ -3045,6 +3046,8 @@ function run(settings){
                         }
                         dr_elem.querySelector("div").querySelector("iframe").src = `https://x.com${reload_path}`;
                         //読み込み直す先のパスに合わせて見出しを組み立て直す (読み込み後の取り込みで同じ値になる)
+                        //表示中と違うページを読み込むときはページタイトルを空にし、読み込み後に取り込むまで見出しには種別の名称を出す
+                        if(dr_elem.querySelector("div").getAttribute("opd_explore_path") !== reload_path) dr_elem.querySelector("div").setAttribute("opd_explore_title", "");
                         dr_elem.querySelector("div").setAttribute("opd_explore_path", reload_path);
                         update_column_heading(dr_elem.querySelector("div"));
                     }
@@ -3584,6 +3587,7 @@ function run(settings){
             });
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
             //iframe の history はタブ全体で共有され back() は他のカラムの遷移まで巻き戻すため使わず、pushState + popstate で X の画面遷移を起こす
+            //副見出しの表示はここでは更新せず、X が画面を描き直したときは遷移監視に、読み込み直したときは load に任せる (表示中のページに合わせて決める)
             //読み込み直しの保険は 1 カラムにつき 1 つだけ予約し、再クリックで前の予約を取り消す
             let subbar_fallback_timer = null;
             column_div.querySelector(".opd_column_subbar_back")?.addEventListener("click", function(){
@@ -3591,13 +3595,15 @@ function run(settings){
                 clearTimeout(subbar_fallback_timer);
                 try{
                     const frame_window = column_frame.contentWindow;
+                    const post_page_title = frame_window.document.title;
                     frame_window.history.pushState({}, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate"));
-                    //X が popstate に応じなかった場合の保険。戻り先のパスのままポスト詳細の本文 (article[tabindex="-1"]) が残っていれば読み込み直して戻す
-                    //その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
+                    //X が popstate に応じなかった場合の保険。戻り先のパスのまま、ページタイトルがポストのものから変わらず、ポスト詳細の本文 (article[tabindex="-1"]) も残っていれば読み込み直して戻す
+                    //X は画面を切り替えるとページタイトルを書き換えるため、タイトルが変わっていれば遷移できたとみなす。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
                     subbar_fallback_timer = setTimeout(function(){
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
+                            if(frame_window.document.title !== post_page_title) return;
                             if(frame_window.document.querySelector('article[tabindex="-1"]') === null) return;
                             frame_window.location.replace(`https://x.com${return_path}`);
                         }catch(fallback_error){
@@ -3610,10 +3616,8 @@ function run(settings){
                         column_frame.contentWindow.location.replace(`https://x.com${return_path}`);
                     }catch(reload_error){
                         console.warn("column subbar: 戻る操作を実行できませんでした->", reload_error);
-                        return;
                     }
                 }
-                update_column_subbar(column_div);
             });
         }
     }
@@ -4745,6 +4749,7 @@ function match_post_page_path(path){
     return is_valid_screen_name(post_match[1]) ? post_match[1] : null;
 }
 //X のページタイトルから、先頭の未読数 "(3) " と末尾の " / X" を落として、カラム見出しに出す形にする
+//未読数は文字列だけでは見分けられないため、"(1) " のような括弧付き数字で始まるページ名もその部分が落ちる
 function normalize_column_page_title(document_title){
     const page_title = (document_title ?? "").replace(/^\(\d+\)\s*/, "");
     const x_title_suffix = " / X";
