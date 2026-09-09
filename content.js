@@ -1980,7 +1980,7 @@ function run(settings){
         }
     }
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
-    //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)。タイトルが仮タイトル "X" か空のあいだは記録しない
+    //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)。タイトルが空 (読み込み中の仮タイトル) のあいだは記録しない
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル。ポスト単体のページではパスだけ更新し、タイトルは残す (見出しは元のページのまま薄く表示するため)
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page){
@@ -1991,7 +1991,7 @@ function run(settings){
         const frame_path = `${frame_url.pathname}${frame_url.search}`;
         if(match_post_page_path(frame_url.pathname) === null){
             column_div.setAttribute("opd_column_return_path", frame_path);
-            if(frame_page.page_title !== "X" && frame_page.page_title !== "") column_div.setAttribute("opd_column_return_title", frame_page.page_title);
+            if(frame_page.page_title !== "") column_div.setAttribute("opd_column_return_title", frame_page.page_title);
         }
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
         column_div.setAttribute("opd_explore_path", frame_path);
@@ -3657,7 +3657,7 @@ function run(settings){
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate", {state: history_state}));
                     //X が popstate に応じなかった場合の保険。1.5 秒後もパスが戻り先のままで、ページタイトルが戻り先ページのものになっていなければ読み込み直して戻す
                     //X は画面を切り替えるとページタイトルを書き換えるため、記録した戻り先ページのタイトルになっていることを遷移できた印とみなす (未読数の変化だけで変わったとみなさないよう正規化して比べる)
-                    //切り替え中は仮タイトル "X" や空のことがあり、切り替えが遅いとクリック時のタイトルのままのこともあるため、そのときは判定を保留して同じ間隔でもう一度確かめる (確かめ直しは 2 回まで。それでも戻り先のタイトルになっていなければ読み込み直す)
+                    //切り替え中はタイトルが空 (読み込み中の仮タイトル) のことがあり、切り替えが遅いとクリック時のタイトルのままのこともあるため、そのときは判定を保留して同じ間隔でもう一度確かめる (確かめ直しは 2 回まで。それでも戻り先のタイトルになっていなければ読み込み直す)
                     //その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
                     const fallback_interval_ms = 1500;
                     let fallback_rechecks_left = 2;
@@ -3666,7 +3666,7 @@ function run(settings){
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
                             const current_title = normalize_column_page_title(frame_window.document.title, frame_window.location.pathname);
-                            if((current_title === "X" || current_title === "" || current_title === clicked_title) && fallback_rechecks_left > 0){
+                            if((current_title === "" || current_title === clicked_title) && fallback_rechecks_left > 0){
                                 fallback_rechecks_left--;
                                 column_div.opd_subbar_fallback_timer = setTimeout(check_return_navigation, fallback_interval_ms);
                                 return;
@@ -4809,10 +4809,12 @@ function match_post_page_path(path){
     return is_valid_screen_name(post_match[1]) ? post_match[1] : null;
 }
 //X のページタイトルから、先頭の未読数 ("(3) " と上限付きの "(20+) ") と末尾の " / X" を落として、カラム見出しに出す形にする
+//X が読み込み中に出す仮タイトル (末尾の " / X" を持たない "X" だけのタイトル) は空文字にし、読み込み中の印は空文字だけにする ("@所有者/X / X" のように名前が "X" のリストと区別する)
 //page_path がリスト系ページなら、X がタイトルに付ける先頭の所有者 "@screen_name/" も落としてリスト名だけにする
 //未読数は文字列だけでは見分けられないため、"(1) " のような括弧付き数字で始まるページ名もその部分が落ちる
 function normalize_column_page_title(document_title, page_path = null){
     let page_title = (document_title ?? "").replace(/^\(\d+\+?\)\s*/, "");
+    if(page_title === "X") return "";
     const x_title_suffix = " / X";
     if(page_title.endsWith(x_title_suffix)) page_title = page_title.slice(0, -x_title_suffix.length);
     if(is_list_page_path(page_path)) page_title = page_title.replace(/^@[A-Za-z0-9_]{1,15}\//, "");
@@ -4828,14 +4830,14 @@ function initial_column_return_path(column_type, column_path){
 }
 //カラム見出しに出す文脈ラベル (上段) とタイトル (下段) を決める
 //  home / notification: ラベル = "@" + ログイン中の screen_name (取得できないあいだは空文字)、タイトル = カラム種別の名称
-//  explore: ラベル = リスト系ページなら「リスト」、それ以外は「検索」、タイトル = X のページタイトル (空か、X が読み込み中に出す仮タイトル "X" ならラベルと同じ語)
+//  explore: ラベル = リスト系ページなら「リスト」、それ以外は「検索」、タイトル = X のページタイトル (空 (読み込み中の仮タイトルを含む) ならラベルと同じ語)
 //column_path: explore カラムが表示しているパス、column_page_title: そのページのタイトル、login_screen_name: ログイン中の screen_name (不明なら null)
 //見出しを持たないカラム種別 (構造用カラム) には null を返す
 function build_column_heading(column_type, column_path, column_page_title, login_screen_name = null){
     if(column_type === "explore"){
         const explore_label = i18n_message(is_list_page_path(column_path) ? "ui_column_list_title" : "ui_column_explore_title");
         const page_title = column_page_title ?? "";
-        return {label: explore_label, name: (page_title === "" || page_title === "X") ? explore_label : page_title};
+        return {label: explore_label, name: page_title === "" ? explore_label : page_title};
     }
     if(column_type !== "home" && column_type !== "notification") return null;
     return {
