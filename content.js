@@ -895,7 +895,8 @@ function run(settings){
         background: var(--opd-surface-hover);
         color: var(--opd-text);
     }
-    .dsp_column_btn:focus-within{
+    /*ボタン枠の中の input (透明で全面に重ねる) がキーボード操作でフォーカスされたときだけ枠にリングを出す*/
+    .dsp_column_btn:has(input:focus-visible){
         outline: 2px solid var(--opd-accent);
         outline-offset: -2px;
     }
@@ -913,10 +914,6 @@ function run(settings){
         height: 100%;
         margin: 0;
         cursor: pointer;
-    }
-    .dsp_column_settings_btn input,
-    .dsp_column_close_btn input{
-        display: none;
     }
     .dsp_column_empty_area{
         flex: 1 1 auto;
@@ -1614,7 +1611,7 @@ function run(settings){
     //カラム要素作成-挿入
     //カラムバー (home / notification / explore で共通)。見出しはドラッグ用グリップ・カラム種別の丸アイコン・2 段組のテキスト (上段: 文脈ラベル、下段: タイトル) で、右端に空白領域 (クリックでカラム先頭へスクロール) と設定・閉じるボタンを置く
     //副見出しはポスト単体を表示しているあいだだけ出す (update_column_subbar が hidden を切り替える)。戻るボタンで元の一覧へ戻す
-    let default_element_bar = `<div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><span class="dsp_column_move_icon" aria-hidden="true"></span><span class="opd_column_kind_icon" aria-hidden="true"></span><span class="opd_column_heading"><span class="opd_column_label">%column_label%</span><span class="opd_column_name">%column_title%</span></span></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div><span class="dsp_column_btn"><label class="dsp_column_settings_btn" title="${i18n_message("ui_column_settings_title")}"><input class="opd_settings_btn" type="button" value="S"></label></span><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn" title="${i18n_message("ui_column_close_title")}"><input type="button" class="column_close_btn" value="X"/></label></span></div></div><div class="opd_column_subbar" hidden><button type="button" class="opd_column_subbar_back" title="${i18n_message("ui_column_back_button")}" aria-label="${i18n_message("ui_column_back_button")}"><span class="opd_icon opd_icon_close" aria-hidden="true"></span></button><span class="opd_column_heading"><span class="opd_column_label opd_column_subbar_label"></span><span class="opd_column_name opd_column_subbar_name"></span></span></div>`;
+    let default_element_bar = `<div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><span class="dsp_column_move_icon" aria-hidden="true"></span><span class="opd_column_kind_icon" aria-hidden="true"></span><span class="opd_column_heading"><span class="opd_column_label">%column_label%</span><span class="opd_column_name">%column_title%</span></span></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div><span class="dsp_column_btn"><label class="dsp_column_settings_btn"><input class="opd_settings_btn" type="button" value="S" title="${i18n_message("ui_column_settings_title")}" aria-label="${i18n_message("ui_column_settings_title")}"></label></span><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn"><input type="button" class="column_close_btn" value="X" title="${i18n_message("ui_column_close_title")}" aria-label="${i18n_message("ui_column_close_title")}"/></label></span></div></div><div class="opd_column_subbar" hidden><button type="button" class="opd_column_subbar_back" title="${i18n_message("ui_column_back_button")}" aria-label="${i18n_message("ui_column_back_button")}"><span class="opd_icon opd_icon_close" aria-hidden="true"></span></button><span class="opd_column_heading"><span class="opd_column_label opd_column_subbar_label"></span><span class="opd_column_name opd_column_subbar_name"></span></span></div>`;
     //カラム設定パネルはカラム種別ごとに出す行が異なる (項目 × カラム種別の適用表に従う)
     let notification_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:false, pinned:false});
     let home_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:true, pinned:false});
