@@ -60,7 +60,7 @@
     "message": "Side rack: new columns are added here"
   },
   "ui_column_back_button": {
-    "message": "Back"
+    "message": "Close post"
   },
   "ui_column_post_title": {
     "message": "Post"
