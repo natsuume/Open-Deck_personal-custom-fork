@@ -32,17 +32,8 @@
   "ui_sidebar_logo_title": {
     "message": "Open-Deck\nv$1"
   },
-  "ui_add_timeline_column_title": {
-    "message": "タイムラインカラム追加"
-  },
-  "ui_add_notification_column_title": {
-    "message": "通知カラム追加"
-  },
-  "ui_add_explore_column_title": {
-    "message": "Explore(ユニバーサル)カラム追加"
-  },
-  "ui_add_list_column_title": {
-    "message": "リストカラム追加"
+  "ui_manage_columns_title": {
+    "message": "カラム管理 (追加・並べ替え・閉じる)"
   },
   "ui_add_target_main_title": {
     "message": "カラム追加先: メインラック (クリックでサイドラックに切替)"
@@ -182,14 +173,35 @@
   "msg_invalid_value_alert": {
     "message": "正しい値を入力してください"
   },
-  "msg_list_column_path_prompt": {
-    "message": "ユーザー名を自動取得できませんでした。\nリスト一覧を開くユーザー名 (@ は省略可)、またはリストの URL か ID を入力"
+  "ui_column_manager_header": {
+    "message": "カラム管理"
   },
-  "ui_add_list_multi_column_title": {
-    "message": "リストカラムを複数追加"
+  "ui_column_manager_add_header": {
+    "message": "カラムを追加"
   },
-  "ui_list_picker_header": {
-    "message": "リストカラムを複数追加"
+  "ui_column_manager_target_label": {
+    "message": "追加先"
+  },
+  "ui_column_manager_target_main": {
+    "message": "メインラック"
+  },
+  "ui_column_manager_target_side": {
+    "message": "サイドラック"
+  },
+  "ui_column_manager_type_home": {
+    "message": "タイムライン"
+  },
+  "ui_column_manager_type_notification": {
+    "message": "通知"
+  },
+  "ui_column_manager_type_explore": {
+    "message": "Explore"
+  },
+  "ui_column_manager_type_lists": {
+    "message": "リスト一覧"
+  },
+  "ui_column_manager_list_header": {
+    "message": "リストを選んで追加"
   },
   "ui_list_picker_user_label": {
     "message": "リスト一覧を表示するユーザー"
@@ -218,44 +230,59 @@
   "ui_list_picker_select_all": {
     "message": "表示中のリストを全て選択"
   },
-  "ui_list_picker_clear_all": {
-    "message": "選択解除"
-  },
-  "ui_list_picker_selection_header": {
-    "message": "追加するカラム"
-  },
-  "ui_list_picker_selection_hint": {
-    "message": "クリックした順に並びます。ドラッグ&ドロップか Alt+↑ / Alt+↓ で並べ替えできます"
-  },
-  "ui_list_picker_empty_selection": {
-    "message": "リスト一覧でリストをクリックするか、URL か ID を入力して追加してください"
-  },
-  "ui_list_picker_remove_button": {
-    "message": "$1 を除外"
-  },
-  "ui_list_picker_moved": {
-    "message": "「$1」を $2 番目に移動しました"
-  },
   "ui_list_picker_manual_label": {
     "message": "追加するリストの URL か ID (1 行に 1 件)"
   },
   "ui_list_picker_manual_add_button": {
     "message": "追加"
   },
-  "ui_list_picker_selected_count": {
-    "message": "追加するカラム: $1 件"
-  },
-  "ui_list_picker_add_button": {
-    "message": "カラムを追加"
-  },
-  "ui_list_picker_cancel_button": {
-    "message": "キャンセル"
-  },
   "ui_list_picker_list_fallback_name": {
     "message": "リスト $1"
   },
-  "msg_list_picker_nothing_selected": {
-    "message": "追加するリストを選択するか入力してください"
+  "ui_column_manager_lists_header": {
+    "message": "カラム一覧"
+  },
+  "ui_column_manager_lists_hint": {
+    "message": "上から順に並びます。ドラッグ&ドロップか Alt+↑ / Alt+↓ で並べ替えできます (ラックをまたいで移動可)。× で外したカラムは適用時に閉じます"
+  },
+  "ui_column_manager_rack_empty": {
+    "message": "カラムはありません"
+  },
+  "ui_column_manager_badge_new": {
+    "message": "追加"
+  },
+  "ui_column_manager_badge_close": {
+    "message": "閉じる"
+  },
+  "ui_column_manager_remove_button": {
+    "message": "$1 を外す"
+  },
+  "ui_column_manager_restore_label": {
+    "message": "残す"
+  },
+  "ui_column_manager_restore_button": {
+    "message": "$1 を残す (閉じるのをやめる)"
+  },
+  "ui_column_manager_moved": {
+    "message": "「$1」を$2の $3 番目に移動しました"
+  },
+  "ui_column_manager_added": {
+    "message": "「$1」を$2の末尾に追加しました"
+  },
+  "ui_column_manager_count": {
+    "message": "追加 $1 件 / 閉じる $2 件"
+  },
+  "ui_column_manager_clear_new": {
+    "message": "追加分をすべて外す"
+  },
+  "ui_column_manager_apply_button": {
+    "message": "適用"
+  },
+  "ui_column_manager_cancel_button": {
+    "message": "キャンセル"
+  },
+  "msg_column_manager_pinned_close_confirm": {
+    "message": "ピン止めされているカラムを閉じます:\n$1\n続行しますか？"
   },
   "msg_list_picker_invalid_manual": {
     "message": "解釈できない入力があります:\n$1"
@@ -264,7 +291,7 @@
     "message": "$1 件のカラムを追加します。多数のカラムはメモリと通信量を消費します。続行しますか？"
   },
   "msg_list_picker_user_required": {
-    "message": "ユーザー名またはリスト一覧の URL を入力してください。リストの URL や ID は選択領域の入力欄に入力してください"
+    "message": "ユーザー名またはリスト一覧の URL を入力してください。リストの URL や ID は URL か ID の入力欄に入力してください"
   },
   "msg_auto_reload_set": {
     "message": "自動更新の秒数を$1秒に設定しました"
