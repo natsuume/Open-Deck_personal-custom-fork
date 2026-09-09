@@ -1975,7 +1975,7 @@ function run(settings){
         }
     }
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
-    //  opd_column_return_path: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先)
+    //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル
     //読み込み前の about:blank など https 以外のページでは何も変えない
     function apply_column_frame_page(column_div, frame_page){
@@ -1983,7 +1983,10 @@ function run(settings){
         const frame_url = new URL(frame_page.href);
         if(frame_url.protocol !== "https:") return;
         const frame_path = `${frame_url.pathname}${frame_url.search}`;
-        if(match_post_page_path(frame_url.pathname) === null) column_div.setAttribute("opd_column_return_path", frame_path);
+        if(match_post_page_path(frame_url.pathname) === null){
+            column_div.setAttribute("opd_column_return_path", frame_path);
+            column_div.setAttribute("opd_column_return_title", frame_page.page_title);
+        }
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
         column_div.setAttribute("opd_explore_path", frame_path);
         column_div.setAttribute("opd_explore_title", frame_page.page_title);
@@ -3600,24 +3603,31 @@ function run(settings){
                 column_frame.contentWindow?.scrollTo({ top: 0, behavior: "auto" });
             });
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
-            //iframe の history はタブ全体で共有され back() は他のカラムの遷移まで巻き戻すため使わず、pushState + popstate で X の画面遷移を起こす
+            //iframe の history はタブ全体で共有され、back() は他のカラムの遷移まで巻き戻し、pushState はブラウザの「戻る」の段数を増やすため、replaceState + popstate で X の画面遷移を起こす (X のルーターは popstate で location を読み直す)
             //副見出しの表示はここでは更新せず、X が画面を描き直したときは遷移監視に、読み込み直したときは load に任せる (表示中のページに合わせて決める)
             //読み込み直しの保険は 1 カラムにつき 1 つだけ予約し (opd_subbar_fallback_timer)、再クリックと reset_column_subbar_before_reload で前の予約を取り消す
             column_div.querySelector(".opd_column_subbar_back")?.addEventListener("click", function(){
                 const return_path = column_div.getAttribute("opd_column_return_path") || initial_column_return_path(column_div.getAttribute("opd_column_type"), column_div.getAttribute("opd_explore_path"));
+                const return_title = column_div.getAttribute("opd_column_return_title");
                 clearTimeout(column_div.opd_subbar_fallback_timer);
                 column_div.opd_subbar_fallback_timer = null;
                 try{
                     const frame_window = column_frame.contentWindow;
                     const post_page_title = normalize_column_page_title(frame_window.document.title);
-                    frame_window.history.pushState({}, "", return_path);
+                    frame_window.history.replaceState({}, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate"));
-                    //X が popstate に応じなかった場合の保険。戻り先のパスのまま、ページタイトルがポストのものから変わっていなければ読み込み直して戻す
-                    //X は画面を切り替えるとページタイトルを書き換えるため、タイトルが変わっていれば遷移できたとみなす (未読数の変化だけで変わったとみなさないよう正規化して比べる)。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
+                    //X が popstate に応じなかった場合の保険。1.5 秒後もパスが戻り先のままで、ページタイトルから遷移できたと分からなければ読み込み直して戻す
+                    //X は画面を切り替えるとページタイトルを書き換える (切り替え中は仮タイトル "X" のことがある) ため、戻り先ページのタイトルを記録していればそれか仮タイトルになっていること、記録が無ければクリック時のタイトルから変わっていることを遷移できた印とみなす
+                    //未読数の変化だけで変わったとみなさないよう正規化して比べる。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
                     column_div.opd_subbar_fallback_timer = setTimeout(function(){
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
-                            if(normalize_column_page_title(frame_window.document.title) !== post_page_title) return;
+                            const current_title = normalize_column_page_title(frame_window.document.title);
+                            if(return_title !== null){
+                                if(current_title === return_title || current_title === "X" || current_title === "") return;
+                            }else if(current_title !== post_page_title){
+                                return;
+                            }
                             frame_window.location.replace(`https://x.com${return_path}`);
                         }catch(fallback_error){
                             //中身を読めなくなっていれば何もしない
