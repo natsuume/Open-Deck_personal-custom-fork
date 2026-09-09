@@ -1667,9 +1667,11 @@ function run(settings){
                 let init_column_save_path = column_setting.column_save_path;
                 let init_column_save_title = column_setting.column_save_title;
                 //Exproleピン止め。実効ピン止め中はピン止めしたパスを開き直す (記録が無い場合は reconcile_column_pinned が現在のパスで補う)
+                //保存したパスと違うページを開くときは保存したタイトルを使わず、読み込み後に取り込むまで見出しには種別の名称を出す
                 if(column_setting.type == "explore" && effective_pinned && (column_setting.column_pinned_path ?? "") != ""){
                     init_pinned_path = column_setting.column_pinned_path;
                     init_column_save_path = column_setting.column_pinned_path;
+                    if(init_column_save_path !== column_setting.column_save_path) init_column_save_title = "";
                 }
                 //見出しの文脈ラベルとタイトル (構造用カラムは見出しを持たないため null になる)
                 const init_heading = build_column_heading(column_setting.type, init_column_save_path, init_column_save_title, init_login_screen_name);
