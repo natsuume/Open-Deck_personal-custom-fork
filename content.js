@@ -3645,18 +3645,28 @@ function run(settings){
                     frame_window.history.replaceState(history_state, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate", {state: history_state}));
                     //X が popstate に応じなかった場合の保険。1.5 秒後もパスが戻り先のままで、ページタイトルが戻り先ページのものになっていなければ読み込み直して戻す
-                    //X は画面を切り替えるとページタイトルを書き換える (切り替え中は仮タイトル "X" のことがある) ため、記録した戻り先ページのタイトルか仮タイトルになっていることを遷移できた印とみなす
-                    //未読数の変化だけで変わったとみなさないよう正規化して比べる。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
-                    column_div.opd_subbar_fallback_timer = setTimeout(function(){
+                    //X は画面を切り替えるとページタイトルを書き換えるため、記録した戻り先ページのタイトルになっていることを遷移できた印とみなす (未読数の変化だけで変わったとみなさないよう正規化して比べる)
+                    //切り替え中は仮タイトル "X" や空のことがあるため、そのときは判定を保留して同じ間隔でもう一度確かめる (確かめ直しは 2 回まで。それでも仮タイトルのままなら読み込み直す)
+                    //その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
+                    const fallback_interval_ms = 1500;
+                    let fallback_rechecks_left = 2;
+                    const check_return_navigation = function(){
+                        column_div.opd_subbar_fallback_timer = null;
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
                             const current_title = normalize_column_page_title(frame_window.document.title);
-                            if(current_title === return_title || current_title === "X" || current_title === "") return;
+                            if(current_title === return_title) return;
+                            if((current_title === "X" || current_title === "") && fallback_rechecks_left > 0){
+                                fallback_rechecks_left--;
+                                column_div.opd_subbar_fallback_timer = setTimeout(check_return_navigation, fallback_interval_ms);
+                                return;
+                            }
                             frame_window.location.replace(`https://x.com${return_path}`);
                         }catch(fallback_error){
                             //中身を読めなくなっていれば何もしない
                         }
-                    }, 1500);
+                    };
+                    column_div.opd_subbar_fallback_timer = setTimeout(check_return_navigation, fallback_interval_ms);
                 }catch(e){
                     //中身を操作できない (別オリジン等) ときは読み込み直しで戻す
                     reload_to_return_path();
