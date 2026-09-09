@@ -4794,10 +4794,10 @@ function match_post_page_path(path){
     if(post_match[1] === undefined) return "";
     return is_valid_screen_name(post_match[1]) ? post_match[1] : null;
 }
-//X のページタイトルから、先頭の未読数 "(3) " と末尾の " / X" を落として、カラム見出しに出す形にする
+//X のページタイトルから、先頭の未読数 ("(3) " と上限付きの "(20+) ") と末尾の " / X" を落として、カラム見出しに出す形にする
 //未読数は文字列だけでは見分けられないため、"(1) " のような括弧付き数字で始まるページ名もその部分が落ちる
 function normalize_column_page_title(document_title){
-    const page_title = (document_title ?? "").replace(/^\(\d+\)\s*/, "");
+    const page_title = (document_title ?? "").replace(/^\(\d+\+?\)\s*/, "");
     const x_title_suffix = " / X";
     return page_title.endsWith(x_title_suffix) ? page_title.slice(0, -x_title_suffix.length) : page_title;
 }
