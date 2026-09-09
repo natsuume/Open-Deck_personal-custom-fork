@@ -1944,7 +1944,7 @@ function run(settings){
         }
         const label_element = subbar.querySelector(".opd_column_subbar_label");
         const name_element = subbar.querySelector(".opd_column_subbar_name");
-        if(label_element !== null) label_element.textContent = `@${post_screen_name}`;
+        if(label_element !== null) label_element.textContent = post_screen_name === "" ? "" : `@${post_screen_name}`;
         if(name_element !== null) name_element.textContent = i18n_message("ui_column_post_title");
         subbar.hidden = false;
         column_div.setAttribute("opd_column_detail", "post");
@@ -3588,6 +3588,15 @@ function run(settings){
                     const frame_window = column_frame.contentWindow;
                     frame_window.history.pushState({}, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate"));
+                    //X が popstate に応じなかった場合の保険。ポスト詳細の本文 (article[tabindex="-1"]) が残っていれば読み込み直して戻す
+                    setTimeout(function(){
+                        try{
+                            if(frame_window.document.querySelector('article[tabindex="-1"]') === null) return;
+                            frame_window.location.replace(`https://x.com${return_path}`);
+                        }catch(fallback_error){
+                            //中身を読めなくなっていれば何もしない
+                        }
+                    }, 1500);
                 }catch(e){
                     //中身を操作できない (別オリジン等) ときは読み込み直しで戻す
                     try{
@@ -4720,14 +4729,17 @@ function escape_html_text(value){
 function is_list_page_path(path){
     return /^\/(?:i\/lists|[^\/?#]+\/lists)(?:[\/?#]|$)/.test(path ?? "");
 }
-//パスがポスト単体のページ (/<screen_name>/status/<id> 配下) を指すか。指すなら投稿者の screen_name を、それ以外は null を返す
+//パスがポスト単体のページ (/<screen_name>/status/<id> 配下、または投稿者を含まない /i/web/status/<id> 配下) を指すか
+//指すなら投稿者の screen_name (無い形式では空文字) を、それ以外は null を返す。予約名 i は screen_name として扱わない
 function match_post_page_path(path){
-    const post_match = (path ?? "").match(/^\/([A-Za-z0-9_]{1,15})\/status\/\d+/);
-    return post_match === null ? null : post_match[1];
+    const post_match = (path ?? "").match(/^\/(?:i\/web|([A-Za-z0-9_]{1,15}))\/status\/\d+/);
+    if(post_match === null) return null;
+    if(post_match[1] === undefined) return "";
+    return is_valid_screen_name(post_match[1]) ? post_match[1] : null;
 }
-//X のページタイトルから末尾の " / X" を落として、カラム見出しに出す形にする
+//X のページタイトルから、先頭の未読数 "(3) " と末尾の " / X" を落として、カラム見出しに出す形にする
 function normalize_column_page_title(document_title){
-    const page_title = document_title ?? "";
+    const page_title = (document_title ?? "").replace(/^\(\d+\)\s*/, "");
     const x_title_suffix = " / X";
     return page_title.endsWith(x_title_suffix) ? page_title.slice(0, -x_title_suffix.length) : page_title;
 }
