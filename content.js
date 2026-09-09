@@ -5131,11 +5131,16 @@ function read_column_setting(column_div, key){
 function effective_column_setting(column_div, key, global_settings){
     return read_column_setting(column_div, key) ?? global_settings[key];
 }
-//モーダルダイアログ共通処理 (リスト選択ダイアログと全体設定ダイアログで共有する)
-//ダイアログ内でフォーカスを受け取れる要素 (非表示・disabled のものを除く) を文書順で返す
+//モーダルダイアログ共通処理 (カラム管理ダイアログ・全体設定ダイアログ・確認 / 入力ダイアログで共有する)
+//ダイアログ内で Tab が止まる要素 (非表示・disabled のもの、および選択中のラジオがあるグループの未選択ラジオを除く) を文書順で返す
 function get_dialog_focusable_elements(dialog_element){
     const focus_candidates = dialog_element.querySelectorAll('input, select, textarea, button, iframe, [tabindex]:not([tabindex="-1"])');
-    return Array.from(focus_candidates).filter((element) => !element.disabled && element.offsetParent !== null);
+    const candidates = Array.from(focus_candidates).filter((element) => !element.disabled && element.offsetParent !== null);
+    //同じ name のラジオグループに選択中のものがあれば、Tab はそれにしか止まらない (未選択のラジオは飛ばされる) ため、循環の境界も同じ要素で数える
+    return candidates.filter((element) => {
+        if(element.type !== "radio" || element.checked || element.name === "") return true;
+        return !candidates.some((other) => other !== element && other.type === "radio" && other.name === element.name && other.checked);
+    });
 }
 //Esc で close_dialog を呼び、Tab をダイアログ内で循環させる keydown ハンドラを返す (document に登録し、閉じるときに外す)
 function create_dialog_keydown_handler(dialog_element, close_dialog){
