@@ -4723,6 +4723,39 @@ function main_dsp(react_root){
 //  イベントを登録する対象を両ラック直下のカラム (#first_rack_element > .dsp_column, #side_rack_element > .dsp_column) に限り、メインバーの section を drop 先にしない。
 //  dragover の挿入位置表示は outline (負の outline-offset で枠内に描く) で描き、border は使わない。border はカラムの幅を変えるため、サイドラックでは ResizeObserver がその増分を拾ってメインラックの幅が揺れる。outline は子要素より後に描かれるため、不透明な iframe に隠れない。
 
+//===== 自動更新 (auto reload) =====
+//home / explore カラムの iframe が表示しているタイムライン (/home・/search・/i/lists 配下) を、実効 auto_reload_time ごとに X の更新関数 (onRefresh) で更新する。
+//更新関数の探索と呼び出し、更新後の先頭保持は iframe の page world で動く extensions/auto_reload_helper.js が担い、
+//content script 側 (extensions/auto_reload.js の OpdExtAutoReload) は iframe の load ごとにヘルパーを注入し、CustomEvent でヘルパーへ指示を送る。
+//
+//run() スコープの関数:
+//  apply_column_auto_reload(column_div)   iframe ごとの setInterval を冪等に張る (実効 auto_reload と実効 auto_reload_time が動作中の interval と同じなら作り直さない)。
+//                                          interval は発火のたびに次を確かめ、1 つでも満たさなければその回は何もしない:
+//                                            表示中のパスが is_column_reload_path / iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
+//                                          更新は reload_column(column_frame, keep_top) で行い、keep_top には発火時点の global_settings.auto_reload_keep_top を渡す
+//                                          (interval は間隔が変わらない限り作り直さないため、設定値は interval 作成時に固定せず発火のたびに読む)
+//  reload_column(column_frame, keep_top)  OpdExtAutoReload.Reload で iframe のヘルパーへ 'opd_column_reload' ({token, keep_top}) を送る。content script 側からは更新後にスクロールしない
+//                                          (更新後のスクロール位置に手を入れるのはヘルパーの先頭保持だけ。auto_reload_keep_top が false なら更新後の位置は X の挙動のまま)
+//  stop_column_auto_reload(column_div)    interval を止める。カラムを閉じる・プロファイルを切り替える前に対象カラム全部へ呼ぶ
+//  is_auto_update()                       停止条件のいずれかに当たれば false
+//  カラムバーの更新ボタン                  home カラムで実効 auto_reload が false のときだけ表示する。設定に依らず「更新して先頭へ」: 先に iframe を scrollTo({top:0, behavior:"instant"}) で先頭へ戻してから reload_column(column_frame, true) を呼ぶ
+//
+//停止条件 (is_auto_update。全カラム共通):
+//  テキスト入力中          イベントで追わず、判定のたびに document.activeElement からフォーカスの連鎖 (iframe なら contentDocument.activeElement、shadow host なら shadowRoot.activeElement) を末端まで辿り、
+//                          末端が編集できるテキスト欄 (isContentEditable、TEXTAREA、テキスト系 INPUT。readOnly / disabled の欄と button・checkbox 等の非テキスト型は除く) なら停止する (is_text_input_focused)。
+//                          別オリジンなどで中身を読めない iframe は入力中と見なさない。ウィンドウが非フォーカスでも activeElement は残るため、入力欄にカーソルを置いたままなら停止し続ける
+//  メディアビューア表示中  column_auto_update_state.media_viewer.active
+//  メッセージダイアログ中  column_auto_update_state.message_dialog.open_count > 0
+//
+//ホバー判定 (iframe 要素の属性 auto_reload_mouse_hover、"true" のあいだはそのカラムを更新しない):
+//  iframe 自身の mouseover で "true"、mouseleave で "false" にする (bind_column_events)。
+//  加えて親 document の capture の mouseover (content script の最上位で 1 回だけ登録する。run() はプロファイル切替で同じ document 上を再実行するため run() 内では登録しない) で、
+//  ポインタが乗った要素がカラム iframe ならその iframe だけ "true"、それ以外の要素なら全カラム iframe を "false" にする (mouseleave が届かないまま残った "true" を、親でポインタが動いた時点で消す)
+//
+//先頭保持 (auto_reload_keep_top。ヘルパー側の契約は extensions/auto_reload_helper.js の先頭コメント):
+//  更新前に先頭 (scrollY が 1 以下) だったカラムは、X が新着を先頭に挿入するときに表示位置を旧先頭ポストに合わせ直す (見かけ上スクロールが下がる) のを打ち消して、更新後も先頭に保ち新着を見せる。
+//  更新前に先頭でなかったカラムには何もしない。
+//
 //===== 全体設定 (global settings) =====
 //全体設定はプロファイルごと (opd_profile_store[n].global_settings) に持つ既定設定で、
 //各カラムの設定値が null (= 全体設定に従う) になっている項目に適用される。
@@ -4731,8 +4764,10 @@ function main_dsp(react_root){
 //  opd_profile_store[n] = {
 //    name, profile: [column...],
 //    settings_schema_version: SETTINGS_SCHEMA_VERSION,
-//    global_settings: {banner, top_visible, tw_view_mode, column_width, auto_reload, auto_reload_time, pinned, side_rack_position}
+//    global_settings: {banner, top_visible, tw_view_mode, column_width, auto_reload, auto_reload_time, auto_reload_keep_top, pinned, side_rack_position}
 //  }
+//  auto_reload_keep_top (boolean、既定 true) は自動更新後の先頭保持 (「自動更新」節) の有効 / 無効。全体でひとつの値で、カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない。
+//  保存値に無いキーは normalize_global_settings が既定値で埋めるため、キーの追加に SETTINGS_SCHEMA_VERSION の更新は要らない
 //  profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック。side_empty_column 型のカラムは保存しない
 //  column = {
 //    type, column_save_path, column_save_title,

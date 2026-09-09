@@ -1,4 +1,20 @@
-//自動更新機能用
+//自動更新のヘルパー。カラム iframe の page world で動き、content script (extensions/auto_reload.js) からの CustomEvent で指示を受ける
+//
+//受け取るイベント (detail は JSON 文字列):
+//  'opd_column_reload_init'  {token}            照合用トークンを受け取る。以後の 'opd_column_reload' はトークンが一致するものだけ処理する
+//  'opd_column_reload'       {token, keep_top}  タイムラインを更新する。keep_top が true なら更新直後に先頭保持を始める (下記)
+//
+//更新関数の探索 (reload_func):
+//  div[data-testid="primaryColumn"] 内の section[role="region"] を先に、無ければ document 内の section[role="region"] を文書順に候補にし、
+//  候補の Fiber から親方向へ辿って onRefresh を持つ props が最初に取れた候補を使う (候補の要素があっても onRefresh が取れなければ次の候補へ進む)。
+//  どの候補からも取れなければ更新せず console.warn を 1 回出す (次に取れるまで繰り返さない)。
+//
+//先頭保持 (keep_top):
+//  開始条件: keep_top が true で、更新関数を取得して呼べた直後の window.scrollY が 1 以下 (更新関数が無い・呼び出しが例外のときは始めない)
+//  保持中: window の scroll で scrollY が 0 より大きくなったら scrollTo({top:0, behavior:"instant"}) で先頭へ戻す
+//  終了条件: 開始から KEEP_TOP_WATCH_MS 経過 / 戻した回数が KEEP_TOP_MAX_CORRECTIONS に達した / ユーザ操作 (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知) があった
+//  世代管理: 開始のたびに世代番号を進め、古い世代のタイマーと scroll 処理は何もしない (新しい更新が始まったら前の保持は無効になる)
+//  isFocusDisabled (更新直後の focus / scrollIntoView の抑制) とは別の状態として持つ
 (() => {
     let opd_reload_token = null;
     let reload_func = ()=>{};
