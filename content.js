@@ -1662,9 +1662,8 @@ function run(settings){
                 const effective_pinned = saved_pinned ?? global_settings.pinned;
                 let init_pinned_path = "";
                 let init_column_save_path = column_setting.column_save_path;
-                //保存したタイトルが無いプロファイルでは空文字にし、テンプレートへ "undefined" を埋めない
-                //保存したタイトルにも読み取り時と同じ整え方を適用する (リスト系ページなら所有者 "@screen_name/" を落としてリスト名だけにする)
-                let init_column_save_title = normalize_column_page_title(column_setting.column_save_title ?? "", column_setting.column_save_path);
+                //保存したタイトルが無いプロファイルでは空文字にし、テンプレートへ "undefined" を埋めない (保存したタイトルは読み取り時に整えた形なのでそのまま使う)
+                let init_column_save_title = column_setting.column_save_title ?? "";
                 //Exproleピン止め。実効ピン止め中はピン止めしたパスを開き直す (記録が無い場合は reconcile_column_pinned が現在のパスで補う)
                 //保存したパスと違うページを開くときは保存したタイトルを使わず、読み込み後に取り込むまで見出しには種別の名称を出す
                 if(column_setting.type == "explore" && effective_pinned && (column_setting.column_pinned_path ?? "") != ""){
