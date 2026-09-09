@@ -1911,13 +1911,15 @@ function run(settings){
     }
     //カラム見出しの文脈ラベルとタイトルを、カラム種別・表示中のパス (opd_explore_path)・ページタイトル (opd_explore_title)・ログイン中の screen_name から決めて書き換える
     //explore カラムには表示中のページ種別を opd_column_kind ("list" | "explore") として持たせ、見出しの丸アイコンの絵柄に使う
+    //ポスト単体を表示中は見出しをそのまま残すため、種別は戻り先のページ (opd_column_return_path) で決める (ポストのパスからは種別が分からない)
     function update_column_heading(column_div){
         if(column_div == null) return;
         const column_type = column_div.getAttribute("opd_column_type");
         const explore_path = column_div.getAttribute("opd_explore_path");
-        const heading = build_column_heading(column_type, explore_path, column_div.getAttribute("opd_explore_title"), get_login_screen_name());
+        const heading_path = match_post_page_path(explore_path) !== null ? (column_div.getAttribute("opd_column_return_path") || explore_path) : explore_path;
+        const heading = build_column_heading(column_type, heading_path, column_div.getAttribute("opd_explore_title"), get_login_screen_name());
         if(heading === null) return;
-        if(column_type === "explore") column_div.setAttribute("opd_column_kind", is_list_page_path(explore_path) ? "list" : "explore");
+        if(column_type === "explore") column_div.setAttribute("opd_column_kind", is_list_page_path(heading_path) ? "list" : "explore");
         const label_element = column_div.querySelector(".column_bar .opd_column_label");
         const name_element = column_div.querySelector(".column_bar .opd_column_name");
         if(label_element !== null) label_element.textContent = heading.label;
@@ -1978,7 +1980,7 @@ function run(settings){
     }
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
     //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)
-    //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル
+    //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル。ポスト単体のページではパスだけ更新し、タイトルは残す (見出しは元のページのまま薄く表示するため)
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page){
         if(column_div == null || frame_page == null) return;
@@ -1992,7 +1994,7 @@ function run(settings){
         }
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
         column_div.setAttribute("opd_explore_path", frame_path);
-        column_div.setAttribute("opd_explore_title", frame_page.page_title);
+        if(match_post_page_path(frame_url.pathname) === null) column_div.setAttribute("opd_explore_title", frame_page.page_title);
     }
     //ログイン中の screen_name を最後に取りに行った時刻 (全カラム共有)
     let last_login_screen_name_retry_time = 0;
