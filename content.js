@@ -3786,9 +3786,16 @@ function run(settings){
                 break;
         }
     }
+    //explore カラムの保存やピン止めに使う「カラムを識別するパス」を返す
+    //表示中のページがポスト単体なら、表示中のポストではなく戻り先 (ポスト以外で最後に表示したページ) を使い、リスト / 検索としての識別を保つ
+    function explore_column_persist_path(column_div){
+        const explore_path = column_div.getAttribute("opd_explore_path") ?? "";
+        if(match_post_page_path(explore_path) === null) return explore_path;
+        return column_div.getAttribute("opd_column_return_path") || initial_column_return_path("explore", explore_path);
+    }
     //ピン止めの不変条件「opd_pinned_path が非空 ⇔ 実効ピン止め」を保つ
     //  実効値 = opd_setting_pinned ("inherit" なら global_settings.pinned)
-    //  実効 true かつ opd_pinned_path が空: opd_explore_path を opd_pinned_path に記録する
+    //  実効 true かつ opd_pinned_path が空: カラムを識別するパス (explore_column_persist_path) を opd_pinned_path に記録する
     //  実効 false: opd_pinned_path を "" にする
     //explore 以外のカラムでは何もしない。起動・追加・個別変更・全体変更のすべての経路から呼ぶ
     function reconcile_column_pinned(column_div){
@@ -3798,7 +3805,7 @@ function run(settings){
         if(is_pinned){
             //実効ピン止めになった時点のパスを記録する
             if((column_div.getAttribute("opd_pinned_path") ?? "") === ""){
-                column_div.setAttribute("opd_pinned_path", column_div.getAttribute("opd_explore_path") ?? "");
+                column_div.setAttribute("opd_pinned_path", explore_column_persist_path(column_div));
             }
         }else{
             column_div.setAttribute("opd_pinned_path", "");
@@ -4143,9 +4150,8 @@ function run(settings){
             let column_page_title = null;
             //exploreの処理
             if(column_type == 'explore'){
-                //ポスト単体を表示中は、カラムの識別 (リスト / 検索) を保つため、表示中のポストではなく戻り先 (ポスト以外で最後に表示したページ) を保存する
-                const explore_path = column_div.getAttribute("opd_explore_path");
-                column_open_path = match_post_page_path(explore_path) !== null ? (column_div.getAttribute("opd_column_return_path") || initial_column_return_path("explore", explore_path)) : explore_path;
+                //ポスト単体を表示中は、表示中のポストではなく戻り先を保存してリスト / 検索としての識別を保つ (explore_column_persist_path)
+                column_open_path = explore_column_persist_path(column_div);
                 //ピン止め
                 column_pinned_save_path = column_div.getAttribute("opd_pinned_path");
                 //タイトル
