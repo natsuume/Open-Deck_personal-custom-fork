@@ -1894,7 +1894,7 @@ function run(settings){
                 column_object[index].addEventListener("load", function(){
                     apply_column_iframe_styles(opd_column_div);
                     //表示中のページをカラムの属性へ取り込んでから見出しを組み立て直す (読み込み時は保存しない)
-                    apply_column_frame_page(opd_column_div, read_column_frame_page(column_object[index]));
+                    apply_column_frame_page(opd_column_div, read_column_frame_page(this));
                     update_column_heading(opd_column_div);
                     update_column_subbar(opd_column_div);
                     //ログイン中の screen_name は X のナビゲーションが読み込まれるまで取れないため、読み込みのたびに取り直して全 home / notification カラムのラベルへ反映する
