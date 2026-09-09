@@ -2626,12 +2626,16 @@ function run(settings){
             return !(to_rack_id === located.rack_id && clamped_to === located.index);
         }
         //追加ボタンは入力欄に残った文字列も追加するため、追加する件数には解釈できる未追加の行も含める
+        //入力欄の行の扱いは add_entry_if_absent と同じ規則で数える: 一覧にあるパスは数えず、閉じる印の付いた行と同じパスは追加ではなく残すに戻す (閉じる件数から引く)
         function update_count(){
             const entries = all_entries();
-            const new_count = entries.filter((entry) => entry.section === null).length;
-            const pending_paths = parse_manual_list_entries(manual_textarea.value).paths.filter((list_path) => !entries.some((entry) => !entry.pending_close && entry.type === "explore" && entry.path === list_path));
-            const close_count = entries.filter((entry) => entry.pending_close).length;
-            count_area.textContent = i18n_message("ui_column_manager_count", [String(new_count + pending_paths.length), String(close_count)]);
+            const has_active_path = (list_path) => entries.some((entry) => !entry.pending_close && entry.type === "explore" && entry.path === list_path);
+            const pending_close_paths = new Set(entries.filter((entry) => entry.pending_close && entry.type === "explore").map((entry) => entry.path));
+            const manual_paths = parse_manual_list_entries(manual_textarea.value).paths.filter((list_path) => !has_active_path(list_path));
+            const restore_count = manual_paths.filter((list_path) => pending_close_paths.has(list_path)).length;
+            const new_count = entries.filter((entry) => entry.section === null).length + manual_paths.length - restore_count;
+            const close_count = entries.filter((entry) => entry.pending_close).length - restore_count;
+            count_area.textContent = i18n_message("ui_column_manager_count", [String(new_count), String(close_count)]);
         }
         //行の要素を組み立てる
         function build_item(entry){
@@ -2690,20 +2694,21 @@ function run(settings){
             const active_item = (active_element !== null && racks_wrap.contains(active_element)) ? active_element.closest(item_selector) : null;
             const active_key = active_item === null ? null : active_item.getAttribute("data-key");
             const is_active_action_btn = active_element !== null && active_element.classList.contains("opd_column_manager_action_btn");
-            const saved_scroll_tops = rack_ids.map((rack_id) => rack_wraps[rack_id].scrollTop);
+            //スクロールするのは両ラックを包む要素 (.opd_column_manager_racks) なので、その位置を保って描き直す
+            const saved_scroll_top = racks_wrap.scrollTop;
             is_render_pending = false;
             //行を作り直すとドラッグ中の行が外れて dragend が届かないため、先にドラッグ状態を戻す
             end_drag();
             let order = 0;
-            rack_ids.forEach((rack_id, rack_index) => {
+            rack_ids.forEach((rack_id) => {
                 rack_lists[rack_id].textContent = "";
                 rack_entries[rack_id].forEach((entry) => {
                     entry.order = entry.pending_close ? null : ++order;
                     rack_lists[rack_id].appendChild(build_item(entry));
                 });
                 rack_empty_messages[rack_id].hidden = rack_entries[rack_id].length !== 0;
-                rack_wraps[rack_id].scrollTop = saved_scroll_tops[rack_index];
             });
+            racks_wrap.scrollTop = saved_scroll_top;
             update_count();
             if(active_key === null) return;
             //外すなどで行が無くなった場合のフォーカス先は呼び出し側で決める
