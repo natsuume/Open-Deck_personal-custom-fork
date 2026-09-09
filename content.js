@@ -34,6 +34,7 @@ const ui_icon_define = {
     column_move:"icon/column_move.svg",
     column_close:"icon/column_close.svg",
     column_settings: "icon/settings.svg",
+    column_reload:"icon/reload.svg",
     column_pin:"icon/pin.svg",
     column_pinned:"icon/pinned.svg",
     column_widesize:"icon/column_w_size.svg",
@@ -362,6 +363,7 @@ function run(settings){
     .dsp_btn_parent > div:not(.dsp_btn_change_profile_btn),
     .dsp_column_move_icon,
     .dsp_column_settings_btn,
+    .dsp_column_reload_btn,
     .dsp_column_close_btn,
     .media_viewer_icon_close,
     .media_viewer_icon_forward,
@@ -387,6 +389,7 @@ function run(settings){
     .dsp_btn_profile_delete_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_delete)}); }
     .dsp_column_move_icon{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_move)}); }
     .dsp_column_settings_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_settings)}); }
+    .dsp_column_reload_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_reload)}); }
     .dsp_column_close_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_close)}); }
     .opd_icon_column_add_1{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_1)}); }
     .opd_icon_column_add_2{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_2)}); }
@@ -894,6 +897,10 @@ function run(settings){
     .dsp_column_btn:hover{
         background: var(--opd-surface-hover);
         color: var(--opd-text);
+    }
+    /*設定で出し分けるボタン (更新ボタン) は hidden 属性で隠す。display: flex のクラス指定が UA の [hidden] より優先されるため明示する*/
+    .dsp_column_btn[hidden]{
+        display: none;
     }
     /*ボタン枠の中の input (透明で全面に重ねる) がキーボード操作でフォーカスされたときだけ枠にリングを出す*/
     .dsp_column_btn:has(input:focus-visible){
@@ -1609,9 +1616,9 @@ function run(settings){
     }
     </style>`);
     //カラム要素作成-挿入
-    //カラムバー (home / notification / explore で共通)。見出しはドラッグ用グリップ・カラム種別の丸アイコン・2 段組のテキスト (上段: 文脈ラベル、下段: タイトル) で、右端に空白領域 (クリックでカラム先頭へスクロール) と設定・閉じるボタンを置く
+    //カラムバー (home / notification / explore で共通)。見出しはドラッグ用グリップ・カラム種別の丸アイコン・2 段組のテキスト (上段: 文脈ラベル、下段: タイトル) で、右端に空白領域 (クリックでカラム先頭へスクロール) と更新 (home カラムで自動更新オフのときだけ表示)・設定・閉じるボタンを置く
     //副見出しはポスト単体を表示しているあいだだけ出す (update_column_subbar が hidden を切り替える)。戻るボタンで元の一覧へ戻す
-    let default_element_bar = `<div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><span class="dsp_column_move_icon" aria-hidden="true"></span><span class="opd_column_kind_icon" aria-hidden="true"></span><span class="opd_column_heading"><span class="opd_column_label">%column_label%</span><span class="opd_column_name">%column_title%</span></span></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div><span class="dsp_column_btn"><label class="dsp_column_settings_btn"><input class="opd_settings_btn" type="button" value="S" title="${i18n_message("ui_column_settings_title")}" aria-label="${i18n_message("ui_column_settings_title")}"></label></span><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn"><input type="button" class="column_close_btn" value="X" title="${i18n_message("ui_column_close_title")}" aria-label="${i18n_message("ui_column_close_title")}"/></label></span></div></div><div class="opd_column_subbar" hidden><button type="button" class="opd_column_subbar_back" title="${i18n_message("ui_column_back_button")}" aria-label="${i18n_message("ui_column_back_button")}"><span class="opd_icon opd_icon_close" aria-hidden="true"></span></button><span class="opd_column_heading"><span class="opd_column_label opd_column_subbar_label"></span><span class="opd_column_name opd_column_subbar_name"></span></span></div>`;
+    let default_element_bar = `<div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><span class="dsp_column_move_icon" aria-hidden="true"></span><span class="opd_column_kind_icon" aria-hidden="true"></span><span class="opd_column_heading"><span class="opd_column_label">%column_label%</span><span class="opd_column_name">%column_title%</span></span></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div><span class="dsp_column_btn dsp_column_reload_btn_wrap" hidden><label class="dsp_column_reload_btn"><input class="opd_column_reload_btn" type="button" value="R" title="${i18n_message("ui_column_reload_title")}" aria-label="${i18n_message("ui_column_reload_title")}"></label></span><span class="dsp_column_btn"><label class="dsp_column_settings_btn"><input class="opd_settings_btn" type="button" value="S" title="${i18n_message("ui_column_settings_title")}" aria-label="${i18n_message("ui_column_settings_title")}"></label></span><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn"><input type="button" class="column_close_btn" value="X" title="${i18n_message("ui_column_close_title")}" aria-label="${i18n_message("ui_column_close_title")}"/></label></span></div></div><div class="opd_column_subbar" hidden><button type="button" class="opd_column_subbar_back" title="${i18n_message("ui_column_back_button")}" aria-label="${i18n_message("ui_column_back_button")}"><span class="opd_icon opd_icon_close" aria-hidden="true"></span></button><span class="opd_column_heading"><span class="opd_column_label opd_column_subbar_label"></span><span class="opd_column_name opd_column_subbar_name"></span></span></div>`;
     //カラム設定パネルはカラム種別ごとに出す行が異なる (項目 × カラム種別の適用表に従う)
     let notification_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:false, pinned:false});
     let home_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:true, pinned:false});
@@ -3620,6 +3627,17 @@ function run(settings){
             column_div.querySelector(".opd_column_scroll_to_top")?.addEventListener("click", function(){
                 column_frame.contentWindow?.scrollTo({ top: 0, behavior: "auto" });
             });
+            //カラムバーの更新ボタン (表示の出し分けは apply_column_dom_state)。自動更新 1 回分と同じ処理 (タイムラインの更新 + 先頭へスクロール) をその場で行う
+            //iframe が更新対象のパス (is_column_reload_path) 以外 (ポスト単体など) を表示中は更新せず先頭へ戻すだけにする。別オリジンを表示していてパスを読めないときは何もしない
+            column_div.querySelector(".opd_column_reload_btn")?.addEventListener("click", function(){
+                const path_name = column_frame_path_name(column_frame);
+                if(path_name === null) return;
+                if(!is_column_reload_path(path_name)){
+                    column_frame.contentWindow?.scrollTo({ top: 0, behavior: "auto" });
+                    return;
+                }
+                reload_column_and_scroll_to_top(column_frame);
+            });
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
             //iframe の history はタブ全体で共有され、back() は他のカラムの遷移まで巻き戻し、pushState はブラウザの「戻る」の段数を増やすため、replaceState + popstate で X の画面遷移を起こす (X のルーターは popstate で location を読み直す)
             //副見出しの表示はここでは更新せず、X が画面を描き直したときは遷移監視に、読み込み直したときは load に任せる (表示中のページに合わせて決める)
@@ -3732,6 +3750,12 @@ function run(settings){
         }
         reconcile_column_pinned(column_div);
         apply_column_auto_reload(column_div);
+        //カラムバーの更新ボタンは home カラムで実効 auto_reload が false のときだけ出す (自動更新中は手動更新の出番が無いため隠す)
+        const reload_btn_wrap = column_div.querySelector(".dsp_column_reload_btn_wrap");
+        if(reload_btn_wrap !== null){
+            const is_manual_reload_target = column_div.getAttribute("opd_column_type") === "home" && effective_column_setting(column_div, "auto_reload", global_settings) !== true;
+            reload_btn_wrap.hidden = !is_manual_reload_target;
+        }
     }
     //iframe 内 head に style 要素 (style[opd_banner_css] / style[opd_top_visible_css] / style[opd_tw_view_mode_css]) を用意し、実効値に応じて COLUMN_IFRAME_CSS の文字列を設定する
     //iframe の contentWindow.document.head が読めない (未生成・クロスオリジン) 場合は何もしない (次回 load で再適用される)
@@ -3809,8 +3833,8 @@ function run(settings){
     }
     //自動更新 interval を冪等に再構成する: 実効 auto_reload と実効 auto_reload_time (ms) が動作中の interval (iframe 要素の opd_auto_reload_interval_id / opd_auto_reload_interval_ms) と同じなら何もせずカウントダウンを維持し、
     //異なるときだけ既存の interval を clear して作り直す (実効 auto_reload が false なら止めるだけ)
-    //interval は毎回、iframe が /home・/search・/i/lists 配下のいずれかを表示していることを確かめ、iframe にマウスが乗っている (auto_reload_mouse_hover が "false" 以外) あいだは何もしない。
-    //is_auto_update() がカラム全体の自動更新を許可していれば OpdExtAutoReload の Reload を呼び、その 100ms 後に iframe を先頭までスクロールする
+    //interval は毎回、iframe が更新対象のパス (is_column_reload_path) を表示していることを確かめ、iframe にマウスが乗っている (auto_reload_mouse_hover が "false" 以外) あいだは何もしない。
+    //is_auto_update() がカラム全体の自動更新を許可していれば reload_column_and_scroll_to_top で更新する
     function apply_column_auto_reload(column_div){
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
@@ -3823,24 +3847,37 @@ function run(settings){
         if(!is_enabled) return;
         column_frame.opd_auto_reload_interval_ms = auto_reload_time;
         column_frame.opd_auto_reload_interval_id = setInterval(function(){
-            const frame_window = column_frame.contentWindow;
-            if(frame_window == null) return;
-            let path_name = "";
-            try{
-                path_name = frame_window.location.pathname;
-            }catch(e){
-                //別オリジンを表示しているあいだは自動更新しない
-                return;
-            }
-            if(!['/home', '/search'].includes(path_name) && !path_name.startsWith('/i/lists')) return;
+            const path_name = column_frame_path_name(column_frame);
+            //別オリジンを表示しているあいだは自動更新しない
+            if(path_name === null) return;
+            if(!is_column_reload_path(path_name)) return;
             if(column_frame.getAttribute("auto_reload_mouse_hover") != "false") return;
             //カラムの自動更新が全体的に許可されていない場合は自動更新を無効化する
             if(!column_frame.opd_auto_reload || !is_auto_update()) return;
-            column_frame.opd_auto_reload.Reload(frame_window);
-            setTimeout(() => {
-                column_frame.contentWindow?.scrollTo({ top: 0, behavior: 'auto' });
-            }, 100);
+            reload_column_and_scroll_to_top(column_frame);
         }, auto_reload_time);
+    }
+    //iframe が表示中のパス (pathname) を返す。iframe が無い・別オリジンを表示していて読めないときは null
+    function column_frame_path_name(column_frame){
+        try{
+            return column_frame?.contentWindow?.location.pathname ?? null;
+        }catch(e){
+            return null;
+        }
+    }
+    //自動更新・手動更新の対象になるパスかどうか (/home・/search・/i/lists 配下)
+    function is_column_reload_path(path_name){
+        return ['/home', '/search'].includes(path_name) || path_name.startsWith('/i/lists');
+    }
+    //タイムラインを更新し、その 100ms 後に iframe を先頭までスクロールする (自動更新 1 回分の処理。カラムバーの更新ボタンからも呼ぶ)
+    //更新は OpdExtAutoReload の Reload (X の onRefresh を呼ぶ) で行う。iframe の load 前などで拡張がまだ無いときは更新せずスクロールだけ行う
+    function reload_column_and_scroll_to_top(column_frame){
+        const frame_window = column_frame?.contentWindow;
+        if(frame_window == null) return;
+        column_frame.opd_auto_reload?.Reload(frame_window);
+        setTimeout(() => {
+            column_frame.contentWindow?.scrollTo({ top: 0, behavior: 'auto' });
+        }, 100);
     }
     //自動更新 interval を止める。カラムを閉じる・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
     function stop_column_auto_reload(column_div){
@@ -4446,7 +4483,8 @@ function set_title_favicon(){
 //  opd_column_kind                 "list" | "explore" (explore カラムのみ。見出しの丸アイコンの絵柄を選ぶ)
 //  opd_column_detail               "post" (ポスト単体を表示中のあいだだけ付く。副見出しの表示と元の見出しの減衰に使う)
 //  opd_column_return_path          副見出しの ✕ で開き直すパス (ポスト以外で最後に表示したページ。初期値はカラム種別の基準パス)
-//カラムバーは見出し (カラム種別の丸アイコン・文脈ラベル・タイトル) と設定・閉じるボタンだけを持ち、個別値の変更はカラム設定パネルから行う。
+//カラムバーは見出し (カラム種別の丸アイコン・文脈ラベル・タイトル) と更新・設定・閉じるボタンを持ち、個別値の変更はカラム設定パネルから行う。
+//更新ボタン (.dsp_column_reload_btn_wrap) は home カラムで実効 auto_reload が false のときだけ表示し (hidden 属性で出し分ける)、タイムラインを更新して先頭へスクロールする。
 //カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
 //
 //項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / side_empty_column / dsp_column は対象外):
@@ -4460,7 +4498,7 @@ function set_title_favicon(){
 //
 //適用経路は 3 つに分ける:
 //  bind_column_events(column_div)        パネル・カラムバーのイベント登録 (data-opd_settings_initialized で二重登録を防ぐ)
-//  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・パネル表示・ピン止め reconcile・自動更新 interval)
+//  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・パネル表示・ピン止め reconcile・自動更新 interval・更新ボタンの表示)
 //  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード)。iframe の load ごとに実行し、head 未生成時は何もしない
 //起動時 (run() の初期化でプロファイルからカラムを組み立てたとき) とカラム追加時は、挿入直後に bind_column_events と apply_column_dom_state を同期で呼ぶ (追加時はその後 column_settings_save する)。
 //全体設定の変更時は、その項目が inherit の全カラムに対して apply_column_dom_state と apply_column_iframe_styles を呼び直す。
