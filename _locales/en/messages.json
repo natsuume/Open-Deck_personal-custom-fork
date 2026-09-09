@@ -20,6 +20,9 @@
   "ui_column_top_toggle_title": {
     "message": "Toggle top area visibility"
   },
+  "ui_column_reload_title": {
+    "message": "Refresh and scroll to top"
+  },
   "ui_column_close_title": {
     "message": "Close column"
   },

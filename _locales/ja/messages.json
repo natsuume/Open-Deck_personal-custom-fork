@@ -20,6 +20,9 @@
   "ui_column_top_toggle_title": {
     "message": "トップ表示切り替え"
   },
+  "ui_column_reload_title": {
+    "message": "更新して先頭へ"
+  },
   "ui_column_close_title": {
     "message": "カラムを閉じる"
   },
