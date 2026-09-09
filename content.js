@@ -1950,6 +1950,17 @@ function run(settings){
         subbar.hidden = false;
         column_div.setAttribute("opd_column_detail", "post");
     }
+    //カラムの iframe を reload_path へ読み込み直す前に、副見出しの状態を読み込み先に合わせて先に整える
+    //予約中の ✕ の読み込み直しの保険 (opd_subbar_fallback_timer) を取り消し、読み込み先がポスト以外なら副見出しを隠して opd_column_detail を外す (読み込み後は load が表示中のページから決め直す)
+    function reset_column_subbar_before_reload(column_div, reload_path){
+        if(column_div == null) return;
+        clearTimeout(column_div.opd_subbar_fallback_timer);
+        column_div.opd_subbar_fallback_timer = null;
+        if(match_post_page_path(reload_path) !== null) return;
+        const subbar = column_div.querySelector(".opd_column_subbar");
+        if(subbar !== null) subbar.hidden = true;
+        column_div.removeAttribute("opd_column_detail");
+    }
     //カラムの iframe が今表示しているページの href と、見出しに出す形に整えたページタイトルを読む
     //中身を読めない (別オリジン等) 場合は null を返す
     function read_column_frame_page(column_frame){
@@ -3051,6 +3062,9 @@ function run(settings){
                         dr_elem.querySelector("div").setAttribute("opd_explore_path", reload_path);
                         update_column_heading(dr_elem.querySelector("div"));
                     }
+                    //DOM 上の移動で iframe は src から読み込み直されるため、その読み込み先に合わせて副見出しを先に整える
+                    const dropped_frame = dr_elem.querySelector("div")?.querySelector("iframe");
+                    if(dropped_frame != null) reset_column_subbar_before_reload(dr_elem.querySelector("div"), new URL(dropped_frame.src).pathname);
                     this.parentNode.insertBefore(dr_elem, this);
                     this.style.outline = '';
                     this.style.outlineOffset = '';
@@ -3588,23 +3602,22 @@ function run(settings){
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
             //iframe の history はタブ全体で共有され back() は他のカラムの遷移まで巻き戻すため使わず、pushState + popstate で X の画面遷移を起こす
             //副見出しの表示はここでは更新せず、X が画面を描き直したときは遷移監視に、読み込み直したときは load に任せる (表示中のページに合わせて決める)
-            //読み込み直しの保険は 1 カラムにつき 1 つだけ予約し、再クリックで前の予約を取り消す
-            let subbar_fallback_timer = null;
+            //読み込み直しの保険は 1 カラムにつき 1 つだけ予約し (opd_subbar_fallback_timer)、再クリックと reset_column_subbar_before_reload で前の予約を取り消す
             column_div.querySelector(".opd_column_subbar_back")?.addEventListener("click", function(){
                 const return_path = column_div.getAttribute("opd_column_return_path") || initial_column_return_path(column_div.getAttribute("opd_column_type"), column_div.getAttribute("opd_explore_path"));
-                clearTimeout(subbar_fallback_timer);
+                clearTimeout(column_div.opd_subbar_fallback_timer);
+                column_div.opd_subbar_fallback_timer = null;
                 try{
                     const frame_window = column_frame.contentWindow;
                     const post_page_title = normalize_column_page_title(frame_window.document.title);
                     frame_window.history.pushState({}, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate"));
-                    //X が popstate に応じなかった場合の保険。戻り先のパスのまま、ページタイトルがポストのものから変わらず、ポスト詳細の本文 (article[tabindex="-1"]) も残っていれば読み込み直して戻す
+                    //X が popstate に応じなかった場合の保険。戻り先のパスのまま、ページタイトルがポストのものから変わっていなければ読み込み直して戻す
                     //X は画面を切り替えるとページタイトルを書き換えるため、タイトルが変わっていれば遷移できたとみなす (未読数の変化だけで変わったとみなさないよう正規化して比べる)。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
-                    subbar_fallback_timer = setTimeout(function(){
+                    column_div.opd_subbar_fallback_timer = setTimeout(function(){
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
                             if(normalize_column_page_title(frame_window.document.title) !== post_page_title) return;
-                            if(frame_window.document.querySelector('article[tabindex="-1"]') === null) return;
                             frame_window.location.replace(`https://x.com${return_path}`);
                         }catch(fallback_error){
                             //中身を読めなくなっていれば何もしない
