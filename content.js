@@ -1929,6 +1929,7 @@ function run(settings){
     //カラムの副見出しを表示中のページに合わせる
     //iframe が /<screen_name>/status/<id> を表示していればポスト単体の表示とみなし、「@投稿者 / ポスト」の副見出しを出して opd_column_detail="post" を付ける (この属性で元の見出しが薄くなる)
     //ポスト以外のページを表示しているあいだは副見出しを隠して属性を外す
+    //表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では、下にあるページの状態を保つため何も変えない
     function update_column_subbar(column_div){
         if(column_div == null) return;
         const subbar = column_div.querySelector(".opd_column_subbar");
@@ -1940,6 +1941,7 @@ function run(settings){
             //別オリジンなどでパスを読めない場合はポスト表示として扱わない
             frame_path = null;
         }
+        if(is_overlay_page_path(frame_path)) return;
         const post_screen_name = match_post_page_path(frame_path);
         if(post_screen_name === null){
             subbar.hidden = true;
