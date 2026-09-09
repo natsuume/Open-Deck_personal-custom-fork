@@ -3498,7 +3498,7 @@ function run(settings){
     //カラム設定パネルとカラムバーのイベントを登録する。登録済み (data-opd_settings_initialized="1") なら何もしない
     //  select / 入力の change: 対応する属性を更新 → apply_column_dom_state → (iframe 項目なら) apply_column_iframe_styles → column_settings_save
     //  ピン止めの select の change: opd_setting_pinned を更新 → reconcile_column_pinned → apply_column_dom_state → column_settings_save
-    //  副見出しの戻るボタン click: iframe の履歴を 1 つ戻る (履歴が無ければカラム種別の基準ページを開き直す)
+    //  副見出しの戻るボタン click: 記録した戻り先パス (opd_column_return_path) を replaceState + popstate で iframe 内に開き直す。戻り先のタイトルが未記録なら、または X が応じなければ読み込み直しで戻す
     //  カスタム幅ボタン: prompt で rem を受け取り、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM の範囲なら opd_column_width に明示値を設定
     function bind_column_events(column_div){
         if(column_div == null) return;
