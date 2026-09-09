@@ -12,7 +12,6 @@ const url_path = new URL(location.href);
 let is_added_system_color_mode = false;
 let apply_ui_color = null;
 const i18n_message = chrome.i18n.getMessage;
-let is_shift_pressed = false;
 let profile_store;
 let last_load_profile = 0;
 let is_removed_default_style = false;
@@ -45,7 +44,6 @@ const ui_icon_define = {
     add_notification_column:"icon/notice_column.svg",
     add_explore_column:"icon/exp_column.svg",
     add_list_column:"icon/list_column.svg",
-    add_list_multi_column:"icon/list_column_multi.svg",
     add_target_main:"icon/add_target_main.svg",
     add_target_side:"icon/add_target_side.svg",
     profile_save:"icon/profile_save.svg",
@@ -61,17 +59,6 @@ function unix_time_mmss(input){
     const date = new Date(input * 1000);
     return date.toLocaleTimeString();
 }
-//ショートカットキー用に shift キーが押されていることを検出
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'Shift') is_shift_pressed = true;
-});
-document.addEventListener('keyup', (event) => {
-    if (event.key === 'Shift') is_shift_pressed = false;
-});
-//ダイアログ表示などでフォーカスを失うと keyup を取りこぼすため、押下状態を解除する
-window.addEventListener('blur', () => {
-    is_shift_pressed = false;
-});
 //ストレージの書き込み監視(主にAPIリミット監視に使う)
 let api_limit_obj = null;
 //APIリミット表示のカテゴリ定義(表示順)
@@ -378,11 +365,7 @@ function run(settings){
         mask: var(--opd-icon) center / contain no-repeat;
     }
     .dsp_btn_post_form_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.post_form)}); }
-    .dsp_btn_add_tl_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_timeline_column)}); }
-    .dsp_btn_add_ntfc_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_notification_column)}); }
-    .dsp_btn_add_explr_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_explore_column)}); }
-    .dsp_btn_add_list_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_list_column)}); }
-    .dsp_btn_add_list_multi_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_list_multi_column)}); }
+    .dsp_btn_manage_columns_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_1)}); }
     .dsp_btn_global_settings_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_settings)}); }
     .dsp_btn_add_target_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_target_main)}); }
     .dsp_btn_profile_add_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_save)}); }
@@ -1049,7 +1032,7 @@ function run(settings){
         flex-direction: row;
         justify-content: flex-end;
     }
-    /*モーダルダイアログ共通 (リストカラム複数追加・全体設定・確認 / 入力ダイアログ)*/
+    /*モーダルダイアログ共通 (カラム管理・全体設定・確認 / 入力ダイアログ)*/
     .opd_dialog_overlay{
         position: fixed;
         inset: 0;
@@ -1164,8 +1147,8 @@ function run(settings){
         justify-content: flex-end;
         gap: 0.5rem;
     }
-    /*リストカラム複数追加ダイアログ*/
-    .opd_list_picker_overlay{
+    /*カラム管理ダイアログ*/
+    .opd_column_manager_overlay{
         /*iframe 内の選択表示へ JS が getComputedStyle で読み出して注入する色 (var() は計算値で解決される)*/
         --opd-list-picker-accent: var(--opd-accent);
         --opd-list-picker-accent-text: var(--opd-on-accent);
@@ -1173,29 +1156,76 @@ function run(settings){
         --opd-frame-surface: var(--opd-surface);
         --opd-frame-skeleton: var(--opd-skeleton);
     }
-    .opd_list_picker_dialog{
-        width: 72rem;
+    .opd_column_manager_dialog{
+        width: 76rem;
     }
-    .opd_list_picker_body{
+    .opd_column_manager_body{
         display: flex;
         flex-direction: row;
         gap: 1.25rem;
         min-height: 0;
     }
-    .opd_list_picker_browse{
+    .opd_column_manager_add{
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
         flex: 3 1 0;
         min-width: 0;
     }
-    .opd_list_picker_selection{
+    .opd_column_manager_lists{
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
         flex: 2 1 0;
         min-width: 0;
     }
+    .opd_column_manager_target_row{
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        font-size: 0.8125rem;
+    }
+    .opd_column_manager_target_row label{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        cursor: pointer;
+    }
+    .opd_radio{
+        width: 1rem;
+        height: 1rem;
+        margin: 0;
+        accent-color: var(--opd-accent);
+        cursor: pointer;
+    }
+    .opd_column_manager_type_buttons{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    /*行と種別ボタンのカラム種別アイコン (カラム見出しの丸アイコンと同じ絵柄を小さく描く)*/
+    .opd_column_manager_type_icon{
+        width: 1.5rem;
+        height: 1.5rem;
+        flex: none;
+        border-radius: 50%;
+        background-color: var(--opd-surface-2);
+    }
+    .opd_column_manager_type_icon::after{
+        content: "";
+        display: block;
+        width: 0.875rem;
+        height: 0.875rem;
+        margin: 0.3125rem;
+        background-color: var(--opd-text-muted);
+        -webkit-mask: var(--opd-icon) center / contain no-repeat;
+        mask: var(--opd-icon) center / contain no-repeat;
+    }
+    .opd_column_manager_type_icon[data-column-type="home"]{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_timeline_column)}); }
+    .opd_column_manager_type_icon[data-column-type="notification"]{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_notification_column)}); }
+    .opd_column_manager_type_icon[data-column-type="explore"]{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_explore_column)}); }
+    .opd_column_manager_type_icon[data-column-type="explore"][data-column-kind="list"]{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_list_column)}); }
     .opd_list_picker_user_row{
         display: flex;
         align-items: center;
@@ -1209,14 +1239,14 @@ function run(settings){
         min-width: 0;
     }
     .opd_list_picker_status,
-    .opd_list_picker_selection_status{
+    .opd_column_manager_selection_status{
         min-height: 1.5rem;
         font-size: 0.8125rem;
         color: var(--opd-text-muted);
     }
     .opd_list_picker_frame_wrap{
         position: relative;
-        height: clamp(12rem, 55vh, 34rem);
+        height: clamp(12rem, 45vh, 30rem);
         background: var(--opd-frame-surface);
         border: 1px solid var(--opd-border-soft);
         border-radius: var(--opd-radius-md);
@@ -1227,97 +1257,6 @@ function run(settings){
         width: 100%;
         height: 100%;
         border: 0;
-    }
-    .opd_list_picker_selection_hint{
-        margin: 0;
-        font-size: 0.8125rem;
-        color: var(--opd-text-muted);
-    }
-    .opd_list_picker_selected_wrap{
-        position: relative;
-        flex: 1 1 auto;
-        min-height: 10rem;
-        overflow-y: auto;
-        scrollbar-width: thin;
-        background: var(--opd-surface-2);
-        border: 1px solid var(--opd-border-soft);
-        border-radius: var(--opd-radius-md);
-    }
-    .opd_list_picker_selected{
-        list-style: none;
-        margin: 0;
-        padding: 0.375rem;
-    }
-    .opd_list_picker_selected_item{
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.375rem 0.5rem;
-        border-top: 2px solid transparent;
-        border-bottom: 2px solid transparent;
-        border-radius: var(--opd-radius-sm);
-        font-size: 0.8125rem;
-        cursor: grab;
-        transition: background-color 0.15s;
-    }
-    .opd_list_picker_selected_item:hover{
-        background: var(--opd-surface-hover);
-    }
-    .opd_list_picker_selected_item:focus-visible{
-        outline: 2px solid var(--opd-accent);
-        outline-offset: -2px;
-    }
-    .opd_list_picker_selected_item.opd_list_picker_dragging{
-        opacity: 0.5;
-    }
-    .opd_list_picker_selected_item.opd_list_picker_drop_before{
-        border-top-color: var(--opd-accent);
-    }
-    .opd_list_picker_selected_item.opd_list_picker_drop_after{
-        border-bottom-color: var(--opd-accent);
-    }
-    .opd_list_picker_drag_handle{
-        color: var(--opd-text-muted);
-        user-select: none;
-    }
-    .opd_list_picker_order{
-        min-width: 1.8rem;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-        color: var(--opd-text-muted);
-    }
-    .opd_list_picker_selected_name{
-        flex: 1 1 auto;
-        min-width: 0;
-        overflow-wrap: anywhere;
-    }
-    .opd_list_picker_remove_btn{
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        flex: none;
-        width: 1.5rem;
-        height: 1.5rem;
-        padding: 0;
-        border: 0;
-        border-radius: 50%;
-        background: transparent;
-        color: var(--opd-text-muted);
-        font: inherit;
-        font-size: 1rem;
-        line-height: 1;
-        cursor: pointer;
-    }
-    .opd_list_picker_remove_btn:hover{
-        background: var(--opd-danger-soft);
-        color: var(--opd-danger);
-    }
-    .opd_list_picker_empty{
-        margin: 0;
-        padding: 1rem;
-        text-align: center;
-        font-size: 0.8125rem;
-        color: var(--opd-text-muted);
     }
     .opd_list_picker_manual_row{
         display: flex;
@@ -1330,29 +1269,179 @@ function run(settings){
         min-width: 0;
         min-height: 3rem;
     }
-    .opd_list_picker_count{
+    .opd_column_manager_hint{
+        margin: 0;
+        font-size: 0.8125rem;
+        color: var(--opd-text-muted);
+    }
+    .opd_column_manager_racks{
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        flex: 1 1 auto;
+        min-height: 10rem;
+        overflow-y: auto;
+        scrollbar-width: thin;
+    }
+    .opd_column_manager_rack{
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .opd_column_manager_rack_title{
+        margin: 0;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--opd-text-muted);
+    }
+    .opd_column_manager_rack_wrap{
+        position: relative;
+        min-height: 3.5rem;
+        background: var(--opd-surface-2);
+        border: 1px solid var(--opd-border-soft);
+        border-radius: var(--opd-radius-md);
+    }
+    .opd_column_manager_rack_wrap.opd_column_manager_drop_end{
+        box-shadow: inset 0 -3px 0 var(--opd-accent);
+    }
+    .opd_column_manager_rack_list{
+        list-style: none;
+        margin: 0;
+        padding: 0.375rem;
+    }
+    .opd_column_manager_item{
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.375rem 0.5rem;
+        border-top: 2px solid transparent;
+        border-bottom: 2px solid transparent;
+        border-radius: var(--opd-radius-sm);
+        font-size: 0.8125rem;
+        cursor: grab;
+        transition: background-color 0.15s;
+    }
+    /*閉じる印の付いた既存カラムの行はドラッグできず、薄くして名前に取り消し線を引く*/
+    .opd_column_manager_item[data-pending-close="true"]{
+        cursor: default;
+        opacity: 0.6;
+    }
+    .opd_column_manager_item[data-pending-close="true"] .opd_column_manager_item_name{
+        text-decoration: line-through;
+    }
+    .opd_column_manager_item:hover{
+        background: var(--opd-surface-hover);
+    }
+    .opd_column_manager_item:focus-visible{
+        outline: 2px solid var(--opd-accent);
+        outline-offset: -2px;
+    }
+    .opd_column_manager_item.opd_column_manager_dragging{
+        opacity: 0.5;
+    }
+    .opd_column_manager_item.opd_column_manager_drop_before{
+        border-top-color: var(--opd-accent);
+    }
+    .opd_column_manager_item.opd_column_manager_drop_after{
+        border-bottom-color: var(--opd-accent);
+    }
+    .opd_column_manager_drag_handle{
+        color: var(--opd-text-muted);
+        user-select: none;
+    }
+    .opd_column_manager_order{
+        min-width: 1.8rem;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--opd-text-muted);
+    }
+    /*見出しは 2 段組 (上段: 文脈ラベル、下段: タイトル)。ラベルが空のときも高さが変わらないよう空白文字を描く*/
+    .opd_column_manager_item_heading{
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-width: 0;
+        line-height: 1.25;
+    }
+    .opd_column_manager_item_label{
+        font-size: 0.6875rem;
+        color: var(--opd-text-muted);
+        overflow-wrap: anywhere;
+    }
+    .opd_column_manager_item_label:empty::before{
+        content: "\\200b";
+    }
+    .opd_column_manager_item_name{
+        overflow-wrap: anywhere;
+    }
+    .opd_column_manager_badge{
+        flex: none;
+        padding: 0 0.4rem;
+        border-radius: var(--opd-radius-full);
+        background: var(--opd-accent-soft);
+        color: var(--opd-accent);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+    .opd_column_manager_badge[data-badge="close"]{
+        background: var(--opd-danger-soft);
+        color: var(--opd-danger);
+    }
+    .opd_column_manager_action_btn{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        min-width: 1.5rem;
+        height: 1.5rem;
+        padding: 0;
+        border: 0;
+        border-radius: var(--opd-radius-full);
+        background: transparent;
+        color: var(--opd-text-muted);
+        font: inherit;
+        font-size: 1rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .opd_column_manager_restore_btn{
+        padding: 0 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .opd_column_manager_remove_btn:hover{
+        background: var(--opd-danger-soft);
+        color: var(--opd-danger);
+    }
+    .opd_column_manager_restore_btn:hover{
+        background: var(--opd-accent-soft);
+        color: var(--opd-accent);
+    }
+    .opd_column_manager_rack_empty{
+        margin: 0;
+        padding: 0.75rem;
+        text-align: center;
+        font-size: 0.8125rem;
+        color: var(--opd-text-muted);
+    }
+    .opd_column_manager_rack_empty[hidden]{
+        display: none;
+    }
+    .opd_column_manager_count{
         min-height: 1.5rem;
         font-size: 0.8125rem;
         color: var(--opd-text-muted);
     }
-    .opd_list_picker_actions{
-        display: flex;
-        flex-direction: row;
-        justify-content: flex-end;
-        gap: 0.5rem;
-    }
-    .opd_list_picker_empty[hidden]{
-        display: none;
-    }
     @media (max-width: 60rem){
-        .opd_list_picker_body{
+        .opd_column_manager_body{
             flex-direction: column;
         }
-        .opd_list_picker_selected_wrap{
+        .opd_column_manager_racks{
             height: 16rem;
         }
     }
-    /*iframe の読み込み中に重ねる skeleton (リストカラム複数追加ダイアログ・ポストフォームのポップオーバーで共用)。色は置き場所の --opd-frame-surface / --opd-frame-skeleton で決める*/
+    /*iframe の読み込み中に重ねる skeleton (カラム管理ダイアログ・ポストフォームのポップオーバーで共用)。色は置き場所の --opd-frame-surface / --opd-frame-skeleton で決める*/
     .opd_frame_skeleton{
         position: absolute;
         inset: 0;
@@ -1594,6 +1683,7 @@ function run(settings){
         .dsp_column_settings_btn,
         .dsp_column_close_btn,
         .opd_column_kind_icon::after,
+        .opd_column_manager_type_icon::after,
         .media_viewer_icon_close,
         .media_viewer_icon_forward,
         .media_viewer_icon_next,
@@ -1635,8 +1725,7 @@ function run(settings){
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="add_timeline" title="${i18n_message("ui_add_timeline_column_title")}"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent" id="add_notify" title="${i18n_message("ui_add_notification_column_title")}"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent" id="add_explore" title="${i18n_message("ui_add_explore_column_title")}"><div class="dsp_btn_add_explr_img"></div></div><div class="dsp_btn_parent" id="add_list" title="${i18n_message("ui_add_list_column_title")}"><div class="dsp_btn_add_list_img"></div></div><div class="dsp_btn_parent" id="add_list_multi" tabindex="0" role="button" title="${i18n_message("ui_add_list_multi_column_title")}"><div class="dsp_btn_add_list_multi_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" id="add_target_toggle" tabindex="0" role="button" aria-pressed="false" title="${i18n_message("ui_add_target_main_title")}"><div class="dsp_btn_add_target_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
-    //let side_bar = `<section class="dsp_column" style="position:fixed;z-index:999;height:98%;"><div draggable="false" opd_column_type="dsp_column" opd_column_width="%column_width_num%" style="height:100%;min-width: 100px;text-align: center;background-color: white;"><div><p style="margin-top:0;padding-top:1em;">Open-Deck<br>Prototype<br>v${manifest.version}</p><hr><p>Debug<br><input type="button" id="init_settings" value="init settings"/><br><input type="button" id="profile_load_save" value="Profile Load"/><br><input type="button" id="dnr_reload" value="dNR_Reload"/><br><input type="button" id="ext_reload" value="Ext_Reload"/></p><hr><p><input type="button" id="add_timeline" value="Add TimeLine"/> <div class="dsp_btn_parent"><div class="dsp_btn_add_tl_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_ntfc_img"></div></div><div class="dsp_btn_parent"><div class="dsp_btn_add_explr_img"></div></div> </p><p><input type="button" id="add_notify" value="Add Notification"/></p><p><input type="button" id="add_explore" value="Add Explore"/><hr><input type="button" id="second_rack" value="Second Rack"/><hr><input type="button" id="profile_save" value="Profile_Save"/><br><input type="button" id="profile_delete" value="Profile_Delete"/><br>${profile_list_html}</p></div></div></section><section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column" style="height:100%;min-width: 110px;"></div></section>`;
+    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="manage_columns" tabindex="0" role="button" aria-haspopup="dialog" title="${i18n_message("ui_manage_columns_title")}"><div class="dsp_btn_manage_columns_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" id="add_target_toggle" tabindex="0" role="button" aria-pressed="false" title="${i18n_message("ui_add_target_main_title")}"><div class="dsp_btn_add_target_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
     let main_column_html = ``;
     let side_column_html = ``;
     //カラム配列の empty_column より後をサイドラックへ振り分けるための検出状態
@@ -1793,16 +1882,6 @@ function run(settings){
         if(side_empty_column !== null) side_empty_column.hidden = !is_side_target;
         //ResizeObserver の反映を待たずに幅を合わせる
         update_side_rack_width();
-    }
-    //追加先ラックに応じて、新しいカラムを insertAdjacentHTML("beforebegin") で入れる基準要素を返す
-    //insert_first が真ならそのラックの先頭カラム (最初の section.dsp_column_draggable_true) の前、無ければ末尾の案内カラムの前
-    //設定パネルのホバー中は draggable 属性が一時的に "false" になるため、先頭カラムの判定にはクラスを使う
-    function get_add_target_column(insert_first){
-        const is_side_target = add_target_rack === "side";
-        const rack_element = document.getElementById(is_side_target ? "side_rack_element" : "first_rack_element");
-        const empty_column = rack_element?.querySelector(is_side_target ? ".dsp_column_side_emptycolumn" : ".dsp_column_emptycolumn");
-        const first_column = rack_element?.querySelector(":scope > section.dsp_column_draggable_true");
-        return (insert_first && first_column) ? first_column : empty_column;
     }
     //プロファイルリスト切替イベント作成関数
     function create_profile_list_btn(){
@@ -2140,96 +2219,178 @@ function run(settings){
         event.preventDefault();
         toggle_post_form_popover(this);
     });
-    //タイムラインカラム追加
-    document.getElementById("add_timeline").addEventListener("click", function(){
-        const add_target_column = get_add_target_column(is_shift_pressed);
-        const new_column = fill_column_template(default_element["home"]["html"], inherit_column_template_values("home"));
-        add_target_column.insertAdjacentHTML("beforebegin", new_column);
-        add_target_column.previousElementSibling?.scrollIntoView({behavior: "smooth", inline: "nearest"});
-        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview], #side_rack_element iframe[opd_init_webview]');
-        append_object_css("add_column", all_webview);
-        column_dd();
-        column_close();
-        update_side_rack_state();
-        column_settings_save("", last_load_profile);
-    });
-    //通知カラム追加
-    document.getElementById("add_notify").addEventListener("click", function(){
-        const add_target_column = get_add_target_column(is_shift_pressed);
-        const new_column = fill_column_template(default_element["notification"]["html"], inherit_column_template_values("notification"));
-        add_target_column.insertAdjacentHTML("beforebegin", new_column);
-        add_target_column.previousElementSibling?.scrollIntoView({behavior: "smooth", inline: "nearest"});
-        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview], #side_rack_element iframe[opd_init_webview]');
-        append_object_css("add_column", all_webview);
-        column_dd();
-        column_close();
-        update_side_rack_state();
-        column_settings_save("", last_load_profile);
-    });
-    //Explore系カラム追加(Explore本体・リストカラムの共通処理)。insert_first が真なら末尾ではなく先頭に追加する
-    function add_explore_column(initial_path, insert_first = is_shift_pressed){
-        add_explore_columns([initial_path], insert_first);
+    //===== カラムの追加・並べ替え・閉じるの一括反映 (カラム管理ダイアログの適用処理) =====
+    //ラック ID ("main" | "side") からラックの要素と末尾の案内カラム (section) を返す。案内カラムは新しいカラムを末尾に入れるときの基準要素になる
+    function get_rack_elements(rack_id){
+        const is_side = rack_id === "side";
+        const rack_element = document.getElementById(is_side ? "side_rack_element" : "first_rack_element");
+        const guide_column = rack_element?.querySelector(is_side ? ":scope > .dsp_column_side_emptycolumn" : ":scope > .dsp_column_emptycolumn") ?? null;
+        return {rack_element: rack_element, guide_column: guide_column};
     }
-    //Explore系カラムをパス配列からまとめて追加する
-    //initial_paths: 各カラムが初期表示するパスの配列(配列の順序どおりに並ぶ)、insert_first: 真なら末尾ではなく先頭に追加する
-    //全カラムのHTMLを1回のinsertAdjacentHTMLで挿入し、挿入後の後処理(iframeへのCSS適用・ドラッグ登録・閉じるボタン登録・設定保存)は追加件数に依らずそれぞれ1回だけ実行する
-    //initial_paths が空の場合は何もしない
-    function add_explore_columns(initial_paths, insert_first = is_shift_pressed){
-        if(initial_paths.length === 0) return;
-        const add_target_column = get_add_target_column(insert_first);
-        let new_columns = "";
-        for (let index = 0; index < initial_paths.length; index++) {
+    //ラック直下の実カラム (section.dsp_column_draggable_true) を DOM 順に返す
+    //設定パネルのホバー中は draggable 属性が一時的に "false" になるため、判定にはクラスを使う
+    function get_rack_columns(rack_id){
+        const rack_element = get_rack_elements(rack_id).rack_element;
+        return rack_element === null ? [] : Array.from(rack_element.querySelectorAll(":scope > section.dsp_column_draggable_true"));
+    }
+    //新しいカラムの HTML を組み立てる。個別設定はすべて全体設定に従い (inherit)、explore カラムは初期表示するパスから見出しと戻り先を決める
+    //column_type: "home" | "notification" | "explore"、column_path: explore カラムが初期表示するパス (他の種別では使わない)
+    function build_new_column_html(column_type, column_path){
+        const values = inherit_column_template_values(column_type);
+        if(column_type === "explore"){
             //見出しは初期表示するパスから決める (ページタイトルは iframe の読み込み後に取り込んで入れ直す)
-            const heading = build_column_heading("explore", initial_paths[index], "");
-            new_columns += fill_column_template(default_element["explore"]["html"], {
-                ...inherit_column_template_values("explore"),
+            const heading = build_column_heading("explore", column_path, "");
+            Object.assign(values, {
                 column_label: heading.label,
                 column_title: heading.name,
-                column_return_path: initial_column_return_path("explore", initial_paths[index]),
-                column_save_path: initial_paths[index],
+                column_return_path: initial_column_return_path("explore", column_path),
+                column_save_path: column_path,
             });
         }
-        add_target_column.insertAdjacentHTML("beforebegin", new_columns);
-        add_target_column.previousElementSibling?.scrollIntoView({behavior: "smooth", inline: "nearest"});
-        const all_webview = document.querySelectorAll('#main_rack_element iframe[opd_init_webview], #side_rack_element iframe[opd_init_webview]');
-        append_object_css("add_column", all_webview);
+        return fill_column_template(default_element[column_type].html, values);
+    }
+    //カラムの section を DOM 上の別の位置へ移す前に、読み込み先を整える
+    //DOM 上の移動で iframe は src から読み込み直されるため、explore カラムはピン止め中ならピン止めしたパス、そうでなければ表示中のパスを src に張り直し、読み込み先に合わせて見出しを組み立て直す
+    //表示中と違うページを読み込むときはページタイトルを空にし、読み込み後に取り込むまで見出しには種別の名称を出す。全種別で副見出しを読み込み先に合わせて先に整える
+    function prepare_column_for_dom_move(column_section){
+        const column_div = column_section.querySelector("div[opd_column_type]");
+        if(column_div === null) return;
+        const column_frame = column_div.querySelector("iframe");
+        if(column_div.getAttribute("opd_column_type") === "explore"){
+            const pinned_path = column_div.getAttribute("opd_pinned_path") ?? "";
+            const reload_path = pinned_path !== "" ? pinned_path : column_div.getAttribute("opd_explore_path");
+            if(column_frame !== null) column_frame.src = `https://x.com${reload_path}`;
+            if(column_div.getAttribute("opd_explore_path") !== reload_path) column_div.setAttribute("opd_explore_title", "");
+            column_div.setAttribute("opd_explore_path", reload_path);
+            update_column_heading(column_div);
+        }
+        if(column_frame !== null) reset_column_subbar_before_reload(column_div, new URL(column_frame.src).pathname);
+    }
+    //ラックの最終的な並び (desired_sections) のうち、動かさずに済む既存カラムの集合を決める
+    //current_sections: そのラックに今ある既存カラム (DOM 順)。両方に含まれる既存カラムだけを比べ、DOM 順を保ったまま残せる最長の部分列 (最長共通部分列) を動かさない集合にする
+    //長さが同じ候補が複数あるときは、並び替えの前後で同じ位置にあるカラムを多く含む候補を選ぶ (中央のカラムを挟んで両端を入れ替えたときに、中央のカラムが動かないようにする)
+    //動かさないカラムには DOM 操作をしないため、その iframe は再読み込みされない
+    function pick_stationary_sections(desired_sections, current_sections){
+        const staying_sections = desired_sections.filter((section) => current_sections.includes(section));
+        const current_staying_sections = current_sections.filter((section) => staying_sections.includes(section));
+        const positions = staying_sections.map((section) => current_staying_sections.indexOf(section));
+        const is_same_position = staying_sections.map((section, index) => current_staying_sections[index] === section);
+        //best[i]: staying_sections[i] で終わる部分列の {length, same_count, prev}
+        const best = [];
+        let best_end = -1;
+        for (let index = 0; index < staying_sections.length; index++) {
+            let candidate = {length: 1, same_count: is_same_position[index] ? 1 : 0, prev: -1};
+            for (let prev_index = 0; prev_index < index; prev_index++) {
+                if(positions[prev_index] >= positions[index]) continue;
+                const length = best[prev_index].length + 1;
+                const same_count = best[prev_index].same_count + (is_same_position[index] ? 1 : 0);
+                if(length > candidate.length || (length === candidate.length && same_count > candidate.same_count)){
+                    candidate = {length: length, same_count: same_count, prev: prev_index};
+                }
+            }
+            best.push(candidate);
+            if(best_end === -1 || candidate.length > best[best_end].length || (candidate.length === best[best_end].length && candidate.same_count > best[best_end].same_count)){
+                best_end = index;
+            }
+        }
+        const stationary_sections = new Set();
+        for (let index = best_end; index !== -1; index = best[index].prev) {
+            stationary_sections.add(staying_sections[index]);
+        }
+        return stationary_sections;
+    }
+    //カラム管理ダイアログの編集結果を両ラックへ一括反映する
+    //layout: {main: [item...], side: [item...]}。item は {section: 既存カラムの section} または {type: 新しいカラムの種別, path: explore カラムが初期表示するパス}。配列の順序がそのままラック内の並びになる
+    //closing_sections: 閉じる既存カラムの section の配列
+    //手順: 新しいカラムの section を未接続の状態で先に作る (見出しのログイン中 screen_name は既存カラムから取るため、閉じる前に作る)
+    //  → 閉じるカラムの自動更新を止めて外す → ラックごとに動かさない既存カラム (pick_stationary_sections) を決め、それ以外の section を末尾側から最終位置へ insertBefore で入れる
+    //  → 新しいカラムの iframe を初期化 (append_object_css) し、ドラッグ・閉じるボタンを登録 → サイドラックの表示を更新 → 保存 → 最初の新しいカラムへスクロール
+    //既存カラムの移動は prepare_column_for_dom_move で読み込み先を整えてから行う。動かさない既存カラムには触れないため再読み込みされない
+    //メインラックを先に処理するため、サイドラックへ移る既存カラムはメインラックの処理中は元の位置に残り、サイドラックの処理で移る (メインラックの並びは動かさないカラムを基準に決まるため影響しない)
+    function apply_column_layout(layout, closing_sections){
+        const new_sections = [];
+        const rack_sections = {main: [], side: []};
+        ["main", "side"].forEach((rack_id) => {
+            (layout[rack_id] ?? []).forEach((item) => {
+                if(item.section !== undefined){
+                    //ダイアログを開いているあいだに外れたカラムは並びに含めない
+                    if(item.section.isConnected) rack_sections[rack_id].push(item.section);
+                    return;
+                }
+                const host = document.createElement("div");
+                host.innerHTML = build_new_column_html(item.type, item.path);
+                const section = host.firstElementChild;
+                if(section === null) return;
+                new_sections.push(section);
+                rack_sections[rack_id].push(section);
+            });
+        });
+        closing_sections.forEach((section) => {
+            if(!section.isConnected) return;
+            stop_column_auto_reload(section.querySelector("div[opd_column_type]"));
+            section.remove();
+        });
+        ["main", "side"].forEach((rack_id) => {
+            const {rack_element, guide_column} = get_rack_elements(rack_id);
+            if(rack_element === null) return;
+            const stationary_sections = pick_stationary_sections(rack_sections[rack_id], get_rack_columns(rack_id));
+            let next_node = guide_column;
+            for (let index = rack_sections[rack_id].length - 1; index >= 0; index--) {
+                const section = rack_sections[rack_id][index];
+                if(!stationary_sections.has(section)){
+                    if(section.isConnected) prepare_column_for_dom_move(section);
+                    rack_element.insertBefore(section, next_node);
+                }
+                next_node = section;
+            }
+        });
+        const new_frames = new_sections.map((section) => section.querySelector("iframe[opd_init_webview]")).filter((frame) => frame !== null);
+        if(new_frames.length > 0) append_object_css("add_column", new_frames);
         column_dd();
         column_close();
         update_side_rack_state();
         column_settings_save("", last_load_profile);
+        new_sections[0]?.scrollIntoView({behavior: "smooth", inline: "nearest"});
     }
-    //リストカラム複数追加の選択ダイアログを開く
-    //insert_first: 追加するカラムを末尾ではなく先頭に入れる場合は true、opener_element: ダイアログを閉じたときにフォーカスを戻す要素
-    //#opd_main_element の直下にオーバーレイ #opd_list_picker_overlay を1つだけ生成する(既に開いている場合は生成しない)。オーバーレイは role="dialog" aria-modal="true" のダイアログ本体を持ち、ダイアログは閲覧領域・選択領域・操作ボタンで構成する:
-    //  閲覧領域:
-    //  ・リスト一覧を表示するユーザー名の入力欄と表示ボタン
-    //  ・表示状態の表示(loading / not_detected / error / login_required / cell_unresolved)
-    //  ・X のリスト一覧ページ(https://x.com/<screen_name>/lists)を表示する iframe。ページ内の左ナビ(header[role="banner"])は隠し、それ以外は X の画面のまま表示する
-    //    [data-testid="primaryColumn"] 配下の listCell へのクリック(左・中・右)と Enter / Space はキャプチャ段階で止めてページ遷移させず、左クリックと Enter / Space はそのリストの選択を切り替える
-    //    iframe 内の Esc は、X の画面が処理しなかった(preventDefault されていない)場合にダイアログを閉じる
-    //    リスト ID の解決は page world ヘルパー(extensions/list_picker_helper.js)が付ける属性と resolve_list_cell_info で行い、ID を決められないセルを選んだときは状態表示で手動入力を案内する
-    //    選択中の listCell には data-opd-list-picker-order 属性(1 始まりの追加順)を付け、iframe に注入した style で枠と順番の数字を重ねる。X の仮想リストでセルが入れ替わるため、属性の付け直しは定期的(400ms)に行う
-    //    読み込み中は iframe の上に skeleton を重ね、listCell が描画されたら外す。制限時間(15秒)内に描画されなければ skeleton を外して not_detected を表示する(その後に listCell が描画されたら消す)
-    //    対象ページを表示した後に別のパスへ遷移した場合は対象 URL を読み込み直す(2回を超えて繰り返す場合は error を表示して読み込みを止める)。ログイン画面へ飛ばされた場合は読み込みを止めて login_required を表示する
-    //    中身を読めない(クロスオリジン等)と分かった iframe は表示したままにせず about:blank に戻し、error を表示する
-    //  ・表示中のリストを全て選択するボタン(そのとき ID を決められている listCell を文書順に、未選択のものだけ選択の末尾へ追加する)
-    //  選択領域:
-    //  ・追加するカラムの順序付き一覧(ol)。項目は追加した順に並び、この並び順のままカラムを追加する。項目のドラッグ&ドロップ(項目の上半分に落とすとその前、下半分に落とすとその後ろ、項目以外の場所に落とすと末尾)と、項目にフォーカスした状態の Alt+↑ / Alt+↓ で1段ずつ並べ替え、各項目の除外ボタンで外せる。並べ替えの結果は選択領域の状態表示(role="status")で知らせる
-    //  ・URL か ID の入力欄(textarea)と追加ボタン。1 行 1 件として解釈し、解釈できた行を一覧の末尾へ追加する(既にある項目は追加しない)。解釈できない行は alert で知らせて入力欄に残し、入力欄へフォーカスを戻す。Enter で追加、Shift+Enter で改行
-    //  ・追加するカラム件数の表示(一覧の件数に、入力欄に残っている解釈できる未追加の行数を足したもの)と選択解除ボタン
-    //  操作ボタン: 追加ボタン・キャンセルボタン。追加時に入力欄へ未追加の文字列が残っていれば先に追加を試み、解釈できない行があれば追加を中止する
-    //Esc キー(iframe 内で押した場合を含む。iframe が about:blank や対象外のページを表示しているときも同様)・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe の内容を破棄して opener_element にフォーカスを戻す
-    //開いているあいだは overlay 以外の #opd_main_element の子要素を inert にして背景を操作対象から外し、閉じるときに解除する(元から inert が付いていた要素は触らない)
-    //Tab はダイアログ内のフォーカス可能要素(iframe を含む)を循環させる。iframe 内では X の画面のフォーカス移動に任せる
-    //追加時は一覧の並び順のままパスを add_explore_columns に渡す
-    //ダイアログ内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない(カラムを一括走査するセレクタに拾われるため)
-    function open_list_picker_dialog(insert_first, opener_element){
+    //===== カラム管理ダイアログ =====
+    //サイドバーのカラム管理ボタンから開く。opener_element: ダイアログを閉じたときにフォーカスを戻す要素
+    //#opd_main_element の直下にオーバーレイ #opd_column_manager_overlay を 1 つだけ生成する (既に開いている場合は生成せずフォーカスを移す)。オーバーレイは role="dialog" aria-modal="true" のダイアログ本体を持ち、ダイアログは追加領域・一覧領域・操作ボタンで構成する:
+    //  追加領域 (左):
+    //  ・追加先ラックの選択 (ラジオ: メインラック / サイドラック)。opd_add_target_rack と同じ状態を指し、切り替えると set_add_target_rack で本体にも反映する。追加領域からの追加はすべて追加先ラックの一覧の末尾に入る
+    //  ・種別ボタン (タイムライン / 通知 / Explore / リスト一覧)。押すたびに新しいカラムの行を追加する (同じ種別の重複を許す)
+    //    リスト一覧は、ユーザー名入力欄がユーザーのリスト一覧のパス (/<screen_name>/lists) に解決できればそのパス、できなければログイン中のユーザーのリスト一覧、どちらも無ければ alert で入力を促す
+    //  ・リスト一覧を表示するユーザー名の入力欄と表示ボタン、表示状態の表示 (loading / not_detected / error / login_required / cell_unresolved)
+    //  ・X のリスト一覧ページ (https://x.com/<screen_name>/lists) を表示する iframe。ページ内の左ナビ (header[role="banner"]) は隠し、それ以外は X の画面のまま表示する
+    //    [data-testid="primaryColumn"] 配下の listCell へのクリック (左・中・右) と Enter / Space はキャプチャ段階で止めてページ遷移させず、左クリックと Enter / Space はそのリストの一覧への出し入れを切り替える
+    //    (同じパスの行が一覧にあれば末尾側の 1 件を外す (既存カラムなら閉じる印を付ける)、閉じる印の付いた行だけがあればそれを残すに戻す、無ければ追加先ラックの末尾に追加する)
+    //    iframe 内の Esc は、X の画面が処理しなかった (preventDefault されていない) 場合にダイアログを閉じる
+    //    リスト ID の解決は page world ヘルパー (extensions/list_picker_helper.js) が付ける属性と resolve_list_cell_info で行い、ID を決められないセルを選んだときは状態表示で手動入力を案内する
+    //    一覧にあるリストの listCell には data-opd-list-picker-order 属性 (一覧での番号) を付け、iframe に注入した style で枠と番号を重ねる。X の仮想リストでセルが入れ替わるため、属性の付け直しは定期的 (400ms) に行う
+    //    読み込み中は iframe の上に skeleton を重ね、listCell が描画されたら外す。制限時間 (15秒) 内に描画されなければ skeleton を外して not_detected を表示する (その後に listCell が描画されたら消す)
+    //    対象ページを表示した後に別のパスへ遷移した場合は対象 URL を読み込み直す (2回を超えて繰り返す場合は error を表示して読み込みを止める)。ログイン画面へ飛ばされた場合は読み込みを止めて login_required を表示する
+    //    中身を読めない (クロスオリジン等) と分かった iframe は表示したままにせず about:blank に戻し、error を表示する
+    //  ・表示中のリストを全て選択するボタン (そのとき ID を決められている listCell を文書順に、一覧に無いものだけ追加先ラックの末尾へ追加する。閉じる印の付いた同じリストの行があれば残すに戻す)
+    //  ・URL か ID の入力欄 (textarea) と追加ボタン。1 行 1 件として解釈し、解釈できた行のうち一覧に無いものを追加先ラックの末尾へ追加する。解釈できない行は alert で知らせて入力欄に残し、入力欄へフォーカスを戻す。Enter で追加、Shift+Enter で改行
+    //  一覧領域 (右):
+    //  ・メインラック / サイドラックそれぞれの順序付き一覧 (ol)。開いた時点の両ラックの実カラムを DOM 順に並べ、追加した行はその後ろに続く。番号は両ラックを通した通し番号 (閉じる印の付いた行は数えない)
+    //    行はカラム種別の丸アイコン・見出し (文脈ラベルとタイトル)・印 (新しい行には「追加」、閉じる印の付いた既存カラムには「閉じる」)・操作ボタンを持つ
+    //    × ボタンで行を外す。新しい行は一覧から消え、既存カラムの行は閉じる印を付けて残る (適用時に閉じる)。閉じる印の付いた行の「残す」ボタンで印を外す
+    //    行のドラッグ&ドロップ (行の上半分に落とすとその前、下半分に落とすとその後ろ、ラックの行以外の場所に落とすとそのラックの末尾。ラックをまたいで落とせる) と、行にフォーカスした状態の Alt+↑ / Alt+↓ で 1 段ずつ並べ替える
+    //    (メインラックの末尾から Alt+↓ でサイドラックの先頭へ、サイドラックの先頭から Alt+↑ でメインラックの末尾へ移る)。閉じる印の付いた行はドラッグできない。並べ替えと追加の結果は一覧領域の状態表示 (role="status") で知らせる
+    //  ・件数の表示 (追加する行数 (入力欄に残っている解釈できる未追加の行数を含む) と閉じる既存カラムの数) と、追加した行をすべて外すボタン (既存カラムの行には触れない)
+    //  操作ボタン: 適用ボタン・キャンセルボタン。適用時に入力欄へ未追加の文字列が残っていれば先に追加を試み、解釈できない行があれば適用を中止する
+    //    追加する行が 10 件を超えるときと、閉じる既存カラムに実効ピン止め中のものがあるときは確認する。確認後にダイアログを閉じ、apply_column_layout で一括反映する
+    //Esc キー (iframe 内で押した場合を含む。iframe が about:blank や対象外のページを表示しているときも同様)・キャンセルボタン・オーバーレイ背景のクリックで閉じ、閉じるときは待機中のタイマーと iframe の内容を破棄して opener_element にフォーカスを戻す
+    //開いているあいだは overlay 以外の #opd_main_element の子要素を inert にして背景を操作対象から外し、閉じるときに解除する (元から inert が付いていた要素は触らない)
+    //Tab はダイアログ内のフォーカス可能要素 (iframe を含む) を循環させる。iframe 内では X の画面のフォーカス移動に任せる
+    //ダイアログ内の要素には .dsp_column クラス・opd_column_type 属性・opd_init_webview 属性・.column_close_btn クラスを付けない (カラムを一括走査するセレクタに拾われるため)。行のカラム種別は data-column-type 属性で持つ
+    function open_column_manager_dialog(opener_element){
         const main_element = document.getElementById("opd_main_element");
         if(main_element === null) return;
         //既に開いている場合は二重に生成せず、開いているダイアログへフォーカスを移す
-        const opened_overlay = document.getElementById("opd_list_picker_overlay");
+        const opened_overlay = document.getElementById("opd_column_manager_overlay");
         if(opened_overlay !== null){
-            const opened_dialog = opened_overlay.querySelector(".opd_list_picker_dialog");
+            const opened_dialog = opened_overlay.querySelector(".opd_column_manager_dialog");
             if(opened_dialog !== null) get_dialog_focusable_elements(opened_dialog)[0]?.focus();
             return;
         }
@@ -2241,35 +2402,51 @@ function run(settings){
         const frame_recover_limit = 2;
         const many_columns_threshold = 10;
         const list_cell_selector = '[data-testid="primaryColumn"] [data-testid="listCell"]';
-        const selected_item_selector = ".opd_list_picker_selected_item";
+        const item_selector = ".opd_column_manager_item";
+        const rack_ids = ["main", "side"];
+        const rack_name_of = (rack_id) => i18n_message(rack_id === "side" ? "ui_column_manager_target_side" : "ui_column_manager_target_main");
+        //種別ボタンと行のカラム種別の表示名
+        const column_type_name_of = (column_type) => i18n_message(column_type === "home" ? "ui_column_timeline_title" : "ui_column_notifications_title");
 
         const overlay = document.createElement("div");
-        overlay.id = "opd_list_picker_overlay";
-        overlay.className = "opd_dialog_overlay opd_list_picker_overlay";
-        //骨格は拡張が持つ静的な文字列だけで組み立てる(X 由来の文字列は生成後に textContent などで入れる)
-        overlay.innerHTML = `<div class="opd_dialog opd_list_picker_dialog" role="dialog" aria-modal="true" aria-labelledby="opd_list_picker_title">
-        <h2 id="opd_list_picker_title">${i18n_message("ui_list_picker_header")}</h2>
-        <div class="opd_list_picker_body">
-        <div class="opd_list_picker_browse">
+        overlay.id = "opd_column_manager_overlay";
+        overlay.className = "opd_dialog_overlay opd_column_manager_overlay";
+        //骨格は拡張が持つ静的な文字列だけで組み立てる (X 由来の文字列は生成後に textContent などで入れる)
+        overlay.innerHTML = `<div class="opd_dialog opd_column_manager_dialog" role="dialog" aria-modal="true" aria-labelledby="opd_column_manager_title">
+        <h2 id="opd_column_manager_title">${i18n_message("ui_column_manager_header")}</h2>
+        <div class="opd_column_manager_body">
+        <div class="opd_column_manager_add">
+        <h3>${i18n_message("ui_column_manager_add_header")}</h3>
+        <div class="opd_column_manager_target_row" role="radiogroup" aria-labelledby="opd_column_manager_target_label"><span id="opd_column_manager_target_label">${i18n_message("ui_column_manager_target_label")}</span><label><input class="opd_radio opd_column_manager_target_radio" type="radio" name="opd_column_manager_target" value="main">${i18n_message("ui_column_manager_target_main")}</label><label><input class="opd_radio opd_column_manager_target_radio" type="radio" name="opd_column_manager_target" value="side">${i18n_message("ui_column_manager_target_side")}</label></div>
+        <div class="opd_column_manager_type_buttons">
+        <button type="button" class="opd_btn opd_btn_sm opd_column_manager_type_btn" data-column-type="home"><span class="opd_column_manager_type_icon" data-column-type="home" aria-hidden="true"></span>${i18n_message("ui_column_manager_type_home")}</button>
+        <button type="button" class="opd_btn opd_btn_sm opd_column_manager_type_btn" data-column-type="notification"><span class="opd_column_manager_type_icon" data-column-type="notification" aria-hidden="true"></span>${i18n_message("ui_column_manager_type_notification")}</button>
+        <button type="button" class="opd_btn opd_btn_sm opd_column_manager_type_btn" data-column-type="explore"><span class="opd_column_manager_type_icon" data-column-type="explore" aria-hidden="true"></span>${i18n_message("ui_column_manager_type_explore")}</button>
+        <button type="button" class="opd_btn opd_btn_sm opd_column_manager_type_btn" data-column-type="lists"><span class="opd_column_manager_type_icon" data-column-type="explore" data-column-kind="list" aria-hidden="true"></span>${i18n_message("ui_column_manager_type_lists")}</button>
+        </div>
+        <h3>${i18n_message("ui_column_manager_list_header")}</h3>
         <div class="opd_list_picker_user_row"><label for="opd_list_picker_user_input">${i18n_message("ui_list_picker_user_label")}</label><input class="opd_input opd_list_picker_user_input" id="opd_list_picker_user_input" type="text"><input class="opd_btn opd_btn_sm opd_list_picker_show_btn" type="button" value="${i18n_message("ui_list_picker_show_button")}"></div>
         <div class="opd_list_picker_status" role="status" aria-live="polite"></div>
         <div class="opd_list_picker_frame_wrap"><iframe class="opd_list_picker_frame" title="${i18n_message("ui_list_picker_frame_title")}"></iframe><div class="opd_list_picker_frame_skeleton opd_frame_skeleton" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div></div>
         <div><input class="opd_btn opd_btn_sm opd_list_picker_select_all" type="button" value="${i18n_message("ui_list_picker_select_all")}"></div>
-        </div>
-        <div class="opd_list_picker_selection">
-        <h3 id="opd_list_picker_selection_title">${i18n_message("ui_list_picker_selection_header")}</h3>
-        <p class="opd_list_picker_selection_hint" id="opd_list_picker_selection_hint">${i18n_message("ui_list_picker_selection_hint")}</p>
-        <div class="opd_list_picker_selected_wrap"><ol class="opd_list_picker_selected" aria-labelledby="opd_list_picker_selection_title" aria-describedby="opd_list_picker_selection_hint"></ol><p class="opd_list_picker_empty">${i18n_message("ui_list_picker_empty_selection")}</p></div>
-        <div class="opd_list_picker_selection_status" role="status" aria-live="polite"></div>
         <div><label for="opd_list_picker_manual_input">${i18n_message("ui_list_picker_manual_label")}</label><div class="opd_list_picker_manual_row"><textarea class="opd_textarea opd_list_picker_manual" id="opd_list_picker_manual_input" rows="2"></textarea><input class="opd_btn opd_btn_sm opd_list_picker_manual_add_btn" type="button" value="${i18n_message("ui_list_picker_manual_add_button")}"></div></div>
-        <div class="opd_list_picker_count" id="opd_list_picker_count"></div>
-        <div><input class="opd_btn opd_btn_sm opd_list_picker_clear_all" type="button" value="${i18n_message("ui_list_picker_clear_all")}"></div>
+        </div>
+        <div class="opd_column_manager_lists">
+        <h3 id="opd_column_manager_lists_title">${i18n_message("ui_column_manager_lists_header")}</h3>
+        <p class="opd_column_manager_hint" id="opd_column_manager_hint">${i18n_message("ui_column_manager_lists_hint")}</p>
+        <div class="opd_column_manager_racks">
+        <section class="opd_column_manager_rack" data-rack="main"><h4 class="opd_column_manager_rack_title" id="opd_column_manager_rack_title_main">${i18n_message("ui_column_manager_target_main")}</h4><div class="opd_column_manager_rack_wrap"><ol class="opd_column_manager_rack_list" aria-labelledby="opd_column_manager_rack_title_main" aria-describedby="opd_column_manager_hint"></ol><p class="opd_column_manager_rack_empty">${i18n_message("ui_column_manager_rack_empty")}</p></div></section>
+        <section class="opd_column_manager_rack" data-rack="side"><h4 class="opd_column_manager_rack_title" id="opd_column_manager_rack_title_side">${i18n_message("ui_column_manager_target_side")}</h4><div class="opd_column_manager_rack_wrap"><ol class="opd_column_manager_rack_list" aria-labelledby="opd_column_manager_rack_title_side" aria-describedby="opd_column_manager_hint"></ol><p class="opd_column_manager_rack_empty">${i18n_message("ui_column_manager_rack_empty")}</p></div></section>
+        </div>
+        <div class="opd_column_manager_selection_status" role="status" aria-live="polite"></div>
+        <div class="opd_column_manager_count" id="opd_column_manager_count"></div>
+        <div><input class="opd_btn opd_btn_sm opd_column_manager_clear_new" type="button" value="${i18n_message("ui_column_manager_clear_new")}"></div>
         </div>
         </div>
-        <div class="opd_list_picker_actions"><input class="opd_btn opd_btn_primary opd_list_picker_add_btn" type="button" aria-describedby="opd_list_picker_count" value="${i18n_message("ui_list_picker_add_button")}"><input class="opd_btn opd_list_picker_cancel_btn" type="button" value="${i18n_message("ui_list_picker_cancel_button")}"></div>
+        <div class="opd_dialog_actions"><input class="opd_btn opd_btn_primary opd_column_manager_apply_btn" type="button" aria-describedby="opd_column_manager_count" value="${i18n_message("ui_column_manager_apply_button")}"><input class="opd_btn opd_column_manager_cancel_btn" type="button" value="${i18n_message("ui_column_manager_cancel_button")}"></div>
         </div>`;
         main_element.appendChild(overlay);
-        //ダイアログを開いているあいだは背景を操作対象から外す(元から inert のものは対象にしない)
+        //ダイアログを開いているあいだは背景を操作対象から外す (元から inert のものは対象にしない)
         const release_inert = set_inert_except(main_element, overlay);
         //オーバーレイが close_dialog を経由せず外された場合でも、閉じるときの後始末を必ず通す
         const overlay_observer = new MutationObserver(function(){
@@ -2278,26 +2455,42 @@ function run(settings){
         });
         overlay_observer.observe(main_element, {childList: true});
 
-        const dialog = overlay.querySelector(".opd_list_picker_dialog");
+        const dialog = overlay.querySelector(".opd_column_manager_dialog");
+        const target_radios = Array.from(overlay.querySelectorAll(".opd_column_manager_target_radio"));
+        const type_buttons = overlay.querySelector(".opd_column_manager_type_buttons");
         const user_input = overlay.querySelector(".opd_list_picker_user_input");
         const show_btn = overlay.querySelector(".opd_list_picker_show_btn");
         const status_area = overlay.querySelector(".opd_list_picker_status");
         const frame = overlay.querySelector(".opd_list_picker_frame");
         const frame_skeleton = overlay.querySelector(".opd_list_picker_frame_skeleton");
         const select_all_btn = overlay.querySelector(".opd_list_picker_select_all");
-        const selected_list = overlay.querySelector(".opd_list_picker_selected");
-        const selected_wrap = overlay.querySelector(".opd_list_picker_selected_wrap");
-        const empty_message = overlay.querySelector(".opd_list_picker_empty");
-        const selection_status_area = overlay.querySelector(".opd_list_picker_selection_status");
         const manual_textarea = overlay.querySelector(".opd_list_picker_manual");
         const manual_add_btn = overlay.querySelector(".opd_list_picker_manual_add_btn");
-        const count_area = overlay.querySelector(".opd_list_picker_count");
-        const clear_all_btn = overlay.querySelector(".opd_list_picker_clear_all");
-        const add_btn = overlay.querySelector(".opd_list_picker_add_btn");
-        const cancel_btn = overlay.querySelector(".opd_list_picker_cancel_btn");
+        const racks_wrap = overlay.querySelector(".opd_column_manager_racks");
+        const rack_lists = {};
+        const rack_wraps = {};
+        const rack_empty_messages = {};
+        rack_ids.forEach((rack_id) => {
+            const rack_section = overlay.querySelector(`.opd_column_manager_rack[data-rack="${rack_id}"]`);
+            rack_lists[rack_id] = rack_section.querySelector(".opd_column_manager_rack_list");
+            rack_wraps[rack_id] = rack_section.querySelector(".opd_column_manager_rack_wrap");
+            rack_empty_messages[rack_id] = rack_section.querySelector(".opd_column_manager_rack_empty");
+        });
+        const selection_status_area = overlay.querySelector(".opd_column_manager_selection_status");
+        const count_area = overlay.querySelector(".opd_column_manager_count");
+        const clear_new_btn = overlay.querySelector(".opd_column_manager_clear_new");
+        const apply_btn = overlay.querySelector(".opd_column_manager_apply_btn");
+        const cancel_btn = overlay.querySelector(".opd_column_manager_cancel_btn");
 
-        //追加するカラムの並び。要素は {path: カラムの初期パス, name: 表示名(不明なら空文字)}。path で一意にし、配列の順序がそのままカラムの順序になる
-        const selected_entries = [];
+        //一覧の状態。ラックごとの順序付き配列で、配列の順序がそのままラック内の並びになる。要素 (entry) は次の形:
+        //  key: 行を識別する文字列 (既存カラムは section の id、新しい行は "new_" + 乱数)
+        //  type: "home" | "notification" | "explore"、path: explore カラムの識別パス (他の種別は "")
+        //  label / name: 見出しの文脈ラベルとタイトル (既存カラムは開いた時点の見出し、新しい行は種別とパスから決める。リストの名前が不明なら name は "")
+        //  section: 既存カラムの section (新しい行は null)、pending_close: 既存カラムを適用時に閉じる印 (新しい行は常に false)
+        //  order: 描き直しのたびに付け直す通し番号 (閉じる印の付いた行は null)
+        const rack_entries = {main: [], side: []};
+        //ログイン中の screen_name (新しい home / notification 行のラベルに使う。取れないあいだはラベルを空にする)
+        const login_screen_name = get_login_screen_name();
         //クリック・キー入力の捕捉を登録済みの iframe の Document
         const frame_documents_prepared = new WeakSet();
         //iframe の Document ごとのヘルパー注入の失敗回数。上限を超えたら注入をやり直さない
@@ -2305,9 +2498,9 @@ function run(settings){
         let frame_poll_timer = null;
         let frame_load_started_at = 0;
         let is_frame_loading = false;
-        //本文のある document を一度でも読めたか(打ち切り時に未検出とエラーを区別する)
+        //本文のある document を一度でも読めたか (打ち切り時に未検出とエラーを区別する)
         let has_frame_document = false;
-        //今回の表示対象のパス(小文字)と、その URL
+        //今回の表示対象のパス (小文字) と、その URL
         let frame_expected_path = "";
         let frame_url = "";
         //対象ページを一度表示したか。表示後に別のパスへ遷移したときの読み込み直しの判定に使う
@@ -2316,140 +2509,258 @@ function run(settings){
         //背景クリック判定用。押下と離上の両方が背景で起きたときだけ閉じる
         let is_overlay_mousedown = false;
         let is_overlay_mouseup = false;
-        //ドラッグ中の項目のパス
-        let dragging_path = null;
+        //ドラッグ中の行の key
+        let dragging_key = null;
         //名前の補完で一覧を描き直す必要があるが、ドラッグ中のため見送っている
-        let is_selection_render_pending = false;
+        let is_render_pending = false;
 
-        //リストのパスから ID を取り出す(/i/lists/<id> の形のときだけ。それ以外は null)
+        //開いた時点の両ラックの実カラムから行を作る
+        function entry_of_existing_section(section){
+            const column_div = section.querySelector("div[opd_column_type]");
+            const column_type = column_div.getAttribute("opd_column_type");
+            return {
+                key: section.id !== "" ? section.id : `existing_${create_random_id()}`,
+                type: column_type,
+                path: column_type === "explore" ? explore_column_persist_path(column_div) : "",
+                label: column_div.querySelector(".column_bar .opd_column_label")?.textContent ?? "",
+                name: column_div.querySelector(".column_bar .opd_column_name")?.textContent ?? "",
+                section: section,
+                pending_close: false,
+                order: null,
+            };
+        }
+        rack_ids.forEach((rack_id) => {
+            rack_entries[rack_id] = get_rack_columns(rack_id).map(entry_of_existing_section);
+        });
+
+        //リストのパスから ID を取り出す (/i/lists/<id> の形のときだけ。それ以外は null)
         function list_id_of_path(list_path){
             const match = list_path.match(/^\/i\/lists\/(\d+)$/);
             return match ? match[1] : null;
         }
-        //項目の表示名。名前が不明なら ID から補い、それも無ければパスをそのまま使う
+        //行の表示名。explore の名前が不明なら ID から補い、それも無ければパスをそのまま使う (検索のトップは種別の名称)
         function display_name_of(entry){
             if(entry.name !== "") return entry.name;
+            if(entry.type !== "explore") return column_type_name_of(entry.type);
             const list_id = list_id_of_path(entry.path);
-            return list_id !== null ? i18n_message("ui_list_picker_list_fallback_name", [list_id]) : entry.path;
+            if(list_id !== null) return i18n_message("ui_list_picker_list_fallback_name", [list_id]);
+            return entry.path === "/explore" ? i18n_message("ui_column_explore_title") : entry.path;
         }
-        function entry_index_of(list_path){
-            return selected_entries.findIndex((entry) => entry.path === list_path);
-        }
-        //末尾へ追加する。既にある場合は追加せず false を返す
-        function add_entry(list_path, list_name){
-            if(entry_index_of(list_path) !== -1) return false;
-            selected_entries.push({path: list_path, name: list_name});
-            return true;
-        }
-        function toggle_entry(list_path, list_name){
-            const index = entry_index_of(list_path);
-            if(index === -1){
-                selected_entries.push({path: list_path, name: list_name});
-                return;
-            }
-            selected_entries.splice(index, 1);
-        }
-        //from_index の項目を取り除いてから to_index の位置に入れ直す。位置が変わらない場合は false を返す
-        function move_entry(from_index, to_index){
-            if(from_index < 0 || from_index >= selected_entries.length) return false;
-            const clamped_to = Math.max(0, Math.min(to_index, selected_entries.length - 1));
-            if(clamped_to === from_index) return false;
-            const [moved] = selected_entries.splice(from_index, 1);
-            selected_entries.splice(clamped_to, 0, moved);
-            return true;
-        }
-        //追加ボタンは入力欄に残った文字列も追加するため、件数には解釈できる未追加の行も含める
-        function update_count(){
-            const pending_paths = parse_manual_list_entries(manual_textarea.value).paths.filter((list_path) => entry_index_of(list_path) === -1);
-            count_area.textContent = i18n_message("ui_list_picker_selected_count", [String(selected_entries.length + pending_paths.length)]);
-        }
-        //選択領域の順序付き一覧を描き直す。フォーカスが一覧の中にあった場合は同じ項目(または同じ項目の除外ボタン)へ戻す
-        function render_selection(){
-            const active_element = document.activeElement;
-            const active_item = (active_element !== null && selected_list.contains(active_element)) ? active_element.closest(selected_item_selector) : null;
-            const active_path = active_item === null ? null : active_item.getAttribute("data-list-path");
-            const is_active_remove_btn = active_element !== null && active_element.classList.contains("opd_list_picker_remove_btn");
-            const saved_scroll_top = selected_wrap.scrollTop;
-            is_selection_render_pending = false;
-            //項目を作り直すとドラッグ中の項目が外れて dragend が届かないため、先にドラッグ状態を戻す
-            end_drag();
-            selected_list.textContent = "";
-            selected_entries.forEach((entry, index) => {
-                const item = document.createElement("li");
-                item.className = "opd_list_picker_selected_item";
-                item.draggable = true;
-                item.tabIndex = 0;
-                item.setAttribute("data-list-path", entry.path);
-                const handle = document.createElement("span");
-                handle.className = "opd_list_picker_drag_handle";
-                handle.setAttribute("aria-hidden", "true");
-                handle.textContent = "⋮⋮";
-                const order = document.createElement("span");
-                order.className = "opd_list_picker_order";
-                order.textContent = `${index + 1}.`;
-                const name = document.createElement("span");
-                name.className = "opd_list_picker_selected_name";
-                name.textContent = display_name_of(entry);
-                const remove_btn = document.createElement("button");
-                remove_btn.type = "button";
-                remove_btn.className = "opd_list_picker_remove_btn";
-                remove_btn.textContent = "×";
-                remove_btn.setAttribute("aria-label", i18n_message("ui_list_picker_remove_button", [display_name_of(entry)]));
-                remove_btn.title = remove_btn.getAttribute("aria-label");
-                item.appendChild(handle);
-                item.appendChild(order);
-                item.appendChild(name);
-                item.appendChild(remove_btn);
-                selected_list.appendChild(item);
-            });
-            empty_message.hidden = selected_entries.length !== 0;
-            selected_wrap.scrollTop = saved_scroll_top;
-            update_count();
-            if(active_path === null) return;
-            //除外などで項目が無くなった場合のフォーカス先は呼び出し側で決める
-            const restored_item = find_selected_item(active_path);
-            if(restored_item === null) return;
-            (is_active_remove_btn ? restored_item.querySelector(".opd_list_picker_remove_btn") : restored_item).focus();
-        }
-        function find_selected_item(list_path){
-            const items = selected_list.querySelectorAll(selected_item_selector);
-            for (let index = 0; index < items.length; index++) {
-                if(items[index].getAttribute("data-list-path") === list_path) return items[index];
+        //key の行がどのラックの何番目にあるかを返す (無ければ null)
+        function locate_entry(key){
+            for (let rack_index = 0; rack_index < rack_ids.length; rack_index++) {
+                const rack_id = rack_ids[rack_index];
+                const index = rack_entries[rack_id].findIndex((entry) => entry.key === key);
+                if(index !== -1) return {rack_id: rack_id, index: index, entry: rack_entries[rack_id][index]};
             }
             return null;
         }
-        //項目を to_index へ動かし、動いた場合は描き直して結果を知らせる
-        function move_entry_and_render(list_path, to_index){
-            const from_index = entry_index_of(list_path);
-            if(from_index === -1 || !move_entry(from_index, to_index)) return;
-            render_selection();
-            mark_frame_cells();
-            const new_index = entry_index_of(list_path);
-            selection_status_area.textContent = i18n_message("ui_list_picker_moved", [display_name_of(selected_entries[new_index]), String(new_index + 1)]);
+        //両ラックの行を並びの順 (メイン → サイド) に 1 つの配列で返す
+        function all_entries(){
+            return rack_ids.flatMap((rack_id) => rack_entries[rack_id]);
         }
-        //ドラッグ中の項目の落とし先を消す
-        function clear_drop_marks(){
-            selected_list.querySelectorAll(selected_item_selector).forEach((item) => {
-                item.classList.remove("opd_list_picker_drop_before", "opd_list_picker_drop_after");
+        //現在の追加先ラック (ラジオの選択)
+        function target_rack_id(){
+            return target_radios.find((radio) => radio.checked)?.value === "side" ? "side" : "main";
+        }
+        //新しい行を追加先ラックの末尾に加える
+        function add_new_entry(column_type, column_path, list_name){
+            const heading = build_column_heading(column_type, column_path, list_name, login_screen_name);
+            const entry = {
+                key: `new_${create_random_id()}`,
+                type: column_type,
+                path: column_type === "explore" ? column_path : "",
+                label: heading?.label ?? "",
+                name: column_type === "explore" ? list_name : "",
+                section: null,
+                pending_close: false,
+                order: null,
+            };
+            const rack_id = target_rack_id();
+            rack_entries[rack_id].push(entry);
+            return {entry: entry, rack_id: rack_id};
+        }
+        //同じパスの行が一覧に無ければ追加先ラックの末尾に加える。閉じる印の付いた同じパスの行があれば印を外して残す。どちらも該当しなければ (既にある) false を返す
+        function add_entry_if_absent(list_path, list_name){
+            const same_path_entries = all_entries().filter((entry) => entry.type === "explore" && entry.path === list_path);
+            if(same_path_entries.some((entry) => !entry.pending_close)) return false;
+            const pending_entry = same_path_entries[same_path_entries.length - 1];
+            if(pending_entry !== undefined){
+                pending_entry.pending_close = false;
+                return true;
+            }
+            add_new_entry("explore", list_path, list_name);
+            return true;
+        }
+        //リストの出し入れを切り替える: 同じパスの行があれば末尾側の 1 件を外す (既存カラムなら閉じる印)、閉じる印の付いた行だけならそれを残すに戻す、無ければ追加する
+        function toggle_list_entry(list_path, list_name){
+            const same_path_entries = all_entries().filter((entry) => entry.type === "explore" && entry.path === list_path);
+            const active_entries = same_path_entries.filter((entry) => !entry.pending_close);
+            if(active_entries.length > 0){
+                remove_entry(active_entries[active_entries.length - 1].key);
+                return;
+            }
+            if(same_path_entries.length > 0){
+                same_path_entries[same_path_entries.length - 1].pending_close = false;
+                return;
+            }
+            add_new_entry("explore", list_path, list_name);
+        }
+        //行を外す。新しい行は一覧から取り除き、既存カラムの行は閉じる印を付けて残す
+        function remove_entry(key){
+            const located = locate_entry(key);
+            if(located === null) return;
+            if(located.entry.section === null){
+                rack_entries[located.rack_id].splice(located.index, 1);
+                return;
+            }
+            located.entry.pending_close = true;
+        }
+        //key の行を to_rack_id の to_index の位置へ動かす (to_index は取り除いた後の配列での位置)。位置が変わらない場合は false を返す
+        function move_entry(key, to_rack_id, to_index){
+            const located = locate_entry(key);
+            if(located === null) return false;
+            rack_entries[located.rack_id].splice(located.index, 1);
+            const clamped_to = Math.max(0, Math.min(to_index, rack_entries[to_rack_id].length));
+            rack_entries[to_rack_id].splice(clamped_to, 0, located.entry);
+            return !(to_rack_id === located.rack_id && clamped_to === located.index);
+        }
+        //追加ボタンは入力欄に残った文字列も追加するため、追加する件数には解釈できる未追加の行も含める
+        function update_count(){
+            const entries = all_entries();
+            const new_count = entries.filter((entry) => entry.section === null).length;
+            const pending_paths = parse_manual_list_entries(manual_textarea.value).paths.filter((list_path) => !entries.some((entry) => !entry.pending_close && entry.type === "explore" && entry.path === list_path));
+            const close_count = entries.filter((entry) => entry.pending_close).length;
+            count_area.textContent = i18n_message("ui_column_manager_count", [String(new_count + pending_paths.length), String(close_count)]);
+        }
+        //行の要素を組み立てる
+        function build_item(entry){
+            const item = document.createElement("li");
+            item.className = "opd_column_manager_item";
+            item.draggable = !entry.pending_close;
+            item.tabIndex = 0;
+            item.setAttribute("data-key", entry.key);
+            item.setAttribute("data-column-type", entry.type);
+            if(entry.pending_close) item.setAttribute("data-pending-close", "true");
+            const handle = document.createElement("span");
+            handle.className = "opd_column_manager_drag_handle";
+            handle.setAttribute("aria-hidden", "true");
+            handle.textContent = "⋮⋮";
+            const order = document.createElement("span");
+            order.className = "opd_column_manager_order";
+            order.textContent = entry.order === null ? "" : `${entry.order}.`;
+            const type_icon = document.createElement("span");
+            type_icon.className = "opd_column_manager_type_icon";
+            type_icon.setAttribute("aria-hidden", "true");
+            type_icon.setAttribute("data-column-type", entry.type);
+            if(entry.type === "explore" && is_list_page_path(entry.path)) type_icon.setAttribute("data-column-kind", "list");
+            const heading = document.createElement("span");
+            heading.className = "opd_column_manager_item_heading";
+            const label = document.createElement("span");
+            label.className = "opd_column_manager_item_label";
+            label.textContent = entry.label;
+            const name = document.createElement("span");
+            name.className = "opd_column_manager_item_name";
+            name.textContent = display_name_of(entry);
+            heading.appendChild(label);
+            heading.appendChild(name);
+            item.appendChild(handle);
+            item.appendChild(order);
+            item.appendChild(type_icon);
+            item.appendChild(heading);
+            if(entry.section === null || entry.pending_close){
+                const badge = document.createElement("span");
+                badge.className = "opd_column_manager_badge";
+                badge.setAttribute("data-badge", entry.pending_close ? "close" : "new");
+                badge.textContent = i18n_message(entry.pending_close ? "ui_column_manager_badge_close" : "ui_column_manager_badge_new");
+                item.appendChild(badge);
+            }
+            const action_btn = document.createElement("button");
+            action_btn.type = "button";
+            action_btn.className = `opd_column_manager_action_btn ${entry.pending_close ? "opd_column_manager_restore_btn" : "opd_column_manager_remove_btn"}`;
+            action_btn.textContent = entry.pending_close ? i18n_message("ui_column_manager_restore_label") : "×";
+            action_btn.setAttribute("aria-label", i18n_message(entry.pending_close ? "ui_column_manager_restore_button" : "ui_column_manager_remove_button", [display_name_of(entry)]));
+            action_btn.title = action_btn.getAttribute("aria-label");
+            item.appendChild(action_btn);
+            return item;
+        }
+        //両ラックの一覧を描き直す。フォーカスが一覧の中にあった場合は同じ行 (または同じ行の操作ボタン) へ戻す
+        function render_lists(){
+            const active_element = document.activeElement;
+            const active_item = (active_element !== null && racks_wrap.contains(active_element)) ? active_element.closest(item_selector) : null;
+            const active_key = active_item === null ? null : active_item.getAttribute("data-key");
+            const is_active_action_btn = active_element !== null && active_element.classList.contains("opd_column_manager_action_btn");
+            const saved_scroll_tops = rack_ids.map((rack_id) => rack_wraps[rack_id].scrollTop);
+            is_render_pending = false;
+            //行を作り直すとドラッグ中の行が外れて dragend が届かないため、先にドラッグ状態を戻す
+            end_drag();
+            let order = 0;
+            rack_ids.forEach((rack_id, rack_index) => {
+                rack_lists[rack_id].textContent = "";
+                rack_entries[rack_id].forEach((entry) => {
+                    entry.order = entry.pending_close ? null : ++order;
+                    rack_lists[rack_id].appendChild(build_item(entry));
+                });
+                rack_empty_messages[rack_id].hidden = rack_entries[rack_id].length !== 0;
+                rack_wraps[rack_id].scrollTop = saved_scroll_tops[rack_index];
             });
+            update_count();
+            if(active_key === null) return;
+            //外すなどで行が無くなった場合のフォーカス先は呼び出し側で決める
+            const restored_item = find_item(active_key);
+            if(restored_item === null) return;
+            (is_active_action_btn ? restored_item.querySelector(".opd_column_manager_action_btn") : restored_item).focus();
         }
-        //ドラッグ中の状態を戻す。項目の描き直しやドロップで元の項目が外れると dragend が一覧まで届かないため、描き直しとドロップの時にも呼ぶ
+        function find_item(key){
+            return racks_wrap.querySelector(`${item_selector}[data-key="${key}"]`);
+        }
+        //行を to_rack_id の to_index へ動かし、動いた場合は描き直して結果を知らせる
+        function move_entry_and_render(key, to_rack_id, to_index){
+            if(!move_entry(key, to_rack_id, to_index)) return;
+            render_lists();
+            mark_frame_cells();
+            const located = locate_entry(key);
+            if(located === null) return;
+            selection_status_area.textContent = i18n_message("ui_column_manager_moved", [display_name_of(located.entry), rack_name_of(located.rack_id), String(located.index + 1)]);
+        }
+        //追加した行を描き直し、追加先を知らせる
+        function announce_added(added){
+            render_lists();
+            mark_frame_cells();
+            selection_status_area.textContent = i18n_message("ui_column_manager_added", [display_name_of(added.entry), rack_name_of(added.rack_id)]);
+        }
+        //ドラッグ中の行の落とし先の目印を消す
+        function clear_drop_marks(){
+            racks_wrap.querySelectorAll(item_selector).forEach((item) => {
+                item.classList.remove("opd_column_manager_drop_before", "opd_column_manager_drop_after");
+            });
+            rack_ids.forEach((rack_id) => rack_wraps[rack_id].classList.remove("opd_column_manager_drop_end"));
+        }
+        //ドラッグ中の状態を戻す。行の描き直しやドロップで元の行が外れると dragend が一覧まで届かないため、描き直しとドロップの時にも呼ぶ
         function end_drag(){
-            dragging_path = null;
+            dragging_key = null;
             clear_drop_marks();
-            selected_list.querySelectorAll(selected_item_selector).forEach((item) => item.classList.remove("opd_list_picker_dragging"));
+            racks_wrap.querySelectorAll(item_selector).forEach((item) => item.classList.remove("opd_column_manager_dragging"));
         }
-        //ドラッグイベントの位置から落とし先を求める。項目の上半分なら {index: その項目の位置, is_after: false}、下半分なら is_after: true、項目の外なら末尾
+        //ドラッグイベントの位置から落とし先を求める。行の上半分なら {rack_id, index: その行の位置, is_after: false}、下半分なら is_after: true、ラック内の行の外ならそのラックの末尾、ラックの外なら null
         function drop_target_from_event(event){
-            const item = event.target instanceof Element ? event.target.closest(selected_item_selector) : null;
-            if(item === null) return {index: selected_entries.length - 1, is_after: true};
-            const rect = item.getBoundingClientRect();
-            return {index: entry_index_of(item.getAttribute("data-list-path")), is_after: event.clientY > rect.top + rect.height / 2};
+            const target = event.target instanceof Element ? event.target : null;
+            const item = target?.closest(item_selector) ?? null;
+            if(item !== null){
+                const located = locate_entry(item.getAttribute("data-key"));
+                if(located === null) return null;
+                const rect = item.getBoundingClientRect();
+                return {rack_id: located.rack_id, index: located.index, is_after: event.clientY > rect.top + rect.height / 2};
+            }
+            const rack_section = target?.closest(".opd_column_manager_rack") ?? null;
+            if(rack_section === null) return null;
+            const rack_id = rack_section.getAttribute("data-rack") === "side" ? "side" : "main";
+            return {rack_id: rack_id, index: rack_entries[rack_id].length - 1, is_after: true};
         }
-        //落とし先を並び替え後の位置に変換する(取り除いた分だけ手前へ詰める)
-        function insert_index_of_drop(from_index, drop_target){
+        //落とし先を並び替え後の位置に変換する (同じラックで手前から動かす場合は取り除いた分だけ手前へ詰める)
+        function insert_index_of_drop(from, drop_target){
             let to_index = drop_target.is_after ? drop_target.index + 1 : drop_target.index;
-            if(from_index < to_index) to_index--;
+            if(from.rack_id === drop_target.rack_id && from.index < to_index) to_index--;
             return to_index;
         }
 
@@ -2480,10 +2791,10 @@ function run(settings){
         }
         //iframe の document に page world ヘルパー extensions/list_picker_helper.js を注入する
         //frame_document: リスト一覧ページを読み込んでいる iframe の Document
-        //documentElement の data-opd-list-picker-helper 属性が既にある document には注入しない(Document ごとに1回)
-        //head が無い場合は何もしない(次回のポーリングで再試行する)
+        //documentElement の data-opd-list-picker-helper 属性が既にある document には注入しない (Document ごとに 1 回)
+        //head が無い場合は何もしない (次回のポーリングで再試行する)
         //注入時は属性を "loading" にし、ヘルパー自身が読み込み完了時に属性を "ready" へ更新する
-        //script の error と注入時の例外は失敗回数が3回に達するまで属性を削除して再試行し(合計3回試行)、3回目の失敗で属性を "failed" にする
+        //script の error と注入時の例外は失敗回数が 3 回に達するまで属性を削除して再試行し (合計 3 回試行)、3 回目の失敗で属性を "failed" にする
         //script の load 後も属性が "ready" でなければ "failed" にする。"failed" の document には再注入せず、走査依頼も送らない
         function inject_list_picker_helper(frame_document){
             try{
@@ -2507,12 +2818,12 @@ function run(settings){
                 record_helper_inject_failure(frame_document);
             }
         }
-        //ヘルパーが準備できていれば listCell へのリスト ID 付与を依頼する(走査は同期的に終わる)
+        //ヘルパーが準備できていれば listCell へのリスト ID 付与を依頼する (走査は同期的に終わる)
         function request_helper_scan(frame_document){
             if(frame_document.documentElement?.getAttribute("data-opd-list-picker-helper") !== "ready") return;
             frame_document.dispatchEvent(new CustomEvent("opd_list_picker_scan"));
         }
-        //iframe の document に、左ナビを隠し選択中のセルに枠と順番を重ねる style を入れる(Document ごとに1回)。色はダイアログ側の token と同じ値を使う
+        //iframe の document に、左ナビを隠し一覧にあるセルに枠と番号を重ねる style を入れる (Document ごとに 1 回)。色はダイアログ側の token と同じ値を使う
         function ensure_frame_style(frame_document){
             if(!frame_document.head) return;
             if(frame_document.head.querySelector("style[opd_list_picker_css]") !== null) return;
@@ -2529,7 +2840,7 @@ function run(settings){
                 ${list_cell_selector}[data-opd-list-picker-order]::after{content:attr(data-opd-list-picker-order);position:absolute;top:0.4rem;left:0.4rem;z-index:1;min-width:1.6rem;height:1.6rem;padding:0 0.4rem;box-sizing:border-box;border-radius:0.8rem;background:${accent};color:${accent_text};font:700 0.85rem/1.6rem sans-serif;text-align:center;pointer-events:none;}`;
             frame_document.head.appendChild(style);
         }
-        //iframe の document に listCell のクリック・キー入力の捕捉を登録する(Document ごとに1回)
+        //iframe の document に listCell のクリック・キー入力の捕捉を登録する (Document ごとに 1 回)
         function prepare_frame_document(frame_document){
             if(frame_documents_prepared.has(frame_document)) return;
             frame_documents_prepared.add(frame_document);
@@ -2538,14 +2849,14 @@ function run(settings){
             frame_document.addEventListener("keydown", on_frame_keydown, true);
             frame_document.addEventListener("keydown", on_frame_escape);
         }
-        //iframe 内のイベントの発生元から、それを含む listCell を返す(無ければ null)
+        //iframe 内のイベントの発生元から、それを含む listCell を返す (無ければ null)
         //iframe の要素は別 realm のため instanceof では判定できず、closest を持つかで要素かどうかを見る
         function list_cell_of_event(event){
             const target = event.target;
             if(!target || typeof target.closest !== "function") return null;
             return target.closest(list_cell_selector);
         }
-        //listCell 内のクリックはページ遷移させず、左クリックだけ選択の切り替えにする
+        //listCell 内のクリックはページ遷移させず、左クリックだけ出し入れの切り替えにする
         function on_frame_click(event){
             const cell = list_cell_of_event(event);
             if(cell === null) return;
@@ -2554,13 +2865,13 @@ function run(settings){
             if(event.type !== "click" || event.button !== 0) return;
             toggle_cell(cell);
         }
-        //iframe 内の Esc でもダイアログを閉じる。X の画面がオーバーレイを閉じるなどで Esc を処理した(preventDefault した)場合はそちらを優先する
+        //iframe 内の Esc でもダイアログを閉じる。X の画面がオーバーレイを閉じるなどで Esc を処理した (preventDefault した) 場合はそちらを優先する
         function on_frame_escape(event){
             if(event.key !== "Escape" || event.defaultPrevented) return;
             event.preventDefault();
             close_dialog();
         }
-        //listCell 上の Enter / Space はページ遷移させず選択の切り替えにする
+        //listCell 上の Enter / Space はページ遷移させず出し入れの切り替えにする
         function on_frame_keydown(event){
             if(event.key !== "Enter" && event.key !== " ") return;
             const cell = list_cell_of_event(event);
@@ -2570,7 +2881,7 @@ function run(settings){
             if(event.repeat) return;
             toggle_cell(cell);
         }
-        //セルのリストを選択に加える(既にあれば外す)。ID を決められないセルは手動入力を案内する
+        //セルのリストの出し入れを切り替える。ID を決められないセルは手動入力を案内する
         function toggle_cell(cell){
             const frame_document = cell.ownerDocument;
             request_helper_scan(frame_document);
@@ -2579,10 +2890,10 @@ function run(settings){
                 status_area.textContent = i18n_message("ui_list_picker_cell_unresolved");
                 return;
             }
-            toggle_entry(`/i/lists/${cell_info.id}`, cell_info.name);
+            toggle_list_entry(`/i/lists/${cell_info.id}`, cell_info.name);
             //直前の未解決の案内は最新の操作の結果に置き換える
             status_area.textContent = "";
-            render_selection();
+            render_lists();
             mark_frame_cells();
         }
         function get_frame_document(){
@@ -2593,28 +2904,30 @@ function run(settings){
                 return null;
             }
         }
-        //iframe に表示中の listCell に選択の順番を属性で付け直す。手動入力で名前が無かった項目はセルから名前を補う
+        //iframe に表示中の listCell に一覧での番号を属性で付け直す (同じリストの行が複数あれば先頭側の番号)。名前が無かった行はセルから名前を補う
         function mark_frame_cells(){
             const frame_document = get_frame_document();
             if(!frame_document) return;
-            const order_by_path = new Map();
-            selected_entries.forEach((entry, index) => order_by_path.set(entry.path, index + 1));
+            const entry_by_path = new Map();
+            all_entries().forEach((entry) => {
+                if(entry.pending_close || entry.type !== "explore" || entry_by_path.has(entry.path)) return;
+                entry_by_path.set(entry.path, entry);
+            });
             frame_document.querySelectorAll(list_cell_selector).forEach((cell) => {
                 const cell_info = resolve_list_cell_info(cell, frame_document.location.href);
-                const order = cell_info === null ? undefined : order_by_path.get(`/i/lists/${cell_info.id}`);
-                if(order === undefined){
+                const entry = cell_info === null ? undefined : entry_by_path.get(`/i/lists/${cell_info.id}`);
+                if(entry === undefined || entry.order === null){
                     cell.removeAttribute("data-opd-list-picker-order");
                     return;
                 }
-                cell.setAttribute("data-opd-list-picker-order", String(order));
-                const entry = selected_entries[order - 1];
+                cell.setAttribute("data-opd-list-picker-order", String(entry.order));
                 if(entry.name === "" && cell_info.name !== ""){
                     entry.name = cell_info.name;
-                    is_selection_render_pending = true;
+                    is_render_pending = true;
                 }
             });
-            //ドラッグ中に項目を作り直すとドラッグが途切れるため、名前の補完による描き直しはドラッグが終わった後の呼び出しまで持ち越す
-            if(is_selection_render_pending && dragging_path === null) render_selection();
+            //ドラッグ中に行を作り直すとドラッグが途切れるため、名前の補完による描き直しはドラッグが終わった後の呼び出しまで持ち越す
+            if(is_render_pending && dragging_key === null) render_lists();
         }
         function stop_frame_poll(){
             if(frame_poll_timer !== null){
@@ -2622,7 +2935,7 @@ function run(settings){
                 frame_poll_timer = null;
             }
         }
-        //対象 URL を読み込み(直し)、skeleton を表示する
+        //対象 URL を読み込み (直し)、skeleton を表示する
         function load_frame(){
             frame_load_started_at = Date.now();
             has_frame_document = false;
@@ -2638,7 +2951,7 @@ function run(settings){
             status_area.textContent = message;
             if(is_unreadable) navigate_frame("about:blank");
         }
-        //指定ユーザーのリスト一覧ページを iframe に表示し、定期的に listCell へ選択の順番を付け直す
+        //指定ユーザーのリスト一覧ページを iframe に表示し、定期的に listCell へ番号を付け直す
         function start_frame(screen_name){
             stop_frame_poll();
             frame_expected_path = `/${screen_name}/lists`.toLowerCase();
@@ -2670,7 +2983,7 @@ function run(settings){
                 return;
             }
             has_frame_document = true;
-            //対象ページ以外(ログイン画面など)を表示しているあいだも Esc で閉じられるよう、読める document には先に捕捉を登録する
+            //対象ページ以外 (ログイン画面など) を表示しているあいだも Esc で閉じられるよう、読める document には先に捕捉を登録する
             prepare_frame_document(frame_document);
             const frame_path_lower = frame_document.location.pathname.toLowerCase().replace(/\/+$/, "");
             if(frame_path_lower !== frame_expected_path){
@@ -2693,7 +3006,7 @@ function run(settings){
                 return;
             }
             has_frame_reached_page = true;
-            //リスト一覧ページを表示できたら style とヘルパーを入れる(入れ済みの document では何もしない)
+            //リスト一覧ページを表示できたら style とヘルパーを入れる (入れ済みの document では何もしない)
             ensure_frame_style(frame_document);
             inject_list_picker_helper(frame_document);
             request_helper_scan(frame_document);
@@ -2715,19 +3028,23 @@ function run(settings){
                 status_area.textContent = i18n_message("ui_list_picker_not_detected");
             }
         }
+        //ユーザー名入力欄の値をユーザーのリスト一覧のパスに解決する (解決できない入力は null)
+        function user_lists_path_of_input(){
+            const resolved_path = resolve_list_column_path(user_input.value);
+            return /^\/[A-Za-z0-9_]{1,15}\/lists$/.test(resolved_path ?? "") ? resolved_path : null;
+        }
         //ユーザー名入力欄の値から表示を始める。リスト一覧ページのパスに解決できない入力は受け付けない
         async function start_frame_from_input(){
-            const resolved_path = resolve_list_column_path(user_input.value);
-            const user_lists_match = (resolved_path ?? "").match(/^\/([A-Za-z0-9_]{1,15})\/lists$/);
-            if(!user_lists_match){
+            const user_lists_path = user_lists_path_of_input();
+            if(user_lists_path === null){
                 await show_alert_dialog(i18n_message("msg_list_picker_user_required"));
                 user_input.focus();
                 return;
             }
-            start_frame(user_lists_match[1]);
+            start_frame(user_lists_path.split("/")[1]);
         }
-        //読み込んだ document の中身を読めない(別オリジンなど)場合は、読み込み中かどうかに関わらずエラーとして終了する
-        //読める document には、対象ページかどうかに関わらず(about:blank でも)Esc を受け取れるよう捕捉を登録する
+        //読み込んだ document の中身を読めない (別オリジンなど) 場合は、読み込み中かどうかに関わらずエラーとして終了する
+        //読める document には、対象ページかどうかに関わらず (about:blank でも) Esc を受け取れるよう捕捉を登録する
         function on_frame_load(){
             const frame_document = get_frame_document();
             if(frame_document !== null){
@@ -2749,11 +3066,11 @@ function run(settings){
         }
         //Esc で閉じ、Tab はダイアログ内のフォーカス可能要素を循環させる
         const on_dialog_keydown = create_dialog_keydown_handler(dialog, close_dialog);
-        //入力欄の各行を解釈して一覧の末尾へ追加する。解釈できない行があれば入力欄に残して知らせ、false を返す
+        //入力欄の各行を解釈して追加先ラックの末尾へ追加する。解釈できない行があれば入力欄に残して知らせ、false を返す
         async function add_manual_entries(){
             const manual_entries = parse_manual_list_entries(manual_textarea.value);
-            manual_entries.paths.forEach((list_path) => add_entry(list_path, ""));
-            render_selection();
+            manual_entries.paths.forEach((list_path) => add_entry_if_absent(list_path, ""));
+            render_lists();
             mark_frame_cells();
             if(manual_entries.invalid.length > 0){
                 manual_textarea.value = manual_entries.invalid.join("\n");
@@ -2764,41 +3081,83 @@ function run(settings){
             manual_textarea.value = "";
             return true;
         }
-        //一覧の並び順のままカラムをまとめて追加する。入力欄に未追加の文字列が残っていれば先に追加を試みる
-        async function add_selected_columns(){
-            if(manual_textarea.value.trim() !== "" && !(await add_manual_entries())) return;
-            if(selected_entries.length === 0){
-                await show_alert_dialog(i18n_message("msg_list_picker_nothing_selected"));
-                manual_textarea.focus();
+        //種別ボタンから新しい行を追加する
+        async function add_entry_of_type(button_type){
+            if(button_type === "home" || button_type === "notification"){
+                announce_added(add_new_entry(button_type, "", ""));
                 return;
             }
-            const paths = selected_entries.map((entry) => entry.path);
-            if(paths.length > many_columns_threshold && !(await show_confirm_dialog(i18n_message("msg_list_picker_many_columns_confirm", [String(paths.length)])))) return;
+            if(button_type === "explore"){
+                announce_added(add_new_entry("explore", "/explore", ""));
+                return;
+            }
+            //リスト一覧: ユーザー名入力欄 → ログイン中のユーザー の順にリスト一覧のパスを決める
+            const current_login_screen_name = get_login_screen_name();
+            const user_lists_path = user_lists_path_of_input() ?? (current_login_screen_name === null ? null : `/${current_login_screen_name}/lists`);
+            if(user_lists_path === null){
+                await show_alert_dialog(i18n_message("msg_list_picker_user_required"));
+                user_input.focus();
+                return;
+            }
+            announce_added(add_new_entry("explore", user_lists_path, ""));
+        }
+        //一覧の内容を両ラックへ一括反映する。入力欄に未追加の文字列が残っていれば先に追加を試みる
+        async function apply_lists(){
+            if(manual_textarea.value.trim() !== "" && !(await add_manual_entries())) return;
+            const entries = all_entries();
+            const new_count = entries.filter((entry) => entry.section === null).length;
+            if(new_count > many_columns_threshold && !(await show_confirm_dialog(i18n_message("msg_list_picker_many_columns_confirm", [String(new_count)])))) return;
+            const closing_entries = entries.filter((entry) => entry.pending_close);
+            //実効ピン止め中のカラムを閉じるときは、その名前を並べて確認する
+            const pinned_closing_names = closing_entries
+                .filter((entry) => entry.type === "explore" && effective_column_setting(entry.section.querySelector("div[opd_column_type]"), "pinned", global_settings) === true)
+                .map((entry) => display_name_of(entry));
+            if(pinned_closing_names.length > 0 && !(await show_confirm_dialog(i18n_message("msg_column_manager_pinned_close_confirm", [pinned_closing_names.join("\n")])))) return;
+            const layout = {};
+            rack_ids.forEach((rack_id) => {
+                layout[rack_id] = rack_entries[rack_id].filter((entry) => !entry.pending_close).map((entry) => entry.section !== null ? {section: entry.section} : {type: entry.type, path: entry.path});
+            });
             close_dialog();
-            add_explore_columns(paths, insert_first);
+            apply_column_layout(layout, closing_entries.map((entry) => entry.section));
         }
 
+        //追加先ラックの切り替えは本体の追加先 (opd_add_target_rack) にも反映する
+        target_radios.forEach((radio) => {
+            radio.checked = radio.value === add_target_rack;
+            radio.addEventListener("change", function(){
+                if(!this.checked) return;
+                set_add_target_rack(this.value === "side" ? "side" : "main");
+            });
+        });
+        type_buttons.addEventListener("click", function(event){
+            const button = event.target instanceof Element ? event.target.closest(".opd_column_manager_type_btn") : null;
+            if(button === null) return;
+            add_entry_of_type(button.getAttribute("data-column-type"));
+        });
         show_btn.addEventListener("click", start_frame_from_input);
         user_input.addEventListener("keydown", function(event){
             if(event.key !== "Enter") return;
             event.preventDefault();
             start_frame_from_input();
         });
-        //そのとき ID を決められている表示中の listCell を文書順に、未選択のものだけ末尾へ追加する(枠と順番を重ねられるセル由来のものに限る)
+        //そのとき ID を決められている表示中の listCell を文書順に、一覧に無いものだけ追加先ラックの末尾へ追加する (枠と番号を重ねられるセル由来のものに限る)
         select_all_btn.addEventListener("click", function(){
             const frame_document = get_frame_document();
             if(!frame_document) return;
             request_helper_scan(frame_document);
             frame_document.querySelectorAll(list_cell_selector).forEach((cell) => {
                 const cell_info = resolve_list_cell_info(cell, frame_document.location.href);
-                if(cell_info !== null) add_entry(`/i/lists/${cell_info.id}`, cell_info.name);
+                if(cell_info !== null) add_entry_if_absent(`/i/lists/${cell_info.id}`, cell_info.name);
             });
-            render_selection();
+            render_lists();
             mark_frame_cells();
         });
-        clear_all_btn.addEventListener("click", function(){
-            selected_entries.length = 0;
-            render_selection();
+        //追加した行だけをすべて外す (既存カラムの行には触れない)
+        clear_new_btn.addEventListener("click", function(){
+            rack_ids.forEach((rack_id) => {
+                rack_entries[rack_id] = rack_entries[rack_id].filter((entry) => entry.section !== null);
+            });
+            render_lists();
             mark_frame_cells();
         });
         manual_add_btn.addEventListener("click", add_manual_entries);
@@ -2809,71 +3168,98 @@ function run(settings){
             event.preventDefault();
             add_manual_entries();
         });
-        //一覧の項目は除外ボタンのクリックで外す
-        selected_list.addEventListener("click", function(event){
-            const remove_btn = event.target instanceof Element ? event.target.closest(".opd_list_picker_remove_btn") : null;
-            if(remove_btn === null) return;
-            const item = remove_btn.closest(selected_item_selector);
-            const index = entry_index_of(item.getAttribute("data-list-path"));
-            if(index === -1) return;
-            selected_entries.splice(index, 1);
-            render_selection();
+        //行の操作ボタン: × で外す (既存カラムは閉じる印)、閉じる印の付いた行の「残す」で印を外す
+        racks_wrap.addEventListener("click", function(event){
+            const action_btn = event.target instanceof Element ? event.target.closest(".opd_column_manager_action_btn") : null;
+            if(action_btn === null) return;
+            const item = action_btn.closest(item_selector);
+            const located = locate_entry(item.getAttribute("data-key"));
+            if(located === null) return;
+            if(located.entry.pending_close){
+                located.entry.pending_close = false;
+                render_lists();
+                mark_frame_cells();
+                return;
+            }
+            remove_entry(located.entry.key);
+            render_lists();
             mark_frame_cells();
-            //フォーカスは同じ位置(末尾を外した場合は新しい末尾)の除外ボタンへ移し、項目が無くなれば入力欄へ移す
-            const next_entry = selected_entries[Math.min(index, selected_entries.length - 1)];
-            const next_item = next_entry === undefined ? null : find_selected_item(next_entry.path);
-            (next_item === null ? manual_textarea : next_item.querySelector(".opd_list_picker_remove_btn")).focus();
+            //フォーカスは同じ行の操作ボタン (行が消えた場合は同じ位置、末尾を外した場合は新しい末尾の行の操作ボタン) へ移し、そのラックに行が無くなれば入力欄へ移す
+            const rack = rack_entries[located.rack_id];
+            const next_entry = rack[Math.min(located.index, rack.length - 1)];
+            const next_item = next_entry === undefined ? null : find_item(next_entry.key);
+            (next_item === null ? manual_textarea : next_item.querySelector(".opd_column_manager_action_btn")).focus();
         });
-        //項目にフォーカスした状態の Alt+↑ / Alt+↓ で1段ずつ動かす
-        selected_list.addEventListener("keydown", function(event){
+        //行にフォーカスした状態の Alt+↑ / Alt+↓ で 1 段ずつ動かす (ラックの端では隣のラックへ移る)
+        racks_wrap.addEventListener("keydown", function(event){
             if(!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
-            const item = event.target instanceof Element ? event.target.closest(selected_item_selector) : null;
+            const item = event.target instanceof Element ? event.target.closest(item_selector) : null;
             if(item === null) return;
             event.preventDefault();
-            const list_path = item.getAttribute("data-list-path");
-            const from_index = entry_index_of(list_path);
-            if(from_index === -1) return;
-            move_entry_and_render(list_path, event.key === "ArrowUp" ? from_index - 1 : from_index + 1);
+            const located = locate_entry(item.getAttribute("data-key"));
+            if(located === null) return;
+            if(event.key === "ArrowUp"){
+                if(located.index > 0){
+                    move_entry_and_render(located.entry.key, located.rack_id, located.index - 1);
+                }else if(located.rack_id === "side"){
+                    move_entry_and_render(located.entry.key, "main", rack_entries.main.length);
+                }
+                return;
+            }
+            if(located.index < rack_entries[located.rack_id].length - 1){
+                move_entry_and_render(located.entry.key, located.rack_id, located.index + 1);
+            }else if(located.rack_id === "main"){
+                move_entry_and_render(located.entry.key, "side", 0);
+            }
         });
-        selected_list.addEventListener("dragstart", function(event){
-            const item = event.target instanceof Element ? event.target.closest(selected_item_selector) : null;
-            if(item === null) return;
-            dragging_path = item.getAttribute("data-list-path");
+        racks_wrap.addEventListener("dragstart", function(event){
+            const item = event.target instanceof Element ? event.target.closest(item_selector) : null;
+            if(item === null || item.hasAttribute("data-pending-close")){
+                event.preventDefault();
+                return;
+            }
+            dragging_key = item.getAttribute("data-key");
             event.dataTransfer.effectAllowed = "move";
-            //text/plain にすると入力欄へ落としたときに文字列が入るため、独自の type だけを持たせる(Firefox はデータが無いとドラッグを始めない)
-            event.dataTransfer.setData("application/x-opd-list-picker", dragging_path);
-            item.classList.add("opd_list_picker_dragging");
+            //text/plain にすると入力欄へ落としたときに文字列が入るため、独自の type だけを持たせる (Firefox はデータが無いとドラッグを始めない)
+            event.dataTransfer.setData("application/x-opd-column-manager", dragging_key);
+            item.classList.add("opd_column_manager_dragging");
         });
-        selected_list.addEventListener("dragend", end_drag);
-        //落とし先の目印は一覧の枠(項目の外)でも出す
-        selected_wrap.addEventListener("dragover", function(event){
-            if(dragging_path === null) return;
+        racks_wrap.addEventListener("dragend", end_drag);
+        //落とし先の目印はラックの枠 (行の外) でも出す
+        racks_wrap.addEventListener("dragover", function(event){
+            if(dragging_key === null) return;
+            const drop_target = drop_target_from_event(event);
+            if(drop_target === null) return;
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
             clear_drop_marks();
-            const drop_target = drop_target_from_event(event);
-            if(drop_target.index === -1) return;
-            const target_item = find_selected_item(selected_entries[drop_target.index].path);
-            if(target_item === null || target_item.getAttribute("data-list-path") === dragging_path) return;
-            target_item.classList.add(drop_target.is_after ? "opd_list_picker_drop_after" : "opd_list_picker_drop_before");
+            if(drop_target.index === -1){
+                rack_wraps[drop_target.rack_id].classList.add("opd_column_manager_drop_end");
+                return;
+            }
+            const target_entry = rack_entries[drop_target.rack_id][drop_target.index];
+            const target_item = find_item(target_entry.key);
+            if(target_item === null || target_entry.key === dragging_key) return;
+            target_item.classList.add(drop_target.is_after ? "opd_column_manager_drop_after" : "opd_column_manager_drop_before");
         });
-        selected_wrap.addEventListener("dragleave", function(event){
-            if(event.relatedTarget instanceof Node && selected_wrap.contains(event.relatedTarget)) return;
+        racks_wrap.addEventListener("dragleave", function(event){
+            if(event.relatedTarget instanceof Node && racks_wrap.contains(event.relatedTarget)) return;
             clear_drop_marks();
         });
-        selected_wrap.addEventListener("drop", function(event){
-            if(dragging_path === null) return;
-            event.preventDefault();
-            const dropped_path = dragging_path;
-            end_drag();
+        racks_wrap.addEventListener("drop", function(event){
+            if(dragging_key === null) return;
             const drop_target = drop_target_from_event(event);
-            const from_index = entry_index_of(dropped_path);
-            if(from_index === -1 || drop_target.index === -1) return;
-            move_entry_and_render(dropped_path, insert_index_of_drop(from_index, drop_target));
+            if(drop_target === null) return;
+            event.preventDefault();
+            const dropped_key = dragging_key;
+            end_drag();
+            const from = locate_entry(dropped_key);
+            if(from === null) return;
+            move_entry_and_render(dropped_key, drop_target.rack_id, insert_index_of_drop(from, drop_target));
         });
-        add_btn.addEventListener("click", add_selected_columns);
+        apply_btn.addEventListener("click", apply_lists);
         cancel_btn.addEventListener("click", close_dialog);
-        //背景(オーバーレイ自身)の上で押して離してクリックされたときだけ閉じる
+        //背景 (オーバーレイ自身) の上で押して離してクリックされたときだけ閉じる
         overlay.addEventListener("mousedown", function(event){
             is_overlay_mousedown = event.target === overlay;
         });
@@ -2893,10 +3279,9 @@ function run(settings){
         if(initial_frame_document !== null) prepare_frame_document(initial_frame_document);
 
         set_frame_loading(false);
-        render_selection();
-        user_input.focus();
+        render_lists();
+        get_dialog_focusable_elements(dialog)[0]?.focus();
         //ログイン中のユーザーが分かればそのままリスト一覧を表示する
-        const login_screen_name = get_login_screen_name();
         if(login_screen_name !== null){
             user_input.value = login_screen_name;
             start_frame(login_screen_name);
@@ -2904,39 +3289,16 @@ function run(settings){
             status_area.textContent = i18n_message("ui_list_picker_not_detected");
         }
     }
-    //Explore(ユニバーサル)カラム追加
-    document.getElementById("add_explore").addEventListener("click", function(){
-        add_explore_column("/explore");
-    });
-    //リストカラム追加(Exploreカラムの派生。ログインユーザーのリスト一覧を初期表示する)
-    document.getElementById("add_list").addEventListener("click", async function(){
-        //ダイアログ表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
-        const insert_first = is_shift_pressed;
-        const screen_name = get_login_screen_name();
-        let list_path = null;
-        if(screen_name){
-            list_path = `/${screen_name}/lists`;
-        }else{
-            const input = await show_prompt_dialog(i18n_message("msg_list_column_path_prompt"));
-            if(input === null) return;
-            list_path = resolve_list_column_path(input);
-            if(list_path === null){
-                await show_alert_dialog(i18n_message("msg_invalid_value_alert"));
-                return;
-            }
-        }
-        add_explore_column(list_path, insert_first);
-    });
-    //リストカラム複数追加(選択ダイアログを開く)。ダイアログ表示中は keyup を取りこぼすため、先頭追加(Shift)の判定はダイアログを開く前に確定する
-    document.getElementById("add_list_multi").addEventListener("click", function(){
-        open_list_picker_dialog(is_shift_pressed, this);
+    //カラム管理ダイアログを開く
+    document.getElementById("manage_columns").addEventListener("click", function(){
+        open_column_manager_dialog(this);
     });
     //ボタンとして振る舞わせるため、Enter と Space でもダイアログを開く
-    document.getElementById("add_list_multi").addEventListener("keydown", function(event){
+    document.getElementById("manage_columns").addEventListener("keydown", function(event){
         if(event.repeat) return;
         if(event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
-        open_list_picker_dialog(is_shift_pressed, this);
+        open_column_manager_dialog(this);
     });
     //全体設定ダイアログを開く
     document.getElementById("global_settings").addEventListener("click", function(){
@@ -3076,23 +3438,8 @@ function run(settings){
                 const dt_id = ev.dataTransfer.getData('text/plain');
                 const dr_elem = document.getElementById(dt_id);
                 if(dr_elem != null){
-                    if(dr_elem?.querySelector("div")?.getAttribute("opd_column_type") == 'explore'){
-                        let reload_path = "";
-                        if(dr_elem.querySelector("div").getAttribute("opd_pinned_path") != ""){
-                            reload_path = dr_elem.querySelector("div").getAttribute("opd_pinned_path");
-                        }else{
-                            reload_path = dr_elem.querySelector("div").getAttribute("opd_explore_path");
-                        }
-                        dr_elem.querySelector("div").querySelector("iframe").src = `https://x.com${reload_path}`;
-                        //読み込み直す先のパスに合わせて見出しを組み立て直す (読み込み後の取り込みで同じ値になる)
-                        //表示中と違うページを読み込むときはページタイトルを空にし、読み込み後に取り込むまで見出しには種別の名称を出す
-                        if(dr_elem.querySelector("div").getAttribute("opd_explore_path") !== reload_path) dr_elem.querySelector("div").setAttribute("opd_explore_title", "");
-                        dr_elem.querySelector("div").setAttribute("opd_explore_path", reload_path);
-                        update_column_heading(dr_elem.querySelector("div"));
-                    }
-                    //DOM 上の移動で iframe は src から読み込み直されるため、その読み込み先に合わせて副見出しを先に整える
-                    const dropped_frame = dr_elem.querySelector("div")?.querySelector("iframe");
-                    if(dropped_frame != null) reset_column_subbar_before_reload(dr_elem.querySelector("div"), new URL(dropped_frame.src).pathname);
+                    //DOM 上の移動で iframe は src から読み込み直されるため、読み込み先と見出し・副見出しを先に整える
+                    prepare_column_for_dom_move(dr_elem);
                     this.parentNode.insertBefore(dr_elem, this);
                     this.style.outline = '';
                     this.style.outlineOffset = '';
@@ -4416,7 +4763,7 @@ function set_title_favicon(){
 //DOM 契約:
 //  #opd_main_element                拡張の最上位要素。サイドラックの状態を属性と CSS カスタムプロパティで持つ
 //    opd_side_rack_position         "left" | "right"。サイドラックを置く側 (global_settings.side_rack_position を反映する)
-//    opd_add_target_rack            "main" | "side"。サイドバーのカラム追加系ボタンの追加先 (run() ごとの一時状態。既定 "main"、プロファイルには保存しない)
+//    opd_add_target_rack            "main" | "side"。カラム管理ダイアログで追加するカラムの追加先 (run() ごとの一時状態。既定 "main"、プロファイルには保存しない)。サイドバーの追加先切替ボタンとダイアログ内の追加先の選択で切り替える
 //    --opd_side_rack_width          サイドラックの現在の描画幅 (px 値。非表示のあいだは 0px)。#main_rack_element の width と left の計算に使う
 //  #main_rack_element               メインラックの横スクロールコンテナ。直下の #first_rack_element (flex row、高さは常に 100%) にメインラックのカラムが並ぶ
 //  #side_rack_element               サイドラック (position:fixed、flex row、高さ 100vh)。非表示のあいだは hidden 属性を付ける (display:flex の指定に負けないよう CSS で [hidden]{display:none} を明示する)
@@ -4432,12 +4779,14 @@ function set_title_favicon(){
 //  この復旧に SETTINGS_SCHEMA_VERSION の更新は要らない (欠損項目は既定値で補い、構造の復旧はスキーマ版に依らず行うため)。
 //  サイドラックを置く側は global_settings.side_rack_position ("left" | "right"、既定 "right") に持つ。カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない。
 //
-//run() スコープの関数 (サイドラックの状態はこの 3 つを通して読み書きする):
-//  get_add_target_column(insert_first)
-//    新しいカラムを insertAdjacentHTML("beforebegin") で入れる基準要素を、opd_add_target_rack の値に応じて返す。
-//    追加先が "main" なら #first_rack_element、"side" なら #side_rack_element を見て、insert_first が真ならそのラックの先頭カラム (最初の section.dsp_column_draggable_true)、偽または先頭カラムが無ければそのラック末尾の案内カラムを返す。
-//    カラム設定パネルのホバー中は draggable 属性が一時的に "false" になるため、先頭カラムの判定には draggable 属性ではなく .dsp_column_draggable_true クラスを使う。
-//    カラム追加の 5 経路 (タイムライン追加 / 通知追加 / Explore 追加 / リストカラム追加 / リスト複数追加ダイアログ) はすべてこの関数で基準要素を決める。
+//run() スコープの関数 (サイドラックの状態はこれらを通して読み書きする):
+//  get_rack_elements(rack_id) / get_rack_columns(rack_id)
+//    ラック ID ("main" | "side") からラックの要素と末尾の案内カラム、ラック直下の実カラム (section.dsp_column_draggable_true、DOM 順) を返す。
+//    カラム設定パネルのホバー中は draggable 属性が一時的に "false" になるため、実カラムの判定には draggable 属性ではなく .dsp_column_draggable_true クラスを使う。
+//  apply_column_layout(layout, closing_sections)
+//    カラムの追加・並べ替え・ラック間移動・閉じるをまとめて反映する唯一の経路 (カラム管理ダイアログの適用から呼ぶ)。
+//    ラックごとの最終的な並びを受け取り、動かさずに済む既存カラム (pick_stationary_sections) には触れず、それ以外の section を案内カラムを基準に insertBefore で最終位置へ入れる。
+//    既存カラムを動かす前には prepare_column_for_dom_move で読み込み先を整える (column_dd の drop も同じ関数を使う)。
 //  update_side_rack_state()
 //    サイドラックの表示状態を現在の状態から決めて反映する。#side_rack_element は「サイドラックに section.dsp_column_draggable_true が 1 つ以上ある」または「追加先が "side"」のときに表示し、それ以外は hidden 属性を付ける。
 //    案内カラム (.dsp_column_side_emptycolumn) は追加先が "side" のときだけ表示する。反映の直後に --opd_side_rack_width も同期で 1 回更新する (通常の更新は #side_rack_element を border-box で監視する ResizeObserver が行う)。
