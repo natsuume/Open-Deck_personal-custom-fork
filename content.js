@@ -4143,7 +4143,9 @@ function run(settings){
             let column_page_title = null;
             //exploreの処理
             if(column_type == 'explore'){
-                column_open_path = column_div.getAttribute("opd_explore_path");
+                //ポスト単体を表示中は、カラムの識別 (リスト / 検索) を保つため、表示中のポストではなく戻り先 (ポスト以外で最後に表示したページ) を保存する
+                const explore_path = column_div.getAttribute("opd_explore_path");
+                column_open_path = match_post_page_path(explore_path) !== null ? (column_div.getAttribute("opd_column_return_path") || initial_column_return_path("explore", explore_path)) : explore_path;
                 //ピン止め
                 column_pinned_save_path = column_div.getAttribute("opd_pinned_path");
                 //タイトル
