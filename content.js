@@ -3595,15 +3595,15 @@ function run(settings){
                 clearTimeout(subbar_fallback_timer);
                 try{
                     const frame_window = column_frame.contentWindow;
-                    const post_page_title = frame_window.document.title;
+                    const post_page_title = normalize_column_page_title(frame_window.document.title);
                     frame_window.history.pushState({}, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate"));
                     //X が popstate に応じなかった場合の保険。戻り先のパスのまま、ページタイトルがポストのものから変わらず、ポスト詳細の本文 (article[tabindex="-1"]) も残っていれば読み込み直して戻す
-                    //X は画面を切り替えるとページタイトルを書き換えるため、タイトルが変わっていれば遷移できたとみなす。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
+                    //X は画面を切り替えるとページタイトルを書き換えるため、タイトルが変わっていれば遷移できたとみなす (未読数の変化だけで変わったとみなさないよう正規化して比べる)。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
                     subbar_fallback_timer = setTimeout(function(){
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
-                            if(frame_window.document.title !== post_page_title) return;
+                            if(normalize_column_page_title(frame_window.document.title) !== post_page_title) return;
                             if(frame_window.document.querySelector('article[tabindex="-1"]') === null) return;
                             frame_window.location.replace(`https://x.com${return_path}`);
                         }catch(fallback_error){
