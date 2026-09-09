@@ -17,16 +17,53 @@ let last_load_profile = 0;
 let is_removed_default_style = false;
 let media_viewer_token = [];
 const column_auto_update_state = {
-    text_focus: {date: 0, active: false},
     media_viewer: {active: false},
     //開いているメッセージダイアログ (alert / confirm / prompt の代替) の数。1 以上のあいだは自動更新を止める
     message_dialog: {open_count: 0},
 };
-//テキストフォーカスの状態 (自動更新の停止判定に使う) を更新する。解除するときは経過時間の判定に使う日時も戻す
-function set_text_focus_state(is_active){
-    column_auto_update_state.text_focus.date = is_active ? Date.now() : 0;
-    column_auto_update_state.text_focus.active = is_active;
+//フォーカスの連鎖の末端がテキスト入力欄なら true (自動更新の停止条件。契約は「自動更新」節)
+//document.activeElement から、iframe なら contentDocument.activeElement、shadow host なら shadowRoot.activeElement を辿って末端の要素を得る。
+//別オリジンなどで中身を読めない iframe は入力中と見なさない
+function is_text_input_focused(){
+    let element = document.activeElement;
+    for (let depth = 0; depth < 16 && element; depth++) {
+        let inner_element = null;
+        if(element.tagName === "IFRAME"){
+            try{
+                inner_element = element.contentDocument?.activeElement ?? null;
+            }catch(e){
+                return false;
+            }
+        }else if(element.shadowRoot){
+            inner_element = element.shadowRoot.activeElement;
+        }
+        if(inner_element === null || inner_element === element) break;
+        element = inner_element;
+    }
+    return is_text_input_element(element);
 }
+//編集できるテキスト欄かどうか。isContentEditable、TEXTAREA、テキスト系 INPUT を対象にし、readOnly / disabled の欄と非テキスト型の INPUT は対象外
+//iframe 内の要素は別 realm のため instanceof では判定できず、要素かどうかは nodeType と tagName で見る
+function is_text_input_element(element){
+    if(!element || element.nodeType !== 1 || typeof element.tagName !== "string") return false;
+    if(element.isContentEditable) return true;
+    if(element.tagName === "TEXTAREA") return !element.readOnly && !element.disabled;
+    if(element.tagName !== "INPUT") return false;
+    const NON_TEXT_INPUT_TYPES = ["button", "submit", "reset", "checkbox", "radio", "range", "color", "file", "image", "hidden"];
+    if(NON_TEXT_INPUT_TYPES.includes(element.type)) return false;
+    return !element.readOnly && !element.disabled;
+}
+//カラム iframe のホバー属性 auto_reload_mouse_hover を親側のポインタ位置で直す (契約は「自動更新」節)。
+//ポインタが乗った要素がカラム iframe ならその iframe だけ "true"、それ以外なら全カラム iframe を "false" にする。
+//run() はプロファイル切替で同じ document 上を再実行するため、ここ (最上位) で 1 回だけ登録する。deck を表示していないページ (#opd_main_element が無い) では何もしない
+document.addEventListener("mouseover", function(event){
+    const main_element = document.getElementById("opd_main_element");
+    if(main_element === null) return;
+    const hovered_frame = event.target?.tagName === "IFRAME" ? event.target : null;
+    main_element.querySelectorAll("iframe[auto_reload_mouse_hover]").forEach((frame) => {
+        frame.setAttribute("auto_reload_mouse_hover", frame === hovered_frame ? "true" : "false");
+    });
+}, true);
 const ui_icon_define = {
     banner_hide:"icon/banner_hide.svg",
     top_bar_hide:"icon/top_hide.svg",
@@ -262,15 +299,6 @@ function run(settings){
     }
     profile_list_html = `<div class="profile_val_now" title="${i18n_message("ui_profile_current_title")}">${last_load_profile}</div><div class="dsp_profile_list"><div id="profile_btn_list">${profile_list_btn_html}</div></div>`;
     //console.log(profile_list_btn_html)
-    //カラム全体のテキストフォーカスの状態で自動更新を制御できるようにする
-    window.addEventListener('opd_post_focus', (e) => {
-        const detail = JSON.parse(e.detail);
-        if(detail){
-            set_text_focus_state(true);
-        }else{
-            set_text_focus_state(false);
-        }
-    });
     //画像表示パネル
     const media_viewer = new OpdExtMediaViewer();
     document.addEventListener('opd_send_media_info', (e) => {
@@ -3392,9 +3420,6 @@ function run(settings){
 
         const ext_load = () => {
             //TODO:今後を見据えてカラム拡張を容易に組み込めるようにする
-            const opd_utils = new OpdUtils();
-            opd_utils.Init(column_frame);
-
             if(column_type === "home" || column_type === "explore"){
                 const auto_reload = new OpdExtAutoReload();
                 auto_reload.Init(column_frame);
@@ -3654,11 +3679,6 @@ function run(settings){
             console.warn("post form: iframe の keydown を登録できませんでした->", e);
         }
         try{
-            new OpdUtils().Init(frame);
-        }catch(e){
-            console.warn("post form: OpdUtils を初期化できませんでした->", e);
-        }
-        try{
             //UITexts は ja と en の 2 言語しか無いため、UI 言語をどちらかに寄せる
             const ui_lang = chrome.i18n.getUILanguage().startsWith("ja") ? "ja" : "en";
             new OpdExtTextReview().Init(frame, ui_icon_define, ui_lang);
@@ -3732,14 +3752,12 @@ function run(settings){
         post_form_popover.querySelector(".opd_post_form_frame")?.focus?.();
     }
     //ポップオーバーを閉じる。iframe は破棄せず隠すだけなので書きかけの下書きは残る
-    //フォーカスの戻しとテキストフォーカスの解除は、フォーカスがポップオーバーの中にあるときだけ行う (非モーダルなので、composer 閉通知が届いたときに別のカラムの入力欄を使っている場合があり、そのフォーカスと停止フラグには触れない)
-    //フォーカスを戻すのを先にするのは、隠した後では iframe 内の focusout (テキストフォーカス解除の通知) が発火しないことがあるため。モーダルダイアログの inert が乗っているあいだはモーダルからフォーカスを奪わない
-    //テキストフォーカスの解除は通知に頼らず明示的に行い、自動更新の停止フラグが残らないようにする
+    //フォーカスの戻しは、フォーカスがポップオーバーの中にあるときだけ行う (非モーダルなので、composer 閉通知が届いたときに別のカラムの入力欄を使っている場合があり、そのフォーカスには触れない)
+    //モーダルダイアログの inert が乗っているあいだはモーダルからフォーカスを奪わない
     function close_post_form_popover(){
         if(!is_post_form_popover_open()) return;
         if(post_form_popover.contains(document.activeElement)){
             if(!is_post_form_popover_blocked_by_modal()) post_form_opener?.focus?.();
-            set_text_focus_state(false);
         }
         post_form_popover.hidden = true;
         post_form_opener?.setAttribute?.("aria-expanded", "false");
@@ -3969,7 +3987,7 @@ function run(settings){
         });
         const column_frame = column_div.querySelector("iframe");
         if(column_frame !== null){
-            //ホバー中は自動更新による先頭への遷移を止める
+            //ホバー中は自動更新を止める。mouseleave が届かず "true" が残った場合は、親 document の mouseover (最上位で登録) が直す
             column_frame.addEventListener("mouseover", function(){
                 this.setAttribute("auto_reload_mouse_hover", "true");
             });
@@ -3980,16 +3998,14 @@ function run(settings){
             column_div.querySelector(".opd_column_scroll_to_top")?.addEventListener("click", function(){
                 column_frame.contentWindow?.scrollTo({ top: 0, behavior: "auto" });
             });
-            //カラムバーの更新ボタン (表示の出し分けは apply_column_dom_state)。自動更新 1 回分と同じ処理 (タイムラインの更新 + 先頭へスクロール) をその場で行う
-            //iframe が更新対象のパス (is_column_reload_path) 以外 (ポスト単体など) を表示中は更新せず先頭へ戻すだけにする。別オリジンを表示していてパスを読めないときは何もしない
+            //カラムバーの更新ボタン (表示の出し分けは apply_column_dom_state)。設定に依らず「更新して先頭へ」: 先に先頭へ戻してから、更新対象のパス (is_column_reload_path) なら先頭保持付きで更新する
+            //別オリジンを表示していてパスを読めないときは何もしない
             column_div.querySelector(".opd_column_reload_btn")?.addEventListener("click", function(){
                 const path_name = column_frame_path_name(column_frame);
                 if(path_name === null) return;
-                if(!is_column_reload_path(path_name)){
-                    column_frame.contentWindow?.scrollTo({ top: 0, behavior: "auto" });
-                    return;
-                }
-                reload_column_and_scroll_to_top(column_frame);
+                column_frame.contentWindow?.scrollTo({ top: 0, behavior: "instant" });
+                if(!is_column_reload_path(path_name)) return;
+                reload_column(column_frame, true);
             });
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
             //iframe の history はタブ全体で共有され、back() は他のカラムの遷移まで巻き戻し、pushState はブラウザの「戻る」の段数を増やすため、replaceState + popstate で X の画面遷移を起こす (X のルーターは popstate で location を読み直す)
@@ -4187,7 +4203,7 @@ function run(settings){
     //自動更新 interval を冪等に再構成する: 実効 auto_reload と実効 auto_reload_time (ms) が動作中の interval (iframe 要素の opd_auto_reload_interval_id / opd_auto_reload_interval_ms) と同じなら何もせずカウントダウンを維持し、
     //異なるときだけ既存の interval を clear して作り直す (実効 auto_reload が false なら止めるだけ)
     //interval は毎回、iframe が更新対象のパス (is_column_reload_path) を表示していることを確かめ、iframe にマウスが乗っている (auto_reload_mouse_hover が "false" 以外) あいだは何もしない。
-    //is_auto_update() がカラム全体の自動更新を許可していれば reload_column_and_scroll_to_top で更新する
+    //is_auto_update() がカラム全体の自動更新を許可していれば reload_column で更新する (keep_top は発火時点の global_settings.auto_reload_keep_top を渡す)
     function apply_column_auto_reload(column_div){
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
@@ -4207,7 +4223,7 @@ function run(settings){
             if(column_frame.getAttribute("auto_reload_mouse_hover") != "false") return;
             //カラムの自動更新が全体的に許可されていない場合は自動更新を無効化する
             if(!column_frame.opd_auto_reload || !is_auto_update()) return;
-            reload_column_and_scroll_to_top(column_frame);
+            reload_column(column_frame, global_settings.auto_reload_keep_top === true);
         }, auto_reload_time);
     }
     //iframe が表示中のパス (pathname) を返す。iframe が無い・別オリジンを表示していて読めないときは null
@@ -4222,15 +4238,12 @@ function run(settings){
     function is_column_reload_path(path_name){
         return ['/home', '/search'].includes(path_name) || path_name.startsWith('/i/lists');
     }
-    //タイムラインを更新し、その 100ms 後に iframe を先頭までスクロールする (自動更新 1 回分の処理。カラムバーの更新ボタンからも呼ぶ)
-    //更新は OpdExtAutoReload の Reload (X の onRefresh を呼ぶ) で行う。iframe の load 前などで拡張がまだ無いときは更新せずスクロールだけ行う
-    function reload_column_and_scroll_to_top(column_frame){
+    //タイムラインを更新する (自動更新 1 回分の処理。カラムバーの更新ボタンからも呼ぶ)。更新は OpdExtAutoReload の Reload (X の onRefresh を呼ぶ) で行い、
+    //keep_top が true ならヘルパーが更新直後に先頭保持を始める。iframe の load 前などでヘルパーがまだ無いときは何もしない。content script 側からは更新後にスクロールしない
+    function reload_column(column_frame, keep_top){
         const frame_window = column_frame?.contentWindow;
         if(frame_window == null) return;
-        column_frame.opd_auto_reload?.Reload(frame_window);
-        setTimeout(() => {
-            column_frame.contentWindow?.scrollTo({ top: 0, behavior: 'auto' });
-        }, 100);
+        column_frame.opd_auto_reload?.Reload(frame_window, { keep_top: keep_top === true });
     }
     //自動更新 interval を止める。カラムを閉じる・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
     function stop_column_auto_reload(column_div){
@@ -4370,7 +4383,7 @@ function run(settings){
     //全体設定ダイアログを開く。opener_element: 閉じたときにフォーカスを戻す要素
     //#opd_main_element の直下にオーバーレイ #opd_global_settings_overlay (class "opd_dialog_overlay opd_global_settings_overlay") を 1 つだけ生成する (既に開いていればそこへフォーカスを移す)
     //ダイアログ本体は role="dialog" aria-modal="true" aria-labelledby で、次のフォームを持つ:
-    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM) / 自動更新 checkbox / 自動更新間隔 number (秒、AUTO_RELOAD_TIME_MIN_MS 〜 AUTO_RELOAD_TIME_MAX_MS を秒に直した範囲) / サイドラックの位置 select (left / right)
+    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM) / 自動更新 checkbox / 自動更新間隔 number (秒、AUTO_RELOAD_TIME_MIN_MS 〜 AUTO_RELOAD_TIME_MAX_MS を秒に直した範囲) / 自動更新後の先頭保持 checkbox / サイドラックの位置 select (left / right)
     //  status 領域 (id 付き、role="status" aria-live="polite"、高さを予約) と 適用 / キャンセル ボタン
     //適用: 検証に失敗したら status 領域へ msg_global_settings_invalid_width / msg_global_settings_invalid_interval を表示し、該当欄へ aria-invalid と status 領域を指す aria-describedby を付けてフォーカスし、閉じない
     //      成功したら該当欄の aria-invalid / aria-describedby を外し、global_settings を更新 → apply_global_settings_to_columns → apply_side_rack_position → 閉じる
@@ -4401,6 +4414,7 @@ function run(settings){
         <div class="opd_global_settings_row"><label for="opd_global_settings_column_width">${i18n_message("ui_global_settings_column_width_rem_label")}</label><input class="opd_input opd_global_settings_column_width opd_column_settings_input_text" id="opd_global_settings_column_width" type="number" min="${COLUMN_WIDTH_MIN_REM}" max="${COLUMN_WIDTH_MAX_REM}"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload">${i18n_message("ui_settings_auto_reload_label")}</label><input class="opd_switch opd_global_settings_auto_reload" id="opd_global_settings_auto_reload" type="checkbox"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload_time">${i18n_message("ui_settings_auto_reload_interval_label")}</label><span><input class="opd_input opd_global_settings_auto_reload_time opd_column_settings_input_text" id="opd_global_settings_auto_reload_time" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}">${i18n_message("ui_settings_seconds_suffix")}</span></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload_keep_top">${i18n_message("ui_global_settings_auto_reload_keep_top_label")}</label><input class="opd_switch opd_global_settings_auto_reload_keep_top" id="opd_global_settings_auto_reload_keep_top" type="checkbox"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_side_rack_position">${i18n_message("ui_global_settings_side_rack_position_label")}</label><select class="opd_select opd_global_settings_side_rack_position" id="opd_global_settings_side_rack_position"><option value="left">${i18n_message("ui_side_rack_position_left")}</option><option value="right">${i18n_message("ui_side_rack_position_right")}</option></select></div>
         <div class="opd_global_settings_status" id="opd_global_settings_status" role="status" aria-live="polite"></div>
         <div class="opd_global_settings_actions"><input class="opd_btn opd_btn_primary opd_global_settings_apply_btn" type="button" value="${i18n_message("ui_global_settings_apply_button")}"><input class="opd_btn opd_global_settings_cancel_btn" type="button" value="${i18n_message("ui_global_settings_cancel_button")}"></div>
@@ -4423,6 +4437,7 @@ function run(settings){
         const column_width_input = overlay.querySelector(".opd_global_settings_column_width");
         const auto_reload_checkbox = overlay.querySelector(".opd_global_settings_auto_reload");
         const auto_reload_time_input = overlay.querySelector(".opd_global_settings_auto_reload_time");
+        const auto_reload_keep_top_checkbox = overlay.querySelector(".opd_global_settings_auto_reload_keep_top");
         const side_rack_position_select = overlay.querySelector(".opd_global_settings_side_rack_position");
         const status_area = overlay.querySelector(".opd_global_settings_status");
         const apply_btn = overlay.querySelector(".opd_global_settings_apply_btn");
@@ -4439,6 +4454,7 @@ function run(settings){
         column_width_input.value = String(global_settings.column_width);
         auto_reload_checkbox.checked = global_settings.auto_reload;
         auto_reload_time_input.value = String(global_settings.auto_reload_time / 1000);
+        auto_reload_keep_top_checkbox.checked = global_settings.auto_reload_keep_top;
         side_rack_position_select.value = global_settings.side_rack_position;
 
         //ダイアログを閉じ、背景の inert を解除してフォーカスを開いた要素へ戻す
@@ -4491,6 +4507,7 @@ function run(settings){
                 column_width: column_width_value,
                 auto_reload: auto_reload_checkbox.checked,
                 auto_reload_time: auto_reload_time_ms,
+                auto_reload_keep_top: auto_reload_keep_top_checkbox.checked,
                 pinned: pinned_checkbox.checked,
                 side_rack_position: side_rack_position_select.value,
             });
@@ -4567,31 +4584,11 @@ function run(settings){
             });
         }
     }
-    //自動更新許可を取得する関数
-    function is_auto_update(stale_check = false){
-        //テキスト入力フォーカス中
-        if(column_auto_update_state.text_focus.active){
-            if (stale_check){
-                //一定時間以上継続している場合は更新不良とみなしてリセット
-                const FOCUS_STALE_MS = 5 * 60 * 1000;
-                if(Date.now() - column_auto_update_state.text_focus.date > FOCUS_STALE_MS){
-                    column_auto_update_state.text_focus.date = 0;
-                    column_auto_update_state.text_focus.active = false;
-                }else{
-                    return false;
-                }
-            }else{
-                return false;
-            }
-        }
-        //メディアビューワー表示中
-        if(column_auto_update_state.media_viewer.active){
-            return false;
-        }
-        //メッセージダイアログ表示中
-        if(column_auto_update_state.message_dialog.open_count > 0){
-            return false;
-        }
+    //自動更新を許可するかどうか (停止条件は「自動更新」節)。テキスト入力中・メディアビューア表示中・メッセージダイアログ表示中は false
+    function is_auto_update(){
+        if(is_text_input_focused()) return false;
+        if(column_auto_update_state.media_viewer.active) return false;
+        if(column_auto_update_state.message_dialog.open_count > 0) return false;
         return true;
     }
     //ランダムID作成
@@ -4767,7 +4764,7 @@ function main_dsp(react_root){
 //    global_settings: {banner, top_visible, tw_view_mode, column_width, auto_reload, auto_reload_time, auto_reload_keep_top, pinned, side_rack_position}
 //  }
 //  auto_reload_keep_top (boolean、既定 true) は自動更新後の先頭保持 (「自動更新」節) の有効 / 無効。全体でひとつの値で、カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない。
-//  保存値に無いキーは normalize_global_settings が既定値で埋めるため、キーの追加に SETTINGS_SCHEMA_VERSION の更新は要らない
+//  全体設定のキーは GLOBAL_SETTINGS_DEFAULT の項目と normalize_global_settings のキーごとの正規化行を一組で持つ。保存値に無い・型不正の値はその正規化行が既定値で埋めるため、キーの追加に SETTINGS_SCHEMA_VERSION の更新は要らない
 //  profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック。side_empty_column 型のカラムは保存しない
 //  column = {
 //    type, column_save_path, column_save_title,
@@ -4819,6 +4816,7 @@ const GLOBAL_SETTINGS_DEFAULT = Object.freeze({
     column_width: 30,
     auto_reload: false,
     auto_reload_time: 10000,
+    auto_reload_keep_top: true,
     pinned: false,
     side_rack_position: "right",
 });
@@ -4896,6 +4894,7 @@ function normalize_global_settings(global_settings){
     if(to_number_in_range_or_null(normalized.column_width, COLUMN_WIDTH_MIN_REM, COLUMN_WIDTH_MAX_REM) === null) normalized.column_width = GLOBAL_SETTINGS_DEFAULT.column_width;
     if(to_boolean_or_null(normalized.auto_reload) === null) normalized.auto_reload = GLOBAL_SETTINGS_DEFAULT.auto_reload;
     if(to_number_in_range_or_null(normalized.auto_reload_time, AUTO_RELOAD_TIME_MIN_MS, AUTO_RELOAD_TIME_MAX_MS) === null) normalized.auto_reload_time = GLOBAL_SETTINGS_DEFAULT.auto_reload_time;
+    if(to_boolean_or_null(normalized.auto_reload_keep_top) === null) normalized.auto_reload_keep_top = GLOBAL_SETTINGS_DEFAULT.auto_reload_keep_top;
     if(to_boolean_or_null(normalized.pinned) === null) normalized.pinned = GLOBAL_SETTINGS_DEFAULT.pinned;
     if(to_side_rack_position_or_null(normalized.side_rack_position) === null) normalized.side_rack_position = GLOBAL_SETTINGS_DEFAULT.side_rack_position;
     return normalized;

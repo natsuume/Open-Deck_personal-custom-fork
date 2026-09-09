@@ -21,7 +21,6 @@
       "js": [
         "load_stopper.js",
         "content.js",
-        "extensions/utils.js",
         "extensions/text_review.js",
         "extensions/auto_reload.js",
         "extensions/media_viewer_block.js",
@@ -34,7 +33,6 @@
     {
       "matches": ["https://*.twitter.com/*", "https://*.x.com/*"],
       "resources": [
-        "extensions/utils_helper.js",
         "extensions/text_review_helper.js",
         "extensions/auto_reload_helper.js",
         "extensions/media_viewer_block_helper.js",
