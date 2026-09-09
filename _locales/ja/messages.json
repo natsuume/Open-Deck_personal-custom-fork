@@ -59,20 +59,23 @@
   "ui_side_empty_column_message": {
     "message": "サイドラック: ここにカラムが追加されます"
   },
+  "ui_column_back_button": {
+    "message": "戻る"
+  },
   "ui_column_post_title": {
-    "message": "Post"
+    "message": "ポスト"
   },
   "ui_column_timeline_title": {
-    "message": "Timeline"
+    "message": "ホーム"
   },
   "ui_column_notifications_title": {
-    "message": "Notifications"
+    "message": "通知"
   },
   "ui_column_explore_title": {
-    "message": "Explore"
+    "message": "検索"
   },
   "ui_column_list_title": {
-    "message": "List"
+    "message": "リスト"
   },
   "ui_settings_header": {
     "message": "設定"

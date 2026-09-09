@@ -59,11 +59,14 @@
   "ui_side_empty_column_message": {
     "message": "Side rack: new columns are added here"
   },
+  "ui_column_back_button": {
+    "message": "Back"
+  },
   "ui_column_post_title": {
     "message": "Post"
   },
   "ui_column_timeline_title": {
-    "message": "Timeline"
+    "message": "Home"
   },
   "ui_column_notifications_title": {
     "message": "Notifications"
