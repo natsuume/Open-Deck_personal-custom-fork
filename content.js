@@ -3629,12 +3629,19 @@ function run(settings){
                 const return_title = column_div.getAttribute("opd_column_return_title");
                 clearTimeout(column_div.opd_subbar_fallback_timer);
                 column_div.opd_subbar_fallback_timer = null;
+                //読み込み直しで戻す。読み込み後の取り込み (load) は保存しないため、explore カラムは読み込み先を表示中のパスとしてここで保存する (デッキの再読込でポストが開き直されないようにする)
                 const reload_to_return_path = function(){
                     try{
                         column_frame.contentWindow.location.replace(`https://x.com${return_path}`);
                     }catch(reload_error){
                         console.warn("column subbar: 戻る操作を実行できませんでした->", reload_error);
+                        return;
                     }
+                    if(column_div.getAttribute("opd_column_type") !== "explore") return;
+                    column_div.setAttribute("opd_explore_path", return_path);
+                    if(return_title !== null) column_div.setAttribute("opd_explore_title", return_title);
+                    update_column_heading(column_div);
+                    column_settings_save("", last_load_profile);
                 };
                 if(return_title === null){
                     reload_to_return_path();
@@ -3664,7 +3671,7 @@ function run(settings){
                                 return;
                             }
                             if(current_title === return_title) return;
-                            frame_window.location.replace(`https://x.com${return_path}`);
+                            reload_to_return_path();
                         }catch(fallback_error){
                             //中身を読めなくなっていれば何もしない
                         }
