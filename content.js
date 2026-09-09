@@ -3044,6 +3044,8 @@ function run(settings){
                             reload_path = dr_elem.querySelector("div").getAttribute("opd_explore_path");
                         }
                         dr_elem.querySelector("div").querySelector("iframe").src = `https://x.com${reload_path}`;
+                        //読み込み直す先のパスに合わせて見出しを組み立て直す (読み込み後の取り込みで同じ値になる)
+                        dr_elem.querySelector("div").setAttribute("opd_explore_path", reload_path);
                         update_column_heading(dr_elem.querySelector("div"));
                     }
                     this.parentNode.insertBefore(dr_elem, this);
@@ -3582,15 +3584,20 @@ function run(settings){
             });
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
             //iframe の history はタブ全体で共有され back() は他のカラムの遷移まで巻き戻すため使わず、pushState + popstate で X の画面遷移を起こす
+            //読み込み直しの保険は 1 カラムにつき 1 つだけ予約し、再クリックで前の予約を取り消す
+            let subbar_fallback_timer = null;
             column_div.querySelector(".opd_column_subbar_back")?.addEventListener("click", function(){
                 const return_path = column_div.getAttribute("opd_column_return_path") || initial_column_return_path(column_div.getAttribute("opd_column_type"), column_div.getAttribute("opd_explore_path"));
+                clearTimeout(subbar_fallback_timer);
                 try{
                     const frame_window = column_frame.contentWindow;
                     frame_window.history.pushState({}, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate"));
-                    //X が popstate に応じなかった場合の保険。ポスト詳細の本文 (article[tabindex="-1"]) が残っていれば読み込み直して戻す
-                    setTimeout(function(){
+                    //X が popstate に応じなかった場合の保険。戻り先のパスのままポスト詳細の本文 (article[tabindex="-1"]) が残っていれば読み込み直して戻す
+                    //その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
+                    subbar_fallback_timer = setTimeout(function(){
                         try{
+                            if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
                             if(frame_window.document.querySelector('article[tabindex="-1"]') === null) return;
                             frame_window.location.replace(`https://x.com${return_path}`);
                         }catch(fallback_error){
