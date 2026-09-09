@@ -1980,11 +1980,12 @@ function run(settings){
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
     //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル
-    //読み込み前の about:blank など https 以外のページでは何も変えない
+    //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page){
         if(column_div == null || frame_page == null) return;
         const frame_url = new URL(frame_page.href);
         if(frame_url.protocol !== "https:") return;
+        if(is_overlay_page_path(frame_url.pathname)) return;
         const frame_path = `${frame_url.pathname}${frame_url.search}`;
         if(match_post_page_path(frame_url.pathname) === null){
             column_div.setAttribute("opd_column_return_path", frame_path);
@@ -1998,16 +1999,28 @@ function run(settings){
     let last_login_screen_name_retry_time = 0;
     //ログイン中の screen_name を取り直す最小間隔 (取得は全 iframe の走査を伴うため間隔をあける)
     const login_screen_name_retry_interval_ms = 1000;
+    //間隔内に見送った取り直しを、間隔が明けたときにもう一度だけ試す予約 (予約は同時に 1 つ)
+    let login_screen_name_retry_timer = null;
     //全 home / notification カラムの見出しを組み立て直す (文脈ラベルに出すログイン中の screen_name を反映する)
     function update_login_dependent_headings(){
         document.querySelectorAll('#opd_main_element div[opd_column_type="home"], #opd_main_element div[opd_column_type="notification"]').forEach((column_div) => update_column_heading(column_div));
     }
     //文脈ラベルが空のままの home / notification カラムが残っているあいだだけ、ログイン中の screen_name を取り直して見出しへ反映する
     //X のナビゲーションは iframe の読み込み後に描画されるため、カラムの遷移検知に相乗りして間隔をあけて試す
+    //間隔内に呼ばれて見送ったときは、その後に変化が起きなくても取り直せるよう、間隔が明けた時点でもう一度試す予約を入れる
     function retry_login_screen_name_headings(){
         if(document.querySelector('#opd_main_element :is(div[opd_column_type="home"], div[opd_column_type="notification"]) .column_bar .opd_column_label:empty') === null) return;
         const retry_time = Date.now();
-        if(retry_time - last_login_screen_name_retry_time < login_screen_name_retry_interval_ms) return;
+        const elapsed_ms = retry_time - last_login_screen_name_retry_time;
+        if(elapsed_ms < login_screen_name_retry_interval_ms){
+            if(login_screen_name_retry_timer === null){
+                login_screen_name_retry_timer = setTimeout(function(){
+                    login_screen_name_retry_timer = null;
+                    retry_login_screen_name_headings();
+                }, login_screen_name_retry_interval_ms - elapsed_ms);
+            }
+            return;
+        }
         last_login_screen_name_retry_time = retry_time;
         if(get_login_screen_name() === null) return;
         update_login_dependent_headings();
@@ -3609,28 +3622,35 @@ function run(settings){
             //iframe の history はタブ全体で共有され、back() は他のカラムの遷移まで巻き戻し、pushState はブラウザの「戻る」の段数を増やすため、replaceState + popstate で X の画面遷移を起こす (X のルーターは popstate で location を読み直す)
             //副見出しの表示はここでは更新せず、X が画面を描き直したときは遷移監視に、読み込み直したときは load に任せる (表示中のページに合わせて決める)
             //読み込み直しの保険は 1 カラムにつき 1 つだけ予約し (opd_subbar_fallback_timer)、再クリックと reset_column_subbar_before_reload で前の予約を取り消す
+            //戻り先ページのタイトルを記録していない (このカラムがポスト以外のページをまだ表示していない) ときは遷移の成否を判定できないため、popstate を試みず最初から読み込み直しで戻す
             column_div.querySelector(".opd_column_subbar_back")?.addEventListener("click", function(){
                 const return_path = column_div.getAttribute("opd_column_return_path") || initial_column_return_path(column_div.getAttribute("opd_column_type"), column_div.getAttribute("opd_explore_path"));
                 const return_title = column_div.getAttribute("opd_column_return_title");
                 clearTimeout(column_div.opd_subbar_fallback_timer);
                 column_div.opd_subbar_fallback_timer = null;
+                const reload_to_return_path = function(){
+                    try{
+                        column_frame.contentWindow.location.replace(`https://x.com${return_path}`);
+                    }catch(reload_error){
+                        console.warn("column subbar: 戻る操作を実行できませんでした->", reload_error);
+                    }
+                };
+                if(return_title === null){
+                    reload_to_return_path();
+                    return;
+                }
                 try{
                     const frame_window = column_frame.contentWindow;
-                    const post_page_title = normalize_column_page_title(frame_window.document.title);
                     frame_window.history.replaceState({}, "", return_path);
                     frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate"));
-                    //X が popstate に応じなかった場合の保険。1.5 秒後もパスが戻り先のままで、ページタイトルから遷移できたと分からなければ読み込み直して戻す
-                    //X は画面を切り替えるとページタイトルを書き換える (切り替え中は仮タイトル "X" のことがある) ため、戻り先ページのタイトルを記録していればそれか仮タイトルになっていること、記録が無ければクリック時のタイトルから変わっていることを遷移できた印とみなす
+                    //X が popstate に応じなかった場合の保険。1.5 秒後もパスが戻り先のままで、ページタイトルが戻り先ページのものになっていなければ読み込み直して戻す
+                    //X は画面を切り替えるとページタイトルを書き換える (切り替え中は仮タイトル "X" のことがある) ため、記録した戻り先ページのタイトルか仮タイトルになっていることを遷移できた印とみなす
                     //未読数の変化だけで変わったとみなさないよう正規化して比べる。その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
                     column_div.opd_subbar_fallback_timer = setTimeout(function(){
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
                             const current_title = normalize_column_page_title(frame_window.document.title);
-                            if(return_title !== null){
-                                if(current_title === return_title || current_title === "X" || current_title === "") return;
-                            }else if(current_title !== post_page_title){
-                                return;
-                            }
+                            if(current_title === return_title || current_title === "X" || current_title === "") return;
                             frame_window.location.replace(`https://x.com${return_path}`);
                         }catch(fallback_error){
                             //中身を読めなくなっていれば何もしない
@@ -3638,11 +3658,7 @@ function run(settings){
                     }, 1500);
                 }catch(e){
                     //中身を操作できない (別オリジン等) ときは読み込み直しで戻す
-                    try{
-                        column_frame.contentWindow.location.replace(`https://x.com${return_path}`);
-                    }catch(reload_error){
-                        console.warn("column subbar: 戻る操作を実行できませんでした->", reload_error);
-                    }
+                    reload_to_return_path();
                 }
             });
         }
@@ -4765,6 +4781,11 @@ function escape_html_text(value){
 //パスがリスト系ページ (/i/lists/<id> 配下、または /<screen_name>/lists 配下) を指すか
 function is_list_page_path(path){
     return /^\/(?:i\/lists|[^\/?#]+\/lists)(?:[\/?#]|$)/.test(path ?? "");
+}
+//パスが、表示中のページに重ねて開くオーバーレイ (投稿・返信のコンポーザー /compose/ 配下、ログイン等のフロー /i/flow/ 配下) を指すか
+//閉じると元のページに戻るため、カラムが表示しているページや戻り先としては扱わない
+function is_overlay_page_path(path){
+    return /^\/(?:compose|i\/flow)(?:[\/?#]|$)/.test(path ?? "");
 }
 //パスがポスト単体のページ (/<screen_name>/status/<id> 配下、または投稿者を含まない /i/web/status/<id> 配下) を指すか
 //指すなら投稿者の screen_name (無い形式では空文字) を、それ以外は null を返す。予約名 i は screen_name として扱わない
