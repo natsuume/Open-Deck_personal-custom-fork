@@ -10,15 +10,19 @@
 //  どの候補からも取れなければ更新せず console.warn を 1 回出す (次に取れるまで繰り返さない)。
 //
 //先頭保持 (keep_top):
-//  開始条件: keep_top が true で、更新関数を取得して呼べた直後の window.scrollY が 1 以下 (更新関数が無い・呼び出しが例外のときは始めない)
-//  保持中: window の scroll で scrollY が 0 より大きくなったら scrollTo({top:0, behavior:"instant"}) で先頭へ戻す
-//  終了条件: 開始から KEEP_TOP_WATCH_MS 経過 / 戻した回数が KEEP_TOP_MAX_CORRECTIONS に達した / ユーザ操作 (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知) があった
+//  開始条件: keep_top が true で、更新関数を呼ぶ直前の window.scrollY が 1 以下で、更新関数を取得して呼べた (更新関数が無い・呼び出しが例外のときは始めない)
+//  保持中: window の scroll で scrollY が 0 より大きくなったとき、直前 KEEP_TOP_MUTATION_WINDOW_MS 以内に DOM の childList の変化 (新着の挿入) があれば
+//          新着挿入に伴う位置合わせと見なして scrollTo({top:0, behavior:"instant"}) で先頭へ戻す (開始から同じ時間内の scroll も更新関数自身による位置変更と見なして戻す)。
+//          どちらでもなければユーザ操作によるスクロール (スクロールバーのドラッグ等) と見なして保持を終える
+//  終了条件: 開始から KEEP_TOP_WATCH_MS 経過 / 戻した回数が KEEP_TOP_MAX_CORRECTIONS に達した / ユーザ操作 (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知、または上記の DOM 変化を伴わない scroll) があった
 //  世代管理: 開始のたびに世代番号を進め、古い世代のタイマーと scroll 処理は何もしない (新しい更新が始まったら前の保持は無効になる)
 //  isFocusDisabled (更新直後の focus / scrollIntoView の抑制) とは別の状態として持つ
 (() => {
     //先頭保持を打ち切るまでの監視時間 (ms) と、先頭へ戻す回数の上限
     const KEEP_TOP_WATCH_MS = 8000;
     const KEEP_TOP_MAX_CORRECTIONS = 5;
+    //scroll を新着挿入に伴うものと見なす、直前の DOM 変化からの経過時間の上限 (ms)
+    const KEEP_TOP_MUTATION_WINDOW_MS = 250;
     let opd_reload_token = null;
     let isFocusDisabled = false;
     
@@ -192,12 +196,20 @@
     let keep_top_active = false;
     let keep_top_corrections = 0;
     let keep_top_timer = null;
+    //保持中の DOM の childList の変化を最後に観測した時刻 (performance.now())。scroll が新着挿入に伴うものかの判定に使う
+    let keep_top_last_mutation_at = -Infinity;
+    const keep_top_mutation_observer = new MutationObserver(() => {
+        keep_top_last_mutation_at = performance.now();
+    });
     //先頭保持を始める (契約は先頭コメント)。前の保持は無効にして世代を進める
     function start_keep_top(){
         stop_keep_top();
         const generation = ++keep_top_generation;
         keep_top_active = true;
         keep_top_corrections = 0;
+        //開始直後の scroll は更新関数自身による位置変更と見なすため、開始時刻を最初の観測時刻にする
+        keep_top_last_mutation_at = performance.now();
+        keep_top_mutation_observer.observe(document.documentElement, { childList: true, subtree: true });
         keep_top_timer = setTimeout(() => {
             if (generation !== keep_top_generation) return;
             stop_keep_top();
@@ -207,15 +219,21 @@
     function stop_keep_top(){
         keep_top_active = false;
         keep_top_generation++;
+        keep_top_mutation_observer.disconnect();
         if (keep_top_timer !== null) {
             clearTimeout(keep_top_timer);
             keep_top_timer = null;
         }
     }
-    //保持中に先頭から外れたら戻す。自分の scrollTo で起きる scroll は scrollY が 0 なので何もしない
+    //保持中に先頭から外れたら戻す。自分の scrollTo で起きる scroll は scrollY が 0 なので何もしない。
+    //直前に DOM の変化が無い scroll はユーザ操作 (スクロールバーのドラッグ等、入力イベントを伴わない移動) と見なして保持を終える
     window.addEventListener('scroll', () => {
         if (!keep_top_active) return;
         if (window.scrollY <= 0) return;
+        if (performance.now() - keep_top_last_mutation_at > KEEP_TOP_MUTATION_WINDOW_MS) {
+            stop_keep_top();
+            return;
+        }
         keep_top_corrections++;
         window.scrollTo({ top: 0, behavior: 'instant' });
         if (keep_top_corrections >= KEEP_TOP_MAX_CORRECTIONS) stop_keep_top();
@@ -242,6 +260,8 @@
         if(opd_reload_token && opd_reload_token !== detail.token) return;
         //新しい更新が始まったら前の保持は無効にする
         stop_keep_top();
+        //先頭にいたかどうかは更新関数を呼ぶ前に取る (更新関数が同期的に位置を変えても「更新前」の判定にする)
+        const was_at_top = window.scrollY <= 1;
         let is_reloaded = false;
         try {
             isFocusDisabled = true;
@@ -249,6 +269,6 @@
         } catch (err) {
             console.warn('reload_func threw->', err);
         }
-        if (is_reloaded && detail.keep_top === true && window.scrollY <= 1) start_keep_top();
+        if (is_reloaded && detail.keep_top === true && was_at_top) start_keep_top();
     }, true);
 })();
