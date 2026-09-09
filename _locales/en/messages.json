@@ -374,6 +374,9 @@
   "ui_global_settings_pinned_label": {
     "message": "Pin Explore / list columns"
   },
+  "ui_global_settings_auto_reload_keep_top_label": {
+    "message": "Keep columns at the top after auto-load if they were at the top"
+  },
   "ui_global_settings_side_rack_position_label": {
     "message": "Side rack position"
   },

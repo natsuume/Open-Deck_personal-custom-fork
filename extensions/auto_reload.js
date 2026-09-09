@@ -1,4 +1,4 @@
-// 自動更新機能で使用
+// 自動更新機能で使用。Reload(column_window, {keep_top}) でヘルパーへ 'opd_column_reload' を送る (契約は auto_reload_helper.js の先頭コメント)
 class OpdExtAutoReload {
     constructor() {
         this.opd_reload_token = null;
@@ -16,12 +16,12 @@ class OpdExtAutoReload {
                 }));
             });
         }
-        this.Reload = (column_window)=>{
+        this.Reload = (column_window, options = {})=>{
             if (!this.opd_reload_token) return false;
             column_window.document.dispatchEvent(new CustomEvent('opd_column_reload', {
                 bubbles: true,
                 composed: true,
-                detail: JSON.stringify({ token:this.opd_reload_token })
+                detail: JSON.stringify({ token:this.opd_reload_token, keep_top: options.keep_top === true })
             }));
         }
     }

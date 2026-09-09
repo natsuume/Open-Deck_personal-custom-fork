@@ -1,7 +1,29 @@
-//自動更新機能用
+//自動更新のヘルパー。カラム iframe の page world で動き、content script (extensions/auto_reload.js) からの CustomEvent で指示を受ける
+//
+//受け取るイベント (detail は JSON 文字列):
+//  'opd_column_reload_init'  {token}            照合用トークンを受け取る。以後の 'opd_column_reload' はトークンが一致するものだけ処理する
+//  'opd_column_reload'       {token, keep_top}  タイムラインを更新する。keep_top が true なら更新直後に先頭保持を始める (下記)
+//
+//更新関数の探索 (reload_func):
+//  div[data-testid="primaryColumn"] 内の section[role="region"] を先に、続けて document 内の残りの section[role="region"] を、それぞれ文書順に候補として並べ、
+//  候補の Fiber から親方向へ辿って onRefresh を持つ props が最初に取れた候補を使う (候補の要素があっても onRefresh が取れなければ次の候補へ進む)。
+//  どの候補からも取れなければ更新せず console.warn を 1 回出す (次に取れるまで繰り返さない)。
+//
+//先頭保持 (keep_top):
+//  開始条件: keep_top が true で、更新関数を呼ぶ直前の window.scrollY が 1 以下で、更新関数を取得して呼べた (更新関数が無い・呼び出しが例外のときは始めない)
+//  保持中: window の scroll で scrollY が 0 より大きくなったとき、直前 KEEP_TOP_MUTATION_WINDOW_MS 以内にタイムライン側 (div[data-testid="primaryColumn"]、無ければ document 全体) の childList の変化 (新着の挿入) があれば
+//          新着挿入に伴う位置合わせと見なして scrollTo({top:0, behavior:"instant"}) で先頭へ戻す (開始から同じ時間内の scroll も更新関数自身による位置変更と見なして戻す)。
+//          どちらでもなければユーザ操作によるスクロール (スクロールバーのドラッグ等) と見なして保持を終える
+//  終了条件: 開始から KEEP_TOP_WATCH_MS 経過 / 戻した回数が KEEP_TOP_MAX_CORRECTIONS に達した / ユーザ操作 (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知、または上記の DOM 変化を伴わない scroll) があった
+//  世代管理: 開始のたびに世代番号を進め、古い世代のタイマーと scroll 処理は何もしない (新しい更新が始まったら前の保持は無効になる)
+//  isFocusDisabled (更新直後の focus / scrollIntoView の抑制) とは別の状態として持つ
 (() => {
+    //先頭保持を打ち切るまでの監視時間 (ms) と、先頭へ戻す回数の上限
+    const KEEP_TOP_WATCH_MS = 8000;
+    const KEEP_TOP_MAX_CORRECTIONS = 5;
+    //scroll を新着挿入に伴うものと見なす、直前の DOM 変化からの経過時間の上限 (ms)
+    const KEEP_TOP_MUTATION_WINDOW_MS = 250;
     let opd_reload_token = null;
-    let reload_func = ()=>{};
     let isFocusDisabled = false;
     
     //ユーザー操作でフォーカス無効化を解除する
@@ -10,6 +32,8 @@
             isFocusDisabled = false;
         }, { capture: true, passive: true });
     });
+    //ユーザーが自分でスクロール・操作したら先頭保持を終える
+    ['wheel', 'touchstart', 'pointerdown', 'mousedown', 'keydown'].forEach(type => document.addEventListener(type, () => stop_keep_top(), { capture: true, passive: true }));
 
     // 自動更新時にフォーカスされる問題があるので、scrollIntoViewとfocusを一時的に無効化する
     HTMLElement.prototype.scrollIntoView = function(options) {
@@ -47,12 +71,43 @@
         return originalFocus.call(this, Object.assign({}, options, { preventScroll: true }));
     };
 
+    //更新対象の候補を、div[data-testid="primaryColumn"] 内の section[role="region"] → document 内の残りの section[role="region"] の順 (それぞれ文書順) で返す
+    function get_reload_candidates(){
+        const candidates = [];
+        const primary_column = document.querySelector('div[data-testid="primaryColumn"]');
+        if (primary_column) candidates.push(...primary_column.querySelectorAll('section[role="region"]'));
+        document.querySelectorAll('section[role="region"]').forEach((section) => {
+            if (!candidates.includes(section)) candidates.push(section);
+        });
+        return candidates;
+    }
+    //候補を順に試し、onRefresh を持つ props が最初に取れたものを返す。どの候補からも取れなければ null
+    function find_on_refresh_props(){
+        for (const candidate of get_reload_candidates()) {
+            const props = get_on_refresh_props(candidate);
+            if (props) return props;
+        }
+        return null;
+    }
+    //更新関数が見つからないことを既に警告したかどうか (次に見つかるまで警告を繰り返さない)
+    let is_reload_func_missing_warned = false;
     //タイムライン更新関数。React の fiber は current / alternate の 2 本で使い回されるため、
     //先取りして保持した onRefresh は古い描画の state を閉じ込めたまま呼ばれて更新されない。
-    //そのため保持せず、呼ぶたびに最新の fiber を探索して onRefresh を取り出す
-    reload_func = ()=>{
-        get_on_refresh_props(document.querySelector('section[role="region"]'))?.onRefresh();
-    };
+    //そのため保持せず、呼ぶたびに get_reload_candidates の探索順で最新の fiber を探索して onRefresh を取り出す。
+    //onRefresh を呼べたら true、見つからなければ false を返す
+    function reload_func(){
+        const props = find_on_refresh_props();
+        if (!props) {
+            if (!is_reload_func_missing_warned) {
+                is_reload_func_missing_warned = true;
+                console.warn('opd auto reload: 更新関数 (onRefresh) が見つかりません');
+            }
+            return false;
+        }
+        is_reload_func_missing_warned = false;
+        props.onRefresh();
+        return true;
+    }
 
     //onRefresh の存在する memoizedProps を、要素の Fiber から親方向 (return) へ最大 max_hop 段たどって取得する。
     //DOM ノードが指す fiber とそこから辿った fiber は古い側 (alternate) のことがあり、古い側の props には
@@ -136,6 +191,54 @@
         const propsKey = Object.getOwnPropertyNames(elem).find(k => k.includes(`__react${prop_type}$`));
         return propsKey ? elem[propsKey] : null;
     }
+    //先頭保持の状態 (isFocusDisabled とは別に持つ)
+    let keep_top_generation = 0;
+    let keep_top_active = false;
+    let keep_top_corrections = 0;
+    let keep_top_timer = null;
+    //保持中の DOM の childList の変化を最後に観測した時刻 (performance.now())。scroll が新着挿入に伴うものかの判定に使う
+    let keep_top_last_mutation_at = -Infinity;
+    const keep_top_mutation_observer = new MutationObserver(() => {
+        keep_top_last_mutation_at = performance.now();
+    });
+    //先頭保持を始める (契約は先頭コメント)。前の保持は無効にして世代を進める
+    function start_keep_top(){
+        stop_keep_top();
+        const generation = ++keep_top_generation;
+        keep_top_active = true;
+        keep_top_corrections = 0;
+        //開始直後の scroll は更新関数自身による位置変更と見なすため、開始時刻を最初の観測時刻にする
+        keep_top_last_mutation_at = performance.now();
+        //観測はタイムラインのある primaryColumn に絞り、無関係な領域の再描画で判定が濁らないようにする
+        keep_top_mutation_observer.observe(document.querySelector('div[data-testid="primaryColumn"]') ?? document.documentElement, { childList: true, subtree: true });
+        keep_top_timer = setTimeout(() => {
+            if (generation !== keep_top_generation) return;
+            stop_keep_top();
+        }, KEEP_TOP_WATCH_MS);
+    }
+    //先頭保持を終える。以後の scroll では戻さない
+    function stop_keep_top(){
+        keep_top_active = false;
+        keep_top_generation++;
+        keep_top_mutation_observer.disconnect();
+        if (keep_top_timer !== null) {
+            clearTimeout(keep_top_timer);
+            keep_top_timer = null;
+        }
+    }
+    //保持中に先頭から外れたら戻す。自分の scrollTo で起きる scroll は scrollY が 0 なので何もしない。
+    //直前に DOM の変化が無い scroll はユーザ操作 (スクロールバーのドラッグ等、入力イベントを伴わない移動) と見なして保持を終える
+    window.addEventListener('scroll', () => {
+        if (!keep_top_active) return;
+        if (window.scrollY <= 0) return;
+        if (performance.now() - keep_top_last_mutation_at > KEEP_TOP_MUTATION_WINDOW_MS) {
+            stop_keep_top();
+            return;
+        }
+        keep_top_corrections++;
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        if (keep_top_corrections >= KEEP_TOP_MAX_CORRECTIONS) stop_keep_top();
+    }, { passive: true });
     //機能動作用のトークンを設定
     window.addEventListener('opd_column_reload_init', (e)=>{
         try {
@@ -147,16 +250,26 @@
     }, true);
     //自動更新イベントを追加する
     window.addEventListener('opd_column_reload', (e) => {
-        const detail = JSON.parse(e.detail);
+        let detail;
+        try {
+            detail = JSON.parse(e.detail);
+        } catch (err) {
+            console.warn('invalid reload detail->', err);
+            return;
+        }
+        if(detail === null || typeof detail !== 'object') return;
         if(opd_reload_token && opd_reload_token !== detail.token) return;
-
-        if(typeof reload_func !== 'function') return;
-
+        //新しい更新が始まったら前の保持は無効にする
+        stop_keep_top();
+        //先頭にいたかどうかは更新関数を呼ぶ前に取る (更新関数が同期的に位置を変えても「更新前」の判定にする)
+        const was_at_top = window.scrollY <= 1;
+        let is_reloaded = false;
         try {
             isFocusDisabled = true;
-            reload_func();
+            is_reloaded = reload_func();
         } catch (err) {
             console.warn('reload_func threw->', err);
         }
+        if (is_reloaded && detail.keep_top === true && was_at_top) start_keep_top();
     }, true);
 })();

@@ -374,6 +374,9 @@
   "ui_global_settings_pinned_label": {
     "message": "Explore / リストカラムのピン止め"
   },
+  "ui_global_settings_auto_reload_keep_top_label": {
+    "message": "更新前に一番上だったカラムは更新後も一番上に保つ"
+  },
   "ui_global_settings_side_rack_position_label": {
     "message": "サイドラックの位置"
   },
