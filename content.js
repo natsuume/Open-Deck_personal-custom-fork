@@ -294,6 +294,9 @@ function run(settings){
     html{
         overflow-y:hidden !important;
     }
+    body{
+        margin: 0 !important;
+    }
     /*デザイントークン。色・余白・角丸・影・字形はすべてここで決め、各要素はこの変数だけを参照する。ダークモードは末尾の [opd-dsp-theme="dark"] で同じ変数を上書きする*/
     #opd_main_element{
         --opd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, Arial, sans-serif;
@@ -1599,8 +1602,8 @@ function run(settings){
     }
 
     /* メディアビューワー */
-    ::backdrop {
-        background: rgba(0, 0, 0, 0.9);
+    #opd_media_viewer::backdrop {
+        background: rgba(0, 0, 0, 0.6);
     }
     #opd_media_viewer:focus {
         outline: none;
@@ -1813,9 +1816,6 @@ function run(settings){
         update_side_rack_width();
     });
     side_rack_resize_observer.observe(document.getElementById("side_rack_element"), {box: "border-box"});
-
-    //favicon・タイトルを設定
-    set_title_favicon()
 
     //react-rootを監視しマスク処理をする
     observe_when_ready(
@@ -4680,87 +4680,6 @@ function main_dsp(react_root){
     react_root.style.overflow = "hidden";
 }
 
-//タイトルやfaviconを設定する
-function set_title_favicon(){
-    const OPD_TITLE = "Open-Deck";
-    const OPD_FAVICON_URL = chrome.runtime.getURL("icon.png");
-
-    //タイトルを設定する
-    document.head.querySelectorAll("title").forEach(elem => {
-        if(elem.dataset.opd !== "1") elem.remove();
-    });
-    let opd_title = document.head.querySelector('title[data-opd="1"]');
-    if(!opd_title){
-        opd_title = document.createElement("title");
-        opd_title.dataset.opd = "1";
-        opd_title.textContent = OPD_TITLE;
-        document.head.appendChild(opd_title);
-    }
-
-    //titleを監視
-    const title_observer = new MutationObserver(() => {
-        //自分の title の中身が変わっていたら戻す
-        if(opd_title.textContent !== OPD_TITLE){
-            opd_title.textContent = OPD_TITLE;
-        }
-        document.head.querySelectorAll("title").forEach(elem => {
-            if(elem.dataset.opd !== "1") elem.remove();
-        });
-    });
-    title_observer.observe(opd_title, {
-        childList: true,
-        characterData: true,
-        subtree: true
-    });
-    //headも監視
-    const head_title_observer = new MutationObserver(mutations => {
-        for(const m of mutations){
-            for(const node of m.addedNodes){
-                if(node.tagName === "TITLE" && node.dataset.opd !== "1"){
-                    node.remove();
-                }
-            }
-        }
-    });
-    head_title_observer.observe(document.head, { childList: true });
-
-    //faviconを設定する
-    document.head.querySelectorAll('link[rel="shortcut icon"], link[rel="icon"]').forEach(l => {
-        if(l.dataset.opd !== "1") l.remove();
-    });
-    let opd_favicon = document.head.querySelector('link[data-opd="1"]');
-    if(!opd_favicon){
-        opd_favicon = document.createElement("link");
-        opd_favicon.rel = "shortcut icon";
-        opd_favicon.href = OPD_FAVICON_URL;
-        opd_favicon.dataset.opd = "1";
-        document.head.appendChild(opd_favicon);
-    }
-
-    //favicon監視
-    const favicon_observer = new MutationObserver(() => {
-        if(opd_favicon.getAttribute("href") !== OPD_FAVICON_URL){
-            opd_favicon.setAttribute("href", OPD_FAVICON_URL);
-        }
-    });
-    favicon_observer.observe(opd_favicon, {
-        attributes: true,
-        attributeFilter: ["href", "rel"]
-    });
-    //head自体も監視
-    const head_favicon_observer = new MutationObserver(mutations => {
-        for(const m of mutations){
-            for(const node of m.addedNodes){
-                if(node.tagName === "LINK"
-                    && (node.rel === "shortcut icon" || node.rel === "icon")
-                    && node.dataset.opd !== "1"){
-                    node.remove();
-                }
-            }
-        }
-    });
-    head_favicon_observer.observe(document.head, { childList: true });
-}
 
 //===== サイドラック (side rack) =====
 //サイドラックは画面の左または右に固定して表示するカラム列で、カラム一覧 (メインラック) と重ならずに並ぶ。
