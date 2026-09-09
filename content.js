@@ -1979,7 +1979,7 @@ function run(settings){
         }
     }
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
-    //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)
+    //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)。タイトルが仮タイトル "X" か空のあいだは記録しない
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル。ポスト単体のページではパスだけ更新し、タイトルは残す (見出しは元のページのまま薄く表示するため)
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page){
@@ -1990,7 +1990,7 @@ function run(settings){
         const frame_path = `${frame_url.pathname}${frame_url.search}`;
         if(match_post_page_path(frame_url.pathname) === null){
             column_div.setAttribute("opd_column_return_path", frame_path);
-            column_div.setAttribute("opd_column_return_title", frame_page.page_title);
+            if(frame_page.page_title !== "X" && frame_page.page_title !== "") column_div.setAttribute("opd_column_return_title", frame_page.page_title);
         }
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
         column_div.setAttribute("opd_explore_path", frame_path);
@@ -3657,12 +3657,12 @@ function run(settings){
                         try{
                             if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
                             const current_title = normalize_column_page_title(frame_window.document.title);
-                            if(current_title === return_title) return;
                             if((current_title === "X" || current_title === "") && fallback_rechecks_left > 0){
                                 fallback_rechecks_left--;
                                 column_div.opd_subbar_fallback_timer = setTimeout(check_return_navigation, fallback_interval_ms);
                                 return;
                             }
+                            if(current_title === return_title) return;
                             frame_window.location.replace(`https://x.com${return_path}`);
                         }catch(fallback_error){
                             //中身を読めなくなっていれば何もしない
