@@ -4640,8 +4640,13 @@ function set_inert_except(container, overlay){
 
 //カラムテンプレートの %name% プレースホルダーを values の同名キーで一括置換する
 //1 パスで置換し、埋めた値を再走査しないため、値に %...% が含まれていても再展開されない
+//値はテキストと属性値の両方で安全になるよう HTML エスケープして埋める (ページタイトルやパスは X 側に由来する外部入力のため、そのまま markup にしない)
 function fill_column_template(template_html, values){
-    return template_html.replace(/%([a-z_]+)%/g, (token, name) => Object.hasOwn(values, name) ? String(values[name]) : token);
+    return template_html.replace(/%([a-z_]+)%/g, (token, name) => Object.hasOwn(values, name) ? escape_html_text(values[name]) : token);
+}
+//HTML のテキスト・属性値に埋めても markup として解釈されないよう、& < > " ' を文字参照に置き換える
+function escape_html_text(value){
+    return String(value).replace(/[&<>"']/g, (character) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[character]));
 }
 //パスがリスト系ページ (/i/lists/<id> 配下、または /<screen_name>/lists 配下) を指すか
 function is_list_page_path(path){
