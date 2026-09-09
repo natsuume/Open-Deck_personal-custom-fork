@@ -1665,7 +1665,8 @@ function run(settings){
                 const effective_pinned = saved_pinned ?? global_settings.pinned;
                 let init_pinned_path = "";
                 let init_column_save_path = column_setting.column_save_path;
-                let init_column_save_title = column_setting.column_save_title;
+                //保存したタイトルが無いプロファイルでは空文字にし、テンプレートへ "undefined" を埋めない
+                let init_column_save_title = column_setting.column_save_title ?? "";
                 //Exproleピン止め。実効ピン止め中はピン止めしたパスを開き直す (記録が無い場合は reconcile_column_pinned が現在のパスで補う)
                 //保存したパスと違うページを開くときは保存したタイトルを使わず、読み込み後に取り込むまで見出しには種別の名称を出す
                 if(column_setting.type == "explore" && effective_pinned && (column_setting.column_pinned_path ?? "") != ""){
