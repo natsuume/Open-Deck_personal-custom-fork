@@ -3230,14 +3230,14 @@ function run(settings){
             item.classList.add("opd_column_manager_dragging");
         });
         racks_wrap.addEventListener("dragend", end_drag);
-        //落とし先の目印はラックの枠 (行の外) でも出す
+        //落とし先の目印はラックの枠 (行の外) でも出す。落とせない場所 (ラックの隙間など) では目印を消し、ドロップも受け付けない
         racks_wrap.addEventListener("dragover", function(event){
             if(dragging_key === null) return;
+            clear_drop_marks();
             const drop_target = drop_target_from_event(event);
             if(drop_target === null) return;
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
-            clear_drop_marks();
             if(drop_target.index === -1){
                 rack_wraps[drop_target.rack_id].classList.add("opd_column_manager_drop_end");
                 return;
