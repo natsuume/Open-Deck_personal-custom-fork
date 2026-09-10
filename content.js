@@ -89,14 +89,11 @@ const ui_icon_define = {
     column_pinned:"icon/pinned.svg",
     column_widesize:"icon/column_w_size.svg",
     column_add_1:"icon/column_add_1st.svg",
-    column_add_2:"icon/column_add_2nd.svg",
     post_form:"icon/post.svg",
     add_timeline_column:"icon/tl_column.svg",
     add_notification_column:"icon/notice_column.svg",
     add_explore_column:"icon/exp_column.svg",
     add_list_column:"icon/list_column.svg",
-    add_target_main:"icon/add_target_main.svg",
-    add_target_side:"icon/add_target_side.svg",
     profile_save:"icon/profile_save.svg",
     profile_delete:"icon/profile_delete.svg",
     text_review:"icon/text_review.svg",
@@ -415,7 +412,6 @@ function run(settings){
     .dsp_btn_post_form_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.post_form)}); }
     .dsp_btn_manage_columns_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_1)}); }
     .dsp_btn_global_settings_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_settings)}); }
-    .dsp_btn_add_target_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.add_target_main)}); }
     .dsp_btn_profile_add_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_save)}); }
     .dsp_btn_profile_delete_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_delete)}); }
     .dsp_column_move_icon{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_move)}); }
@@ -423,7 +419,6 @@ function run(settings){
     .dsp_column_reload_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_reload)}); }
     .dsp_column_close_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_close)}); }
     .opd_icon_column_add_1{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_1)}); }
-    .opd_icon_column_add_2{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_2)}); }
     .media_viewer_icon_close{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_close)}); }
     .media_viewer_icon_forward{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.forward)}); }
     .media_viewer_icon_next{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.next)}); }
@@ -670,11 +665,6 @@ function run(settings){
     #open_post_form[aria-expanded="true"]{
         background: var(--opd-accent-hover);
     }
-    /*追加先切替は押下状態 (サイドラック) をアクセント色で示す*/
-    #add_target_toggle[aria-pressed="true"]{
-        background: var(--opd-accent-soft);
-        color: var(--opd-accent);
-    }
     #profile_delete:hover{
         background: var(--opd-danger-soft);
         color: var(--opd-danger);
@@ -774,8 +764,7 @@ function run(settings){
     #side_rack_element > section.dsp_column{
         flex: 0 0 auto;
     }
-    #side_rack_element[hidden],
-    .dsp_column_side_emptycolumn[hidden]{
+    #side_rack_element[hidden]{
         display: none;
     }
     #main_bar_empty_column{
@@ -785,35 +774,30 @@ function run(settings){
         overflow-x: scroll;
         scrollbar-width: none;
     }
-    /*案内カラム (メインラック末尾・サイドラック末尾)*/
-    .dsp_column_emptycolumn,
-    .dsp_column_side_emptycolumn{
+    /*案内カラム (メインラック末尾)*/
+    .dsp_column_emptycolumn{
         border: 2px dashed var(--opd-border);
         border-radius: var(--opd-radius-lg);
         color: var(--opd-text-muted);
     }
-    .dsp_column_emptycolumn > div,
-    .dsp_column_side_emptycolumn > div{
+    .dsp_column_emptycolumn > div{
         height: 100%;
         min-width: 30rem;
         display: flex;
         align-items: center;
         justify-content: center;
     }
-    .dsp_column_emptycolumn > div > div,
-    .dsp_column_side_emptycolumn > div > div{
+    .dsp_column_emptycolumn > div > div{
         display: flex;
         flex-direction: column;
         align-items: center;
     }
-    .dsp_column_emptycolumn .opd_icon,
-    .dsp_column_side_emptycolumn .opd_icon{
+    .dsp_column_emptycolumn .opd_icon{
         width: 3rem;
         height: 3rem;
         opacity: 0.6;
     }
-    .dsp_column_emptycolumn p,
-    .dsp_column_side_emptycolumn p{
+    .dsp_column_emptycolumn p{
         margin: 0.75rem 0 0;
         text-align: center;
         font-size: 0.875rem;
@@ -1641,7 +1625,7 @@ function run(settings){
             }
         }
 
-        & #main_bar_empty_column, div[opd_column_type="empty_column"], div[opd_column_type="side_empty_column"] {
+        & #main_bar_empty_column, div[opd_column_type="empty_column"] {
             filter: brightness(var(--opd-column-burn-in));
         }
     }
@@ -1768,18 +1752,14 @@ function run(settings){
         notification:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="notification" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${notification_settings_panel}<iframe allow="fullscreen" src="https://x.com/notifications" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
         explore:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="explore" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_setting_pinned="%column_setting_pinned%" opd_explore_path="%column_save_path%" opd_explore_title="%column_save_title%" opd_pinned_path="%column_pinned_save_path%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${explore_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com%column_save_path%" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`}
     };
-    //サイドラックの案内カラム。プロファイルには保存せず、run() ごとに #side_rack_element の末尾へ 1 つ作る
-    const side_empty_column_template = `<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_side_emptycolumn"><div opd_column_type="side_empty_column" opd_column_width="%column_width_attr%"><div><span class="opd_icon opd_icon_column_add_2" aria-hidden="true"></span><p>${i18n_message("ui_side_empty_column_message")}</p></div></div></section>`;
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="manage_columns" tabindex="0" role="button" aria-haspopup="dialog" title="${i18n_message("ui_manage_columns_title")}"><div class="dsp_btn_manage_columns_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" id="add_target_toggle" tabindex="0" role="button" aria-pressed="false" title="${i18n_message("ui_add_target_main_title")}"><div class="dsp_btn_add_target_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
+    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="manage_columns" tabindex="0" role="button" aria-haspopup="dialog" title="${i18n_message("ui_manage_columns_title")}"><div class="dsp_btn_manage_columns_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
     let main_column_html = ``;
     let side_column_html = ``;
     //カラム配列の empty_column より後をサイドラックへ振り分けるための検出状態
     let is_main_rack_end = false;
-    //カラム追加系ボタンの追加先ラック ("main" | "side")
-    let add_target_rack = "main";
     //スクロール検出用
     let scroll_block = true;
     //
@@ -1848,14 +1828,12 @@ function run(settings){
             }
         }
     }
-    //初期挿入HTML作成。サイドラックはメインラックの後に置き、末尾に案内カラムを 1 つ持たせる
-    const side_empty_column_html = fill_column_template(side_empty_column_template, {column_num: create_random_id(), column_width_attr: "inherit"});
-    ins_html.innerHTML = `${side_bar}<div id="main_rack_element"><div id="first_rack_element" style="height: 100%;display:flex;flex-direction:row;">${main_column_html}</div></div><div id="side_rack_element">${side_column_html}${side_empty_column_html}</div>`;
+    //初期挿入HTML作成。サイドラックはメインラックの後に置く
+    ins_html.innerHTML = `${side_bar}<div id="main_rack_element"><div id="first_rack_element" style="height: 100%;display:flex;flex-direction:row;">${main_column_html}</div></div><div id="side_rack_element">${side_column_html}</div>`;
     //HTML挿入
     document.body.insertAdjacentElement("afterbegin", ins_html);
-    //サイドラックの位置と追加先ラックを属性へ反映する
+    //サイドラックの位置を属性へ反映する
     apply_side_rack_position();
-    ins_html.setAttribute("opd_add_target_rack", add_target_rack);
     //サイドラックの描画幅の変化を --opd_side_rack_width へ反映する
     const side_rack_resize_observer = new ResizeObserver(function(){
         update_side_rack_width();
@@ -1914,17 +1892,13 @@ function run(settings){
         if(main_element === null || side_rack === null) return;
         main_element.style.setProperty("--opd_side_rack_width", `${side_rack.getBoundingClientRect().width}px`);
     }
-    //サイドラックの表示状態を現在の状態から決めて反映する。カラムの追加・閉じる・ドラッグ移動・追加先切替・起動時に呼ぶ
-    //表示条件: サイドラックに section.dsp_column_draggable_true が 1 つ以上ある、または追加先が "side"
-    //案内カラム (.dsp_column_side_emptycolumn) は追加先が "side" のときだけ表示する
+    //サイドラックの表示状態を現在の状態から決めて反映する。カラムの追加・閉じる・ドラッグ移動・起動時に呼ぶ
+    //表示条件: サイドラックに section.dsp_column_draggable_true が 1 つ以上ある
     function update_side_rack_state(){
         const side_rack = document.getElementById("side_rack_element");
         if(side_rack === null) return;
-        const is_side_target = add_target_rack === "side";
         const has_side_column = side_rack.querySelector(":scope > section.dsp_column_draggable_true") !== null;
-        side_rack.hidden = !(has_side_column || is_side_target);
-        const side_empty_column = side_rack.querySelector(".dsp_column_side_emptycolumn");
-        if(side_empty_column !== null) side_empty_column.hidden = !is_side_target;
+        side_rack.hidden = !has_side_column;
         //ResizeObserver の反映を待たずに幅を合わせる
         update_side_rack_width();
     }
@@ -2209,33 +2183,6 @@ function run(settings){
     document.querySelector("#side_rack_element").addEventListener("scrollend", function(){
         document.querySelector("#side_rack_element").scrollTop = 0;
     })
-    //カラム追加先ラックを next_target ("main" | "side") にし、属性・ボタンの表示・サイドラックの表示状態へ反映する
-    function set_add_target_rack(next_target){
-        add_target_rack = next_target;
-        const is_side_target = add_target_rack === "side";
-        document.getElementById("opd_main_element")?.setAttribute("opd_add_target_rack", add_target_rack);
-        const toggle_btn = document.getElementById("add_target_toggle");
-        if(toggle_btn !== null){
-            toggle_btn.setAttribute("aria-pressed", is_side_target ? "true" : "false");
-            toggle_btn.title = i18n_message(is_side_target ? "ui_add_target_side_title" : "ui_add_target_main_title");
-            const toggle_icon = toggle_btn.querySelector(".dsp_btn_add_target_img");
-            if(toggle_icon !== null){
-                toggle_icon.style.setProperty("--opd-icon", `url(${chrome.runtime.getURL(is_side_target ? ui_icon_define.add_target_side : ui_icon_define.add_target_main)})`);
-            }
-        }
-        update_side_rack_state();
-    }
-    //カラム追加先の切替
-    document.getElementById("add_target_toggle").addEventListener("click", function(){
-        set_add_target_rack(add_target_rack === "side" ? "main" : "side");
-    });
-    //ボタンとして振る舞わせるため、Enter と Space でも切り替える
-    document.getElementById("add_target_toggle").addEventListener("keydown", function(event){
-        if(event.repeat) return;
-        if(event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        set_add_target_rack(add_target_rack === "side" ? "main" : "side");
-    });
     //プロファイルローダー
     document.getElementById("profile_load_save").addEventListener("click", function(){
         window.open(chrome.runtime.getURL("profile_debug.html"), "OPD-Profile-Loader", 'width=720, height=600');
@@ -2266,10 +2213,11 @@ function run(settings){
     });
     //===== カラムの追加・並べ替え・閉じるの一括反映 (カラム管理ダイアログの適用処理) =====
     //ラック ID ("main" | "side") からラックの要素と末尾の案内カラム (section) を返す。案内カラムは新しいカラムを末尾に入れるときの基準要素になる
+    //案内カラムはメインラックだけにある。サイドラックでは null を返し、insertBefore の基準が null = ラックの末尾になる
     function get_rack_elements(rack_id){
         const is_side = rack_id === "side";
         const rack_element = document.getElementById(is_side ? "side_rack_element" : "first_rack_element");
-        const guide_column = rack_element?.querySelector(is_side ? ":scope > .dsp_column_side_emptycolumn" : ":scope > .dsp_column_emptycolumn") ?? null;
+        const guide_column = is_side ? null : (rack_element?.querySelector(":scope > .dsp_column_emptycolumn") ?? null);
         return {rack_element: rack_element, guide_column: guide_column};
     }
     //ラック直下の実カラム (section.dsp_column_draggable_true) を DOM 順に返す
@@ -2462,7 +2410,7 @@ function run(settings){
         <div class="opd_column_manager_body">
         <div class="opd_column_manager_add">
         <h3>${i18n_message("ui_column_manager_add_header")}</h3>
-        <div class="opd_column_manager_target_row" role="radiogroup" aria-labelledby="opd_column_manager_target_label"><span id="opd_column_manager_target_label">${i18n_message("ui_column_manager_target_label")}</span><label><input class="opd_radio opd_column_manager_target_radio" type="radio" name="opd_column_manager_target" value="main">${i18n_message("ui_column_manager_target_main")}</label><label><input class="opd_radio opd_column_manager_target_radio" type="radio" name="opd_column_manager_target" value="side">${i18n_message("ui_column_manager_target_side")}</label></div>
+        <div class="opd_column_manager_target_row" role="radiogroup" aria-labelledby="opd_column_manager_target_label"><span id="opd_column_manager_target_label">${i18n_message("ui_column_manager_target_label")}</span><label><input class="opd_radio opd_column_manager_target_radio" type="radio" name="opd_column_manager_target" value="main" checked>${i18n_message("ui_column_manager_target_main")}</label><label><input class="opd_radio opd_column_manager_target_radio" type="radio" name="opd_column_manager_target" value="side">${i18n_message("ui_column_manager_target_side")}</label></div>
         <div class="opd_column_manager_type_buttons">
         <button type="button" class="opd_btn opd_btn_sm opd_column_manager_type_btn" data-column-type="home"><span class="opd_column_manager_type_icon" data-column-type="home" aria-hidden="true"></span>${i18n_message("ui_column_manager_type_home")}</button>
         <button type="button" class="opd_btn opd_btn_sm opd_column_manager_type_btn" data-column-type="notification"><span class="opd_column_manager_type_icon" data-column-type="notification" aria-hidden="true"></span>${i18n_message("ui_column_manager_type_notification")}</button>
@@ -3172,14 +3120,6 @@ function run(settings){
             apply_column_layout(layout, closing_entries.map((entry) => entry.section));
         }
 
-        //追加先ラックの切り替えは本体の追加先 (opd_add_target_rack) にも反映する
-        target_radios.forEach((radio) => {
-            radio.checked = radio.value === add_target_rack;
-            radio.addEventListener("change", function(){
-                if(!this.checked) return;
-                set_add_target_rack(this.value === "side" ? "side" : "main");
-            });
-        });
         type_buttons.addEventListener("click", function(event){
             const button = event.target instanceof Element ? event.target.closest(".opd_column_manager_type_btn") : null;
             if(button === null) return;
@@ -4303,7 +4243,7 @@ function run(settings){
         });
     }
     //全体設定の変更を全カラムへ反映する: 適用表の対象カラム (home / notification / explore) それぞれに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
-    //構造用カラム (main_bar_empty_column / empty_column / side_empty_column / dsp_column) には触れない
+    //構造用カラム (main_bar_empty_column / empty_column / dsp_column) には触れない
     function apply_global_settings_to_columns(){
         get_settings_target_columns().forEach((column_div) => {
             apply_column_dom_state(column_div);
@@ -4594,8 +4534,6 @@ function run(settings){
         for (let index = 0; index < column_divs.length; index++) {
             const column_div = column_divs[index];
             const column_type = column_div.getAttribute("opd_column_type");
-            //サイドラックの案内カラムは run() が常に 1 つ作るためプロファイルには保存しない
-            if(column_type == "side_empty_column") continue;
             let column_open_path = "";
             let column_pinned_save_path = "";
             let column_page_title = null;

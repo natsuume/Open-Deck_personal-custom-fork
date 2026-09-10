@@ -35,12 +35,6 @@
   "ui_manage_columns_title": {
     "message": "Manage columns (add, reorder, close)"
   },
-  "ui_add_target_main_title": {
-    "message": "Add columns to: main rack (click to switch to the side rack)"
-  },
-  "ui_add_target_side_title": {
-    "message": "Add columns to: side rack (click to switch to the main rack)"
-  },
   "ui_profile_save_title": {
     "message": "Save profile"
   },
@@ -49,9 +43,6 @@
   },
   "ui_empty_column_message": {
     "message": "Add a column from the left bar"
-  },
-  "ui_side_empty_column_message": {
-    "message": "Side rack: new columns are added here"
   },
   "ui_column_back_button": {
     "message": "Close post"
