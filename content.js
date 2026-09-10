@@ -67,6 +67,17 @@ document.addEventListener("mouseover", function(event){
         frame.setAttribute("auto_reload_mouse_hover", frame === hovered_frame ? "true" : "false");
     });
 }, true);
+//deck のタブが visible に戻ったときに呼ぶ関数。run() が reload_stale_columns_on_visible を代入する。
+//run() の再実行では代入が上書きされるだけでリスナーは増えない
+let deck_visible_handler = null;
+//タブが visible に戻ったときに、古くなったカラムを 1 回更新する (契約は「自動更新」節)。
+//run() はプロファイル切替で同じ document 上を再実行するため、ここ (最上位) で 1 回だけ登録する。
+//deck_visible_handler が未代入 (run() の実行前・deck を表示していないページ) なら何もしない
+document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState !== "visible") return;
+    if(typeof deck_visible_handler !== "function") return;
+    deck_visible_handler();
+});
 const ui_icon_define = {
     banner_hide:"icon/banner_hide.svg",
     top_bar_hide:"icon/top_hide.svg",
@@ -290,6 +301,9 @@ if(location.href == "https://twitter.com/run-opdeck" || location.href == "https:
     }
 }
 function run(settings){
+    //最上位の visibilitychange リスナーから呼ばれる関数 (reload_stale_columns_on_visible は関数宣言なので巻き上げで参照できる) を、
+    //後続の DOM 構築が途中で例外を投げても代入が済んでいるように run() の冒頭で登録する
+    deck_visible_handler = reload_stale_columns_on_visible;
     //console.log(settings)
     //現在のプロファイルの全体設定。run() の呼び出し元 (init 内の 2 箇所とプロファイル切替) は
     //{column_settings, global_settings} の形で、読み込むプロファイルの global_settings を必ず渡す
@@ -3427,6 +3441,8 @@ function run(settings){
                 const auto_reload = new OpdExtAutoReload();
                 auto_reload.Init(column_frame);
                 column_frame.opd_auto_reload = auto_reload;
+                //load 時に X 自身が最新を取得しているため、最終更新時刻の初期値は load 時刻にする
+                column_frame.opd_auto_reload_last_reload_at = Date.now();
 
                 const blocker = new OpdMediaViewerBlocker();
                 blocker.Init(column_frame);
@@ -4205,8 +4221,7 @@ function run(settings){
     }
     //自動更新 interval を冪等に再構成する: 実効 auto_reload と実効 auto_reload_time (ms) が動作中の interval (iframe 要素の opd_auto_reload_interval_id / opd_auto_reload_interval_ms) と同じなら何もせずカウントダウンを維持し、
     //異なるときだけ既存の interval を clear して作り直す (実効 auto_reload が false なら止めるだけ)
-    //interval は毎回、iframe が更新対象のパス (is_column_reload_path) を表示していることを確かめ、iframe にマウスが乗っている (auto_reload_mouse_hover が "false" 以外) あいだは何もしない。
-    //is_auto_update() がカラム全体の自動更新を許可していれば reload_column で更新する (keep_top は発火時点の global_settings.auto_reload_keep_top を渡す)
+    //interval は発火のたびに try_auto_reload_column を呼ぶ (interval は間隔が変わらない限り作り直さないため、設定値は interval 作成時に固定せず発火のたびに読む)
     function apply_column_auto_reload(column_div){
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
@@ -4219,15 +4234,23 @@ function run(settings){
         if(!is_enabled) return;
         column_frame.opd_auto_reload_interval_ms = auto_reload_time;
         column_frame.opd_auto_reload_interval_id = setInterval(function(){
-            const path_name = column_frame_path_name(column_frame);
-            //別オリジンを表示しているあいだは自動更新しない
-            if(path_name === null) return;
-            if(!is_column_reload_path(path_name)) return;
-            if(column_frame.getAttribute("auto_reload_mouse_hover") != "false") return;
-            //カラムの自動更新が全体的に許可されていない場合は自動更新を無効化する
-            if(!column_frame.opd_auto_reload || !is_auto_update()) return;
-            reload_column(column_frame, global_settings.auto_reload_keep_top === true);
+            try_auto_reload_column(column_frame);
         }, auto_reload_time);
+    }
+    //自動更新 1 回分の判定と実行。次を確かめ、1 つでも満たさなければ何もしない:
+    //  iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
+    //満たせば reload_column(column_frame, keep_top) で更新して true を返し、満たさなければ false を返す。keep_top には呼び出し時点の global_settings.auto_reload_keep_top を渡す
+    //interval の発火と、hidden からの復帰時 (reload_stale_columns_on_visible) の両方から呼ぶ
+    function try_auto_reload_column(column_frame){
+        const path_name = column_frame_path_name(column_frame);
+        //別オリジンを表示しているあいだは自動更新しない
+        if(path_name === null) return false;
+        if(!is_column_reload_path(path_name)) return false;
+        if(column_frame.getAttribute("auto_reload_mouse_hover") != "false") return false;
+        //カラムの自動更新が全体的に許可されていない場合は自動更新を無効化する
+        if(!column_frame.opd_auto_reload || !is_auto_update()) return false;
+        reload_column(column_frame, global_settings.auto_reload_keep_top === true);
+        return true;
     }
     //iframe が表示中のパス (pathname) を返す。iframe が無い・別オリジンを表示していて読めないときは null
     function column_frame_path_name(column_frame){
@@ -4242,10 +4265,12 @@ function run(settings){
         return ['/home', '/search'].includes(path_name) || path_name.startsWith('/i/lists');
     }
     //タイムラインを更新する (自動更新 1 回分の処理。カラムバーの更新ボタンからも呼ぶ)。更新は OpdExtAutoReload の Reload (X の onRefresh を呼ぶ) で行い、
-    //keep_top が true ならヘルパーが更新直後に先頭保持を始める。iframe の load 前などでヘルパーがまだ無いときは何もしない。content script 側からは更新後にスクロールしない
+    //keep_top が true ならヘルパーが更新直後に先頭保持を始める。iframe の load 前などでヘルパーがまだ無いときはヘルパーへ送らない (最終更新時刻の記録は行う)。content script 側からは更新後にスクロールしない
+    //更新のたびに iframe 要素の opd_auto_reload_last_reload_at を Date.now() にして、hidden からの復帰時の古さ判定に使う
     function reload_column(column_frame, keep_top){
         const frame_window = column_frame?.contentWindow;
         if(frame_window == null) return;
+        column_frame.opd_auto_reload_last_reload_at = Date.now();
         column_frame.opd_auto_reload?.Reload(frame_window, { keep_top: keep_top === true });
     }
     //自動更新 interval を止める。カラムを閉じる・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
@@ -4256,6 +4281,26 @@ function run(settings){
         clearInterval(column_frame.opd_auto_reload_interval_id);
         column_frame.opd_auto_reload_interval_id = null;
         column_frame.opd_auto_reload_interval_ms = null;
+    }
+    //deck のタブが visible に戻ったときに、古くなったカラムだけを 1 回更新する (最上位の visibilitychange リスナーから呼ばれる)。
+    //#opd_main_element が無ければ何もしない。interval が動作中のカラム (iframe 要素の opd_auto_reload_interval_id が非 null) のうち、
+    //Date.now() - opd_auto_reload_last_reload_at が動作中の間隔 (opd_auto_reload_interval_ms) 以上のカラムだけに try_auto_reload_column を呼ぶ (最終更新時刻が数値でないカラムは対象外)。
+    //更新した (true が返った) カラムは interval を張り直して、次の更新がその更新から間隔後になるようにする (直後に残りわずかの interval が発火して二重に更新しない)。
+    //間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する
+    function reload_stale_columns_on_visible(){
+        if(document.getElementById("opd_main_element") === null) return;
+        get_settings_target_columns().forEach((column_div) => {
+            const column_frame = column_div.querySelector("iframe");
+            if(!column_frame) return;
+            //interval が動作中でないカラム (自動更新が無効・対象外のカラム) は復帰時にも更新しない
+            if(column_frame.opd_auto_reload_interval_id == null) return;
+            const last_reload_at = column_frame.opd_auto_reload_last_reload_at;
+            if(!Number.isFinite(last_reload_at)) return;
+            if(Date.now() - last_reload_at < column_frame.opd_auto_reload_interval_ms) return;
+            if(!try_auto_reload_column(column_frame)) return;
+            stop_column_auto_reload(column_div);
+            apply_column_auto_reload(column_div);
+        });
     }
     //全体設定の変更を全カラムへ反映する: 適用表の対象カラム (home / notification / explore) それぞれに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
     //構造用カラム (main_bar_empty_column / empty_column / side_empty_column / dsp_column) には触れない
@@ -4587,8 +4632,9 @@ function run(settings){
             });
         }
     }
-    //自動更新を許可するかどうか (停止条件は「自動更新」節)。テキスト入力中・メディアビューア表示中・メッセージダイアログ表示中は false
+    //自動更新を許可するかどうか (停止条件は「自動更新」節)。deck のタブが hidden・テキスト入力中・メディアビューア表示中・メッセージダイアログ表示中は false
     function is_auto_update(){
+        if(document.visibilityState === "hidden") return false;
         if(is_text_input_focused()) return false;
         if(column_auto_update_state.media_viewer.active) return false;
         if(column_auto_update_state.message_dialog.open_count > 0) return false;
@@ -4730,23 +4776,37 @@ function main_dsp(react_root){
 //
 //run() スコープの関数:
 //  apply_column_auto_reload(column_div)   iframe ごとの setInterval を冪等に張る (実効 auto_reload と実効 auto_reload_time が動作中の interval と同じなら作り直さない)。
-//                                          interval は発火のたびに次を確かめ、1 つでも満たさなければその回は何もしない:
-//                                            表示中のパスが is_column_reload_path / iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
-//                                          更新は reload_column(column_frame, keep_top) で行い、keep_top には発火時点の global_settings.auto_reload_keep_top を渡す
-//                                          (interval は間隔が変わらない限り作り直さないため、設定値は interval 作成時に固定せず発火のたびに読む)
-//  reload_column(column_frame, keep_top)  OpdExtAutoReload.Reload で iframe のヘルパーへ 'opd_column_reload' ({token, keep_top}) を送る。content script 側からは更新後にスクロールしない
+//                                          interval は発火のたびに try_auto_reload_column を呼ぶ (interval は間隔が変わらない限り作り直さないため、設定値は interval 作成時に固定せず発火のたびに読む)
+//  try_auto_reload_column(column_frame)   自動更新 1 回分の判定と実行。次を確かめ、1 つでも満たさなければ何もしない:
+//                                            iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
+//                                          満たせば reload_column(column_frame, keep_top) で更新して true を返し (満たさなければ false)、keep_top には呼び出し時点の global_settings.auto_reload_keep_top を渡す。interval の発火と、hidden からの復帰時 (下記) の両方から呼ぶ
+//  reload_column(column_frame, keep_top)  OpdExtAutoReload.Reload で iframe のヘルパーへ 'opd_column_reload' ({token, keep_top}) を送り、iframe 要素の opd_auto_reload_last_reload_at を Date.now() にする。content script 側からは更新後にスクロールしない
 //                                          (更新後のスクロール位置に手を入れるのはヘルパーの先頭保持だけ。auto_reload_keep_top が false なら更新後の位置は X の挙動のまま)
 //  stop_column_auto_reload(column_div)    interval を止める。カラムを閉じる・プロファイルを切り替える前に対象カラム全部へ呼ぶ
 //  is_auto_update()                       停止条件のいずれかに当たれば false
+//  reload_stale_columns_on_visible()      deck のタブが visible に戻ったときの処理 (下記「hidden からの復帰」)。最上位の visibilitychange リスナーから呼ばれる
 //  カラムバーの更新ボタン                  home カラムで実効 auto_reload が false のときだけ表示する。設定に依らず「更新して先頭へ」: 先に iframe を scrollTo({top:0, behavior:"instant"}) で先頭へ戻してから reload_column(column_frame, true) を呼ぶ
 //
 //停止条件 (is_auto_update。全カラム共通):
+//  deck のタブが hidden     document.visibilityState が "hidden" (別タブの裏・最小化。別ウィンドウに完全に覆われた状態を hidden にするかはブラウザと OS の occlusion 検知に依存し、Windows 版 Chrome は hidden にする)。
+//                          interval は止めずカウントダウンを保ったまま、発火では何もしない。
+//                          判定はブラウザの可視状態にそのまま従い、フォーカス (document.hasFocus) やウィンドウの重なりを独自には見ない (非アクティブでも見えているウィンドウ・一部が重なっただけのウィンドウは visible のまま更新を続ける)
 //  テキスト入力中          イベントで追わず、判定のたびに document.activeElement からフォーカスの連鎖 (iframe なら contentDocument.activeElement、shadow host なら shadowRoot.activeElement) を末端まで辿り、
 //                          連鎖が iframe の中に入っていて、末端が編集できるテキスト欄 (isContentEditable、TEXTAREA、テキスト系 INPUT。readOnly / disabled の欄と button・checkbox 等の非テキスト型は除く) なら停止する (is_text_input_focused)。
 //                          deck 自身 (親 document) の入力欄 (カラム設定パネル・ダイアログの欄) にフォーカスがあっても停止しない (iframe 内の入力面だけが対象)。
 //                          別オリジンなどで中身を読めない iframe は入力中と見なさない。ウィンドウが非フォーカスでも activeElement は残るため、入力欄にカーソルを置いたままなら停止し続ける
 //  メディアビューア表示中  column_auto_update_state.media_viewer.active
 //  メッセージダイアログ中  column_auto_update_state.message_dialog.open_count > 0
+//
+//hidden からの復帰 (reload_stale_columns_on_visible):
+//  最終更新時刻: iframe 要素の opd_auto_reload_last_reload_at (Date.now() の ms)。iframe の load ごとにヘルパーを注入する時点 (reinit_column_extensions の ext_load) で load 時刻を初期値として入れ (load 時に X 自身が最新を取得しているため)、
+//                reload_column を呼ぶたび (interval 経由・復帰時・手動更新ボタン経由のすべて) に上書きする。停止条件で何もしなかった発火では変えない
+//  復帰時の処理: 最上位の visibilitychange リスナー (content script の最上位で 1 回だけ登録し、run() が最上位の変数 deck_visible_handler に代入した関数を呼ぶ。run() の再実行では代入が上書きされるだけでリスナーは増えない) が
+//                document.visibilityState が "visible" になったときに呼ぶ。deck_visible_handler が未代入 (run() の実行前・deck を表示していないページ) なら、リスナーは何もしない。呼ばれた側も #opd_main_element が無ければ何もしない。
+//                interval が動作中のカラム (iframe 要素の opd_auto_reload_interval_id が非 null) のうち、Date.now() - opd_auto_reload_last_reload_at が動作中の間隔 (opd_auto_reload_interval_ms) 以上のカラムだけに try_auto_reload_column を呼ぶ (条件を満たさなければその回は何もせず次の interval を待つ)。
+//                最終更新時刻が数値でないカラム (ヘルパー注入前で初期値が入っていない) は対象外にして次の interval を待つ。
+//                更新した (true が返った) カラムは interval を張り直し (stop_column_auto_reload してから apply_column_auto_reload)、次の更新がその更新から間隔後になるようにする (直後に残りわずかの interval が発火して二重に更新しない)。
+//                間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する
 //
 //ホバー判定 (iframe 要素の属性 auto_reload_mouse_hover、"true" のあいだはそのカラムを更新しない):
 //  iframe 自身の mouseover で "true"、mouseleave で "false" にする (bind_column_events)。
