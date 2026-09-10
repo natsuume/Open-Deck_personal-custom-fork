@@ -2401,7 +2401,7 @@ function run(settings){
     //サイドバーのカラム管理ボタンから開く。opener_element: ダイアログを閉じたときにフォーカスを戻す要素
     //#opd_main_element の直下にオーバーレイ #opd_column_manager_overlay を 1 つだけ生成する (既に開いている場合は生成せずフォーカスを移す)。オーバーレイは role="dialog" aria-modal="true" のダイアログ本体を持ち、ダイアログは追加領域・一覧領域・操作ボタンで構成する:
     //  追加領域 (左):
-    //  ・追加先ラックの選択 (ラジオ: メインラック / サイドラック)。opd_add_target_rack と同じ状態を指し、切り替えると set_add_target_rack で本体にも反映する。追加領域からの追加はすべて追加先ラックの一覧の末尾に入る
+    //  ・追加先ラックの選択 (ラジオ: メインラック / サイドラック)。ダイアログ内だけの状態で、開くたびにメインラックに戻る。追加領域からの追加はすべて追加先ラックの一覧の末尾に入る
     //  ・種別ボタン (タイムライン / 通知 / Explore / リスト一覧)。押すたびに新しいカラムの行を追加する (同じ種別の重複を許す)
     //    リスト一覧は、ユーザー名入力欄がユーザーのリスト一覧のパス (/<screen_name>/lists) に解決できればそのパス、できなければログイン中のユーザーのリスト一覧、どちらも無ければ alert で入力を促す
     //  ・リスト一覧を表示するユーザー名の入力欄と表示ボタン、表示状態の表示 (loading / not_detected / error / login_required / cell_unresolved)
@@ -4734,17 +4734,16 @@ function main_dsp(react_root){
 //DOM 契約:
 //  #opd_main_element                拡張の最上位要素。サイドラックの状態を属性と CSS カスタムプロパティで持つ
 //    opd_side_rack_position         "left" | "right"。サイドラックを置く側 (global_settings.side_rack_position を反映する)
-//    opd_add_target_rack            "main" | "side"。カラム管理ダイアログで追加するカラムの追加先 (run() ごとの一時状態。既定 "main"、プロファイルには保存しない)。サイドバーの追加先切替ボタンとダイアログ内の追加先の選択で切り替える
 //    --opd_side_rack_width          サイドラックの現在の描画幅 (px 値。非表示のあいだは 0px)。#main_rack_element の width と left の計算に使う
 //  #main_rack_element               メインラックの横スクロールコンテナ。直下の #first_rack_element (flex row、高さは常に 100%) にメインラックのカラムが並ぶ
 //  #side_rack_element               サイドラック (position:fixed、flex row、高さ 100vh)。非表示のあいだは hidden 属性を付ける (display:flex の指定に負けないよう CSS で [hidden]{display:none} を明示する)
-//  .dsp_column_side_emptycolumn     サイドラックの案内カラム (div[opd_column_type="side_empty_column"])。#side_rack_element の末尾に常に 1 つあり、追加先が "side" のときだけ hidden 属性を外す
-//  .dsp_column_emptycolumn          メインラックの案内カラム (div[opd_column_type="empty_column"])。保存形式ではメインラックの終了マーカーを兼ねる
+//  .dsp_column_emptycolumn          メインラックの案内カラム (div[opd_column_type="empty_column"])。保存形式ではメインラックの終了マーカーを兼ねる。サイドラックに案内カラムは無い
+//サイドラックへのカラムの追加・移動はカラム管理ダイアログ (追加先ラックの選択と一覧の並べ替え) で行う。追加先ラックの選択はダイアログ内だけの状態で、開くたびにメインラックに戻る。
+//空のサイドラックは非表示のため、カラムのドラッグ & ドロップで移せるのはサイドラックに実カラムがあるときに限る。
 //DOM 順序: #opd_main_element の中身は サイドバー → #main_rack_element (> #first_rack_element) → #side_rack_element の順に並べる。
 //column_settings_save は #opd_main_element div[opd_column_type] を DOM 順に走査するため、この順序が「メインラックのカラム → empty_column → サイドラックのカラム」という保存順を保証する。
 //
 //保存形式: opd_profile_store[n].profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック。
-//  side_empty_column 型のカラムは保存しない (案内カラムはプロファイル由来ではなく run() が常に 1 つ生成する)。column_settings_save は opd_column_type="side_empty_column" の div をスキップする。
 //  empty_column マーカーはちょうど 1 つに正規化する (normalize_profile_store の構造復旧)。マーカーが無いプロファイルの既存カラムはすべてメインラック扱いになる。
 //  保存値に second_empty_column 型の要素がある場合は normalize_profile_store が取り除き、empty_column より後のカラムをサイドラックのカラムとして読み込む。
 //  この復旧に SETTINGS_SCHEMA_VERSION の更新は要らない (欠損項目は既定値で補い、構造の復旧はスキーマ版に依らず行うため)。
@@ -4752,16 +4751,16 @@ function main_dsp(react_root){
 //
 //run() スコープの関数 (サイドラックの状態はこれらを通して読み書きする):
 //  get_rack_elements(rack_id) / get_rack_columns(rack_id)
-//    ラック ID ("main" | "side") からラックの要素と末尾の案内カラム、ラック直下の実カラム (section.dsp_column_draggable_true、DOM 順) を返す。
+//    ラック ID ("main" | "side") からラックの要素と末尾の案内カラム (メインラックのみ。サイドラックでは null)、ラック直下の実カラム (section.dsp_column_draggable_true、DOM 順) を返す。
 //    カラム設定パネルのホバー中は draggable 属性が一時的に "false" になるため、実カラムの判定には draggable 属性ではなく .dsp_column_draggable_true クラスを使う。
 //  apply_column_layout(layout, closing_sections)
 //    カラムの追加・並べ替え・ラック間移動・閉じるをまとめて反映する唯一の経路 (カラム管理ダイアログの適用から呼ぶ)。
-//    ラックごとの最終的な並びを受け取り、動かさずに済む既存カラム (pick_stationary_sections) には触れず、それ以外の section を案内カラムを基準に insertBefore で最終位置へ入れる。
+//    ラックごとの最終的な並びを受け取り、動かさずに済む既存カラム (pick_stationary_sections) には触れず、それ以外の section を案内カラム (サイドラックでは null = 末尾) を基準に insertBefore で最終位置へ入れる。
 //    既存カラムを動かす前には prepare_column_for_dom_move で読み込み先を整える (column_dd の drop も同じ関数を使う)。
 //  update_side_rack_state()
-//    サイドラックの表示状態を現在の状態から決めて反映する。#side_rack_element は「サイドラックに section.dsp_column_draggable_true が 1 つ以上ある」または「追加先が "side"」のときに表示し、それ以外は hidden 属性を付ける。
-//    案内カラム (.dsp_column_side_emptycolumn) は追加先が "side" のときだけ表示する。反映の直後に --opd_side_rack_width も同期で 1 回更新する (通常の更新は #side_rack_element を border-box で監視する ResizeObserver が行う)。
-//    起動時の初期構築後・カラム追加後・カラムを閉じた後・ドラッグ移動の drop 後・追加先の切替後に呼ぶ。
+//    サイドラックの表示状態を現在の状態から決めて反映する。#side_rack_element は「サイドラックに section.dsp_column_draggable_true が 1 つ以上ある」ときに表示し、それ以外は hidden 属性を付ける。
+//    反映の直後に --opd_side_rack_width も同期で 1 回更新する (通常の更新は #side_rack_element を border-box で監視する ResizeObserver が行う)。
+//    起動時の初期構築後・カラム追加後・カラムを閉じた後・ドラッグ移動の drop 後に呼ぶ。
 //  apply_side_rack_position()
 //    #opd_main_element の opd_side_rack_position 属性を global_settings.side_rack_position の値にする。run() の初期構築で innerHTML を挿入した直後と、全体設定ダイアログでサイドラックの位置を適用した後に呼ぶ。
 //
@@ -4829,7 +4828,7 @@ function main_dsp(react_root){
 //  }
 //  auto_reload_keep_top (boolean、既定 true) は自動更新後の先頭保持 (「自動更新」節) の有効 / 無効。全体でひとつの値で、カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない。
 //  全体設定のキーは GLOBAL_SETTINGS_DEFAULT の項目と normalize_global_settings のキーごとの正規化行を一組で持つ。保存値に無い・型不正の値はその正規化行が既定値で埋めるため、キーの追加に SETTINGS_SCHEMA_VERSION の更新は要らない
-//  profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック。side_empty_column 型のカラムは保存しない
+//  profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック
 //  column = {
 //    type, column_save_path, column_save_title,
 //    banner: boolean|null, top_visible: boolean|null, tw_view_mode: "0"|"1"|"2"|null,
@@ -4857,7 +4856,7 @@ function main_dsp(react_root){
 //更新ボタン (.dsp_column_reload_btn_wrap) は home カラムで実効 auto_reload が false のときだけ表示し (hidden 属性で出し分ける)、タイムラインを更新して先頭へスクロールする。
 //カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
 //
-//項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / side_empty_column / dsp_column は対象外):
+//項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / dsp_column は対象外):
 //  項目            home  notification  explore(リスト含む)
 //  バナー表示       ○     ○             ○
 //  トップ表示       ○     ○             ○ (リスト系ページ表示中の非表示はヘッダーをリスト名だけの専用バーに整形する)
