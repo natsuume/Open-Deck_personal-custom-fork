@@ -35,12 +35,6 @@
   "ui_manage_columns_title": {
     "message": "カラム管理 (追加・並べ替え・閉じる)"
   },
-  "ui_add_target_main_title": {
-    "message": "カラム追加先: メインラック (クリックでサイドラックに切替)"
-  },
-  "ui_add_target_side_title": {
-    "message": "カラム追加先: サイドラック (クリックでメインラックに切替)"
-  },
   "ui_profile_save_title": {
     "message": "プロファイル保存"
   },
@@ -49,9 +43,6 @@
   },
   "ui_empty_column_message": {
     "message": "左のバーからカラムを追加"
-  },
-  "ui_side_empty_column_message": {
-    "message": "サイドラック: ここにカラムが追加されます"
   },
   "ui_column_back_button": {
     "message": "ポストを閉じる"
