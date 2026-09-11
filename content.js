@@ -3621,7 +3621,7 @@ function run(settings){
             if(frame_head){
                 ensure_post_form_frame_style(frame_head, "opd_main_css").textContent = `html{scrollbar-width:thin;}`;
                 ensure_post_form_frame_style(frame_head, "opd_banner_css").textContent = COLUMN_IFRAME_CSS.banner_hidden;
-                ensure_post_form_frame_style(frame_head, "opd_top_visible_css").textContent = COLUMN_IFRAME_CSS.top_hidden;
+                ensure_post_form_frame_style(frame_head, "opd_top_visible_css").textContent = COLUMN_IFRAME_CSS.top_hidden_post_form;
             }
         }catch(e){
             console.warn("post form: iframe の style を用意できませんでした->", e);
@@ -4838,10 +4838,13 @@ const COLUMN_INHERITABLE_SETTINGS = Object.freeze({
 });
 //iframe 内へ注入する CSS の正本 (初回 load・再 load・設定変更のどの経路でも同じ文字列を使う)
 //トップ非表示ではリスト系ページの見出し (リスト名) も他のページと同じく隠す。リスト名はカラム見出しに出す
+//カラム (top_hidden / top_hidden_home) では X のヘッダーを戻る矢印 (app-bar-back) ごと隠す。ポスト表示から一覧へ戻る操作は副見出しの戻るボタンが担う
+//ポストフォーム (top_hidden_post_form) だけはヘッダーを画面下に寄せて戻る矢印を残す。下書き一覧 (/unsent) から composer へ戻るために使い、矢印を出すパスの切り替えは文章校正拡張 (extensions/text_review.js) が行う
 const COLUMN_IFRAME_CSS = Object.freeze({
     banner_hidden: `header[role="banner"]{display:none}`,
-    top_hidden: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
-    top_hidden_home: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;} div[role="progressbar"] + div{display:none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
+    top_hidden: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
+    top_hidden_home: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;} div[role="progressbar"] + div{display:none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
+    top_hidden_post_form: `div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1){visibility: hidden; height: 0;top: calc(100vh - 60px);position: sticky;backdrop-filter: blur(0px) !important;}[data-testid="app-bar-back"]{visibility: visible; filter: none;}div[data-testid="cellInnerDiv"]:has(button[aria-describedby], div[data-testid="UserAvatar-Container-unknown"]):not(:has(article[tabindex="-1"])){display:none;}`,
     tw_view_text_only: `div[data-testid="cellInnerDiv"]:has(div[aria-labelledby]){visibility: hidden; height: 0;}`,
     tw_view_media_only: `div[data-testid="cellInnerDiv"]:not(:has(div[aria-labelledby])){visibility: hidden; height: 0;}`,
 });
