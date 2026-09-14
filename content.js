@@ -2063,8 +2063,6 @@ function run(settings){
     //読み込み先がポスト以外なら副見出しを隠して opd_column_detail を外す (読み込み後は load が表示中のページから決め直す)
     function reset_column_subbar_before_reload(column_div, reload_path){
         if(column_div == null) return;
-        clearTimeout(column_div.opd_subbar_fallback_timer);
-        column_div.opd_subbar_fallback_timer = null;
         if(match_post_page_path(reload_path) !== null) return;
         const subbar = column_div.querySelector(".opd_column_subbar");
         if(subbar !== null) subbar.hidden = true;
@@ -2094,10 +2092,7 @@ function run(settings){
         if(frame_url.protocol !== "https:") return;
         if(is_overlay_page_path(frame_url.pathname)) return;
         const frame_path = `${frame_url.pathname}${frame_url.search}`;
-        if(match_post_page_path(frame_url.pathname) === null){
-            column_div.setAttribute("opd_column_return_path", frame_path);
-            if(frame_page.page_title !== "") column_div.setAttribute("opd_column_return_title", frame_page.page_title);
-        }
+        if(match_post_page_path(frame_url.pathname) === null) column_div.setAttribute("opd_column_return_path", frame_path);
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
         column_div.setAttribute("opd_explore_path", frame_path);
         if(match_post_page_path(frame_url.pathname) === null) column_div.setAttribute("opd_explore_title", frame_page.page_title);
@@ -3973,11 +3968,16 @@ function run(settings){
             //副見出しの表示はここでは更新せず、X が画面を描き直したときは遷移監視に、読み込み直したときは load に任せる (表示中のページに合わせて決める)
             column_div.querySelector(".opd_column_subbar_back")?.addEventListener("click", function(){
                 const return_path = column_div.getAttribute("opd_column_return_path") || initial_column_return_path(column_div.getAttribute("opd_column_type"), column_div.getAttribute("opd_explore_path"));
-                const return_title = column_div.getAttribute("opd_column_return_title");
-                clearTimeout(column_div.opd_subbar_fallback_timer);
-                column_div.opd_subbar_fallback_timer = null;
-                //読み込み直しで戻す。読み込み後の取り込み (load) は保存しないため、explore カラムは読み込み先を表示中のパスとしてここで保存する (デッキの再読込でポストが開き直されないようにする)
-                const reload_to_return_path = function(){
+                try{
+                    const frame_window = column_frame.contentWindow;
+                    //X のルーターが履歴エントリに持たせている state はそのまま引き継ぎ、popstate にも同じ state を載せる
+                    const history_state = frame_window.history.state;
+                    frame_window.history.replaceState(history_state, "", return_path);
+                    frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate", {state: history_state}));
+                }catch(e){
+                    //中身を操作できない (別オリジン等) ときは読み込み直しで戻す
+                    //読み込み後の取り込み (load) は保存しないため、explore カラムは読み込み先を表示中のパスとしてここで保存する (デッキの再読込でポストが開き直されないようにする)
+                    //ページタイトル (opd_explore_title) はポスト単体を表示中も戻り先ページのものを保っているため変えない
                     try{
                         column_frame.contentWindow.location.replace(`https://x.com${return_path}`);
                     }catch(reload_error){
@@ -3986,47 +3986,8 @@ function run(settings){
                     }
                     if(column_div.getAttribute("opd_column_type") !== "explore") return;
                     column_div.setAttribute("opd_explore_path", return_path);
-                    if(return_title !== null) column_div.setAttribute("opd_explore_title", return_title);
                     update_column_heading(column_div);
                     column_settings_save("", last_load_profile);
-                };
-                if(return_title === null){
-                    reload_to_return_path();
-                    return;
-                }
-                try{
-                    const frame_window = column_frame.contentWindow;
-                    const clicked_title = normalize_column_page_title(frame_window.document.title, frame_window.location.pathname);
-                    //X のルーターが履歴エントリに持たせている state はそのまま引き継ぎ、popstate にも同じ state を載せる
-                    const history_state = frame_window.history.state;
-                    frame_window.history.replaceState(history_state, "", return_path);
-                    frame_window.dispatchEvent(new frame_window.PopStateEvent("popstate", {state: history_state}));
-                    //X が popstate に応じなかった場合の保険。1.5 秒後もパスが戻り先のままで、ページタイトルが戻り先ページのものになっていなければ読み込み直して戻す
-                    //X は画面を切り替えるとページタイトルを書き換えるため、記録した戻り先ページのタイトルになっていることを遷移できた印とみなす (未読数の変化だけで変わったとみなさないよう正規化して比べる)
-                    //切り替え中はタイトルが空 (読み込み中の仮タイトル) のことがあり、切り替えが遅いとクリック時のタイトルのままのこともあるため、そのときは判定を保留して同じ間隔でもう一度確かめる (確かめ直しは 2 回まで。それでも戻り先のタイトルになっていなければ読み込み直す)
-                    //その間に別のページへ移っていれば (パスが戻り先と違えば) 何もしない
-                    const fallback_interval_ms = 1500;
-                    let fallback_rechecks_left = 2;
-                    const check_return_navigation = function(){
-                        column_div.opd_subbar_fallback_timer = null;
-                        try{
-                            if(`${frame_window.location.pathname}${frame_window.location.search}` !== return_path) return;
-                            const current_title = normalize_column_page_title(frame_window.document.title, frame_window.location.pathname);
-                            if((current_title === "" || current_title === clicked_title) && fallback_rechecks_left > 0){
-                                fallback_rechecks_left--;
-                                column_div.opd_subbar_fallback_timer = setTimeout(check_return_navigation, fallback_interval_ms);
-                                return;
-                            }
-                            if(current_title === return_title) return;
-                            reload_to_return_path();
-                        }catch(fallback_error){
-                            //中身を読めなくなっていれば何もしない
-                        }
-                    };
-                    column_div.opd_subbar_fallback_timer = setTimeout(check_return_navigation, fallback_interval_ms);
-                }catch(e){
-                    //中身を操作できない (別オリジン等) ときは読み込み直しで戻す
-                    reload_to_return_path();
                 }
             });
         }
