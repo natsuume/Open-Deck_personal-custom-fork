@@ -2060,7 +2060,7 @@ function run(settings){
         column_div.setAttribute("opd_column_detail", "post");
     }
     //カラムの iframe を reload_path へ読み込み直す前に、副見出しの状態を読み込み先に合わせて先に整える
-    //予約中の ✕ の読み込み直しの保険 (opd_subbar_fallback_timer) を取り消し、読み込み先がポスト以外なら副見出しを隠して opd_column_detail を外す (読み込み後は load が表示中のページから決め直す)
+    //読み込み先がポスト以外なら副見出しを隠して opd_column_detail を外す (読み込み後は load が表示中のページから決め直す)
     function reset_column_subbar_before_reload(column_div, reload_path){
         if(column_div == null) return;
         clearTimeout(column_div.opd_subbar_fallback_timer);
@@ -2085,7 +2085,7 @@ function run(settings){
         }
     }
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
-    //  opd_column_return_path / opd_column_return_title: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパスと、そのページのタイトル)。タイトルが空 (読み込み中の仮タイトル) のあいだは記録しない
+    //  opd_column_return_path: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパス)
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル。ポスト単体のページではパスだけ更新し、タイトルは残す (見出しは元のページのまま薄く表示するため)
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page){
@@ -3838,7 +3838,7 @@ function run(settings){
     //カラム設定パネルとカラムバーのイベントを登録する。登録済み (data-opd_settings_initialized="1") なら何もしない
     //  select / 入力の change: 対応する属性を更新 → apply_column_dom_state → (iframe 項目なら) apply_column_iframe_styles → column_settings_save
     //  ピン止めの select の change: opd_setting_pinned を更新 → reconcile_column_pinned → apply_column_dom_state → column_settings_save
-    //  副見出しの戻るボタン click: 記録した戻り先パス (opd_column_return_path) を replaceState + popstate で iframe 内に開き直す。戻り先のタイトルが未記録なら、または X が応じなければ読み込み直しで戻す
+    //  副見出しの戻るボタン click: 記録した戻り先パス (opd_column_return_path) を replaceState + popstate で iframe 内に開き直す。iframe の中身を操作できない (別オリジン等) ときだけ読み込み直しで戻す
     //  カスタム幅ボタン: prompt で rem を受け取り、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM の範囲なら opd_column_width に明示値を設定
     function bind_column_events(column_div){
         if(column_div == null) return;
@@ -3968,9 +3968,9 @@ function run(settings){
             });
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
             //iframe の history はタブ全体で共有され、back() は他のカラムの遷移まで巻き戻し、pushState はブラウザの「戻る」の段数を増やすため、replaceState + popstate で X の画面遷移を起こす (X のルーターは popstate で location を読み直す)
+            //遷移の成否はページタイトル等で照合せず、X のルーターが popstate に応じることを前提にする (タイトルの照合は、リスト名のようにデータの解決を待つタイトルで不一致になり、遷移できているのに読み込み直す誤発火の元になる)
+            //iframe の中身を操作できない (別オリジン等) ときだけ、戻り先パスを読み込み直して戻す
             //副見出しの表示はここでは更新せず、X が画面を描き直したときは遷移監視に、読み込み直したときは load に任せる (表示中のページに合わせて決める)
-            //読み込み直しの保険は 1 カラムにつき 1 つだけ予約し (opd_subbar_fallback_timer)、再クリックと reset_column_subbar_before_reload で前の予約を取り消す
-            //戻り先ページのタイトルを記録していない (このカラムがポスト以外のページをまだ表示していない) ときは遷移の成否を判定できないため、popstate を試みず最初から読み込み直しで戻す
             column_div.querySelector(".opd_column_subbar_back")?.addEventListener("click", function(){
                 const return_path = column_div.getAttribute("opd_column_return_path") || initial_column_return_path(column_div.getAttribute("opd_column_type"), column_div.getAttribute("opd_explore_path"));
                 const return_title = column_div.getAttribute("opd_column_return_title");
