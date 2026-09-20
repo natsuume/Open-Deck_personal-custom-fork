@@ -4790,7 +4790,8 @@ function main_dsp(react_root){
 //  iframe の width / height は 100 % で、percent は zoom で乗じられないため、カラムの枠の大きさは変わらない。
 //  iframe はカラムバー・副見出し・設定パネルと同じ縦 flex の中にあるので flex: 1 1 0; min-height: 0; で残り高さを受け持たせる (縦に短いウィンドウで設定パネルを開き、内容を拡大しても iframe が押し出されない)。
 //  対象はカラムの iframe だけで、投稿フォーム (.opd_post_form_frame) とリスト選択 (.opd_list_picker_frame) は対象外。
-//  zoom が iframe の中身に及ぶのは Chrome 128 以降の標準の挙動。Firefox は 126 で CSS zoom を実装しているが、iframe の中身への波及は未検証。manifest の対応最低バージョンはこの 2 つ (Chrome 128 / Firefox 126) に合わせる。
+//  zoom が iframe の中身に及ぶのは Chrome 128 以降の標準の挙動。Firefox は 126 で CSS zoom を実装しているが、iframe の中身への波及は未検証。
+//  manifest の対応最低バージョンは変えない。zoom が iframe の中身に及ばないブラウザでは、カラム内容のサイズを変えても表示が変わらないだけで、ほかの機能には影響しない (必要なバージョンは README に書く)。
 //
 //run() スコープの関数:
 //  apply_display_scale()
@@ -4808,23 +4809,29 @@ function main_dsp(react_root){
 //
 //ブラウザ標準ズームの無効化 (content script → background):
 //  content script は run() の初期構築 (DOM 挿入後、apply_side_rack_position() の付近) で chrome.runtime.sendMessage({message: "deck_zoom_disable"}) を送る。
+//  加えて window の pageshow で event.persisted が true のとき (bfcache から復元されたとき) も同じ "deck_zoom_disable" を送り直す。
+//    background はデッキを離れたタブを automatic へ戻すため、履歴で戻って document が再実行されないまま復元されると、送り直さなければ無効化が失われたままになる。
 //  応答が false でも例外でも console.warn するだけでデッキの構築は止めない。
 //  background は onMessage の request.message == "deck_zoom_disable" で受ける:
 //    sender 検証は sender.tab?.id が数値、sender.frameId === 0、sender.url がデッキの URL (https://x.com/run-opdeck または https://twitter.com/run-opdeck で始まる) の 3 つで、満たさなければ sendResponse(false) で終える。
 //      tab id が無いときにアクティブタブへ代替しない (tabId を省略したズーム API はアクティブタブを対象にするため、無関係なタブのズームを固定してしまう)。
-//    chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, callback) を callback 形式で呼び、callback の中で chrome.runtime.lastError があれば console.warn して sendResponse(false)、無ければ sendResponse(true) する。
+//    sender 検証を通ったら chrome.tabs.get(tab_id, callback) でタブの現在の url を読み、解除側と同じ判定でデッキの URL でなければ setZoomSettings を呼ばず sendResponse(false) で終える。
+//      送信は読み込みの開始から数段の非同期処理を経た後で、そのあいだにタブが別のページへ移っていることがあるため、sender.url だけでは今そのタブが表示しているページを保証できない。
+//    デッキの URL なら chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, callback) を callback 形式で呼び、成功していれば sendResponse(true) する。
+//    どの callback でも chrome.runtime.lastError を確かめ、あれば console.warn して sendResponse(false) する。
 //    どの経路でも sendResponse を 1 回で完結させる (onMessage のリスナーは末尾で return true して応答を非同期にしているため、返さないと応答が来ない)。
 //  ズーム無効化の解除 (Chromium の disabled はブラウザ既定倍率へ戻して固定するモードで、ナビゲーションでは解除されないため、デッキを離れたタブは background が戻す):
 //    background はズーム無効化中のタブを覚えない。解除するかはそのつどタブの現在の状態から判定するため、service worker が待機で止まって再起動しても次の chrome.tabs.onUpdated のイベントで解除できる。
 //    chrome.tabs.onUpdated を購読し、changeInfo.status が "loading" または "complete" のイベントごとに次の順で見る:
-//      1. chrome.tabs.getZoomSettings(tab_id, callback) で mode を読み、"disabled" でなければ何もしない (この拡張が固定したタブだけを対象にする)。
+//      1. chrome.tabs.getZoomSettings(tab_id, callback) で mode を読み、"disabled" でなければ何もしない。
+//         mode が disabled のタブはこの拡張が固定したものとみなして戻す。どの拡張が固定したかは判別できないため、ほかの拡張がタブのズームを disabled にしていた場合もデッキ以外のページでは automatic に戻ることを意図的に受け入れる。
 //      2. chrome.tabs.get(tab_id, callback) でタブの url を読み、デッキの URL (https://x.com/run-opdeck または https://twitter.com/run-opdeck で始まる) ならデッキを表示したままなので何もしない。
 //         カラム iframe の自動更新・再読み込みなど子フレームの遷移でも status は立つため、デッキ表示中の解除はこの url の判定で防ぐ。
 //         url が空・未定義のときは解除する側に倒す。host permission を持つのは x.com のページだけで、ほかのページでは url が読めず空になるが、それはデッキでない証拠として扱える。
 //      3. それ以外なら setZoomSettings(tab_id, {mode: "automatic"}, callback) で戻す。
 //    status を "loading" と "complete" の両方で見るのは、トップフレームの遷移開始の時点では tab.url がまだ遷移前 (デッキ) のことがあるためで、遷移完了時にも判定して確実に戻す。
 //    どの callback でも chrome.runtime.lastError を確かめ、あれば console.warn して終える (判定の途中でタブが閉じた場合など)。
-//    デッキを読み込み直した場合は run() が改めて "deck_zoom_disable" を送るので再び無効化される。
+//    デッキを読み込み直した場合も履歴で戻った場合も、content script が改めて "deck_zoom_disable" を送るので再び無効化される。
 //  ズーム系のメソッド・onUpdated の status・chrome.tabs.get には "tabs" permission が要らないため追加しない (tabs.get が返す url は host permission のある x.com のページでだけ読める)。
 //  Firefox は mode: "disabled" を受け付けず lastError (Unsupported zoom settings) になる。これは想定内の失敗として warn だけで扱い、Firefox ではズーム無効化が効かない (ブラウザ標準ズームがデッキに掛かったまま残る) ため、この機能は Chromium 限定とする。
 //    解除の側も Firefox では getZoomSettings が常に "automatic" を返すため何も起きない。
