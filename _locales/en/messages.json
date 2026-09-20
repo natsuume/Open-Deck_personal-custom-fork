@@ -360,7 +360,7 @@
     "message": "Global settings"
   },
   "ui_global_settings_description": {
-    "message": "Applied to every column item that is set to \"Follow global settings\"."
+    "message": "Applied to every column item that is set to \"Follow global settings\". Display sizes apply to the whole profile."
   },
   "ui_global_settings_pinned_label": {
     "message": "Pin Explore / list columns"
@@ -370,6 +370,15 @@
   },
   "ui_global_settings_side_rack_position_label": {
     "message": "Side rack position"
+  },
+  "ui_global_settings_text_scale_label": {
+    "message": "Text size (%, 50 to 200)"
+  },
+  "ui_global_settings_ui_scale_label": {
+    "message": "UI size: icons, spacing, column width (%, 50 to 200)"
+  },
+  "ui_global_settings_column_content_scale_label": {
+    "message": "Column content size (%, 50 to 200)"
   },
   "ui_side_rack_position_left": {
     "message": "Left"
@@ -451,5 +460,8 @@
   },
   "msg_global_settings_invalid_interval": {
     "message": "Enter an auto-load interval between 1 and 86400 seconds"
+  },
+  "msg_global_settings_invalid_scale": {
+    "message": "Enter a display size between 50 and 200 as an integer"
   }
 }
