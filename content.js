@@ -4754,6 +4754,72 @@ function main_dsp(react_root){
 //  更新前に先頭 (scrollY が 1 以下) だったカラムは、X が新着を先頭に挿入するときに表示位置を旧先頭ポストに合わせ直す (見かけ上スクロールが下がる) のを打ち消して、更新後も先頭に保ち新着を見せる。
 //  更新前に先頭でなかったカラムには何もしない。
 //
+//===== 表示サイズ (display scale) =====
+//デッキの表示サイズは全体設定の 3 項目で決める。デッキのタブではブラウザ標準ズーム (Ctrl +/-) を無効化し、拡大縮小はこの 3 項目だけで行う。
+//  text_scale_percent              文字サイズ。親 UI (サイドバー・カラムバー・設定パネル・ダイアログ) の文字だけを伸縮する
+//  ui_scale_percent                UI サイズ。アイコン・余白・カラム幅など寸法の側を伸縮する
+//  column_content_scale_percent    カラム内容のサイズ。カラムの iframe が表示している X のページだけを伸縮する
+//いずれも % の整数で DISPLAY_SCALE_MIN_PERCENT (50) 以上 DISPLAY_SCALE_MAX_PERCENT (200) 以下、既定は 100。
+//100 % は「ブラウザ既定倍率での表示」を指す (ズーム無効化はブラウザ既定倍率へ戻して固定する操作であり、必ず 100 % に固定されるわけではない)。
+//
+//保存形式: 3 項目ともプロファイルの global_settings に持ち、既存の保存・clone・正規化の経路にそのまま乗る。
+//  GLOBAL_SETTINGS_DEFAULT に既定値 100 を置き、normalize_global_settings では to_number_in_range_or_null(value, DISPLAY_SCALE_MIN_PERCENT, DISPLAY_SCALE_MAX_PERCENT) が null でなく、かつ Number.isInteger を満たす値だけを通し、満たさなければ既定値 100 に落とす。
+//  カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない (カラム個別の値は持たない)。全体設定のキーの追加に SETTINGS_SCHEMA_VERSION の更新は要らない。
+//  他タブへの即時同期は行わない (ほかの全体設定と同じ)。
+//
+//CSS 変数 (html 要素に置く。値は percent / 100 の倍率):
+//  --opd-ui-scale                  UI 倍率。html{font-size: calc(100% * var(--opd-ui-scale, 1))} で rem の基準を伸縮するため、rem で書いた寸法とカラム幅 (rem) がすべて追従する
+//  --opd-text-scale                文字倍率
+//  --opd-column-content-scale      カラム内容の倍率。.dsp_column iframe の zoom に使う
+//  #opd_main_element のトークン --opd-text-em: calc(1rem * var(--opd-text-scale, 1) / var(--opd-ui-scale, 1)) が親 UI の文字の 1 単位。
+//    UI 倍率で rem が伸びても割り戻されるため、文字の大きさは文字倍率だけで決まる。
+//
+//<style opd_default_css> ブロックの書き方:
+//  親 UI の文字サイズは font-size: calc(<N> * var(--opd-text-em)) で書く (font-size: <N>rem は使わない)。
+//  例外 1 — 文字で描いているアイコンは寸法の一部なので rem のまま残し、UI 倍率に追従させる。対象はカラム管理ダイアログのドラッグハンドル (.opd_column_manager_drag_handle の "⋮⋮") と削除ボタン (.opd_column_manager_remove_btn の "×")。
+//    ドラッグハンドルは行 (.opd_column_manager_item) から font-size を継承しているため、文字側へ移った継承値を受けないよう自分の font-size を rem で持つ。
+//    削除ボタンと復元ボタンはクラスが分かれている (.opd_column_manager_action_btn の基底値が "×" の大きさ、.opd_column_manager_restore_btn の上書きが「復元」の文字) ため、基底値は rem のまま残し、復元ボタン側の上書きだけを文字サイズの扱いにする。
+//  例外 2 — iframe の head へ注入する CSS 文字列 (COLUMN_IFRAME_CSS、ensure_frame_style や insertAdjacentHTML でリスト選択 iframe に入れる装飾など) は親 UI ではないため置換しない。
+//  レイアウト用の寸法は rem で書いて UI 倍率に追従させる (--opd-sidebar-width、--opd-column-gap、プロファイル一覧の max-height、投稿ポップオーバーの top など)。
+//  px のまま据え置くもの: border 幅・角丸・影・outline と outline-offset・1〜2px の微調整・アニメーションの translateY・JS が測定して書く --opd_side_rack_width・JS の screen_margin (実測値に対する調整であり、UI 倍率で伸ばすと二重に掛かる)。
+//  select の矢印 (--opd-select-arrow、SVG 16×16) は background-size: 1rem 1rem を付けて UI 倍率に追従させる。
+//  既知の制約: @media (max-width: 60rem) の rem は初期の文字サイズが基準で root の font-size 変更に追従しないため、UI 倍率を変えても切替点は動かない。
+//
+//カラム内容の拡大縮小 (.dsp_column iframe{zoom: var(--opd-column-content-scale, 1)}):
+//  zoom は入れ子の frame の自然な大きさと子 frame の devicePixelRatio に掛かるため、ブラウザズームと同じように iframe 内の X のページが拡大縮小される。
+//  iframe の width / height は 100 % で、percent は zoom で乗じられないため、カラムの枠の大きさは変わらない。
+//  iframe はカラムバー・副見出し・設定パネルと同じ縦 flex の中にあるので flex: 1 1 0; min-height: 0; で残り高さを受け持たせる (縦に短いウィンドウで設定パネルを開き、内容を拡大しても iframe が押し出されない)。
+//  対象はカラムの iframe だけで、投稿フォーム (.opd_post_form_frame) とリスト選択 (.opd_list_picker_frame) は対象外。
+//  zoom が iframe の中身に及ぶのは Chrome 128 / Firefox 126 以降の標準の挙動で、manifest の対応最低バージョンはこれに合わせる。
+//
+//run() スコープの関数:
+//  apply_display_scale()
+//    正規化済みの global_settings の 3 値を percent / 100 にして、document.documentElement の style へ --opd-ui-scale / --opd-text-scale / --opd-column-content-scale を設定する。
+//    値が 100 のときも 3 つとも毎回書く。CSS 変数は html 要素に残るのに対しプロファイル切替で置き換わるのは #opd_main_element なので、書かない経路を作ると前のプロファイルの値が残る。
+//    CSS 変数の更新だけを行い、ほかの DOM には触らない。
+//    呼ぶ場所は 2 つ: run() の初期構築で apply_side_rack_position() を呼んだ直後と、全体設定ダイアログの適用 (apply_global_settings_to_columns → apply_side_rack_position → apply_display_scale の順)。
+//    ダイアログの適用側では apply_display_scale の後に、投稿ポップオーバーが開いているときだけ position_post_form_popover() を呼び直す (root の font-size が変わっても window の resize は起きないため、位置は自力で合わせ直す)。
+//
+//全体設定ダイアログ (open_global_settings_dialog) のフォーム:
+//  サイドラックの位置の行の後ろに 文字サイズ / UI サイズ / カラム内容のサイズ の 3 行を、既存の行と同じ構造 (id 付き label + 入力欄) で並べる。
+//  入力欄は <input type="number" min="50" max="200" step="1"> で、class は opd_global_settings_text_scale / opd_global_settings_ui_scale / opd_global_settings_column_content_scale。
+//  検証は既存のパターンに従う: 空欄・非有限・非整数・範囲外を不正とし、カラム幅 → 自動更新間隔 → 文字サイズ → UI サイズ → カラム内容のサイズ の順に見て、最初に見つかった不正な欄だけに aria-invalid と status 領域を指す aria-describedby を付けてフォーカスし、ほかの欄の印は外す。
+//  3 項目とも共通のメッセージ msg_global_settings_invalid_scale を status 領域へ表示する。全項目の検証を通るまで global_settings も CSS 変数も保存値も変えない。
+//
+//ブラウザ標準ズームの無効化 (content script → background):
+//  content script は run() の初期構築 (DOM 挿入後、apply_side_rack_position() の付近) で chrome.runtime.sendMessage({message: "deck_zoom_disable"}) を送る。
+//  応答が false でも例外でも console.warn するだけでデッキの構築は止めない。
+//  background は onMessage の request.message == "deck_zoom_disable" で受ける:
+//    sender 検証は sender.tab?.id が数値、sender.frameId === 0、sender.url がデッキの URL (https://x.com/run-opdeck または https://twitter.com/run-opdeck で始まる) の 3 つで、満たさなければ sendResponse(false) で終える。
+//      tab id が無いときにアクティブタブへ代替しない (tabId を省略したズーム API はアクティブタブを対象にするため、無関係なタブのズームを固定してしまう)。
+//    chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, callback) を callback 形式で呼び、callback の中で chrome.runtime.lastError があれば console.warn して sendResponse(false)、無ければタブ ID をズーム無効化中のタブ集合へ入れて sendResponse(true) する。
+//    どの経路でも sendResponse を 1 回で完結させる (onMessage のリスナーは末尾で return true して応答を非同期にしているため、返さないと応答が来ない)。
+//  Chromium の disabled はブラウザ既定倍率へ戻して固定するモードで、ナビゲーションでは解除されない。そのため chrome.tabs.onUpdated で changeInfo.status === "loading" を見て、集合に入っているタブなら setZoomSettings(tab_id, {mode: "automatic"}, callback) で戻し、集合から外す。
+//    デッキを読み込み直した場合は run() が改めて "deck_zoom_disable" を送るので再び無効化される。chrome.tabs.onRemoved でも集合から外す。
+//    集合は service worker が止まれば失われるが、そのときの影響はデッキを離れたタブでズーム禁止が残ることだけで、次にそのタブでデッキを開いて離れれば戻るため、この割り切りを取る。
+//  ズーム系のメソッドと onUpdated の status には "tabs" permission が要らないため追加しない。
+//  Firefox は mode: "disabled" を受け付けず lastError (Unsupported zoom settings) になる。これは想定内の失敗として warn だけで扱い、Firefox ではズーム無効化が効かない (ブラウザ標準ズームがデッキに掛かったまま残る) ため、この機能は Chromium 限定とする。
+//
 //===== 全体設定 (global settings) =====
 //全体設定はプロファイルごと (opd_profile_store[n].global_settings) に持つ既定設定で、
 //各カラムの設定値が null (= 全体設定に従う) になっている項目に適用される。
