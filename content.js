@@ -2170,8 +2170,10 @@ function run(settings){
     //      (X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) は、遷移監視の確認ポーリングがページのヘッダーと照合して取り込む)
     //    リスト系ページで、直前の観測と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
     //      (オーバーレイを閉じて元のページへ戻った観測は、オーバーレイのパスからの移動として上の扱いになり、オーバーレイのタイトルを取り込まない)
-    //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直して取得時刻を今にする
+    //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直す
     //      (取得時刻が今より先 (時計の補正や別の環境で保存したプロファイル) のときも取り直す。リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
+    //      取得時刻を今にするのは、そのタイトルが X のヘッダーのリスト名と一致する (is_list_title_confirmed) ときだけとし、一致しなければ取得時刻を付けずに取り込む
+    //      (パスが変わった後に遅れて届く移る前のページのタイトル (ポストを開いてすぐ戻った場合等) を、取り直し間隔のあいだ固定しないため。取得時刻の無いタイトルは次のタイトル変化や確認ポーリングで取り直される)
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page, previous_frame_path = null){
         if(column_div == null || frame_page == null) return;
@@ -2202,7 +2204,7 @@ function run(settings){
         const now = Date.now();
         const elapsed_ms = fetched_at === null ? null : now - fetched_at;
         if(saved_title !== "" && elapsed_ms !== null && elapsed_ms >= 0 && elapsed_ms < LIST_TITLE_REFRESH_INTERVAL_MS) return;
-        set_column_page_title(column_div, page_title, now);
+        set_column_page_title(column_div, page_title, is_list_title_confirmed(column_div.querySelector("iframe"), page_title) ? now : null);
     }
     //ログイン中の screen_name を最後に取りに行った時刻 (全カラム共有)
     let last_login_screen_name_retry_time = 0;
@@ -2261,6 +2263,22 @@ function run(settings){
     }
     //リスト系ページの X のヘッダーにあるリスト名の見出し (トップ非表示 CSS が隠すヘッダーと同じ要素の中の h2)
     const list_page_heading_selector = 'div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2';
+    //ページタイトル (正規化済み) が、カラムの iframe が表示している X のヘッダーのリスト名と一致するか (中身を読めない・ヘッダーが未描画・不一致なら false)
+    //X はリスト名の絵文字を img (alt に絵文字) で描画するため、ヘッダーの文字列はテキストノードと img の alt を文書順につないで作る
+    //document.title はブラウザが空白を 1 つに畳んで返すため、比較は両側の空白を畳んで trim した形で行う
+    function is_list_title_confirmed(column_frame, page_title){
+        if(page_title === "") return false;
+        let heading_text = "";
+        try{
+            const heading_element = column_frame?.contentDocument?.querySelector(list_page_heading_selector);
+            if(!heading_element) return false;
+            heading_text = collapse_whitespace(read_text_with_image_alt(heading_element));
+        }catch(e){
+            //別オリジンなどで中身を読めない場合は確かめられない
+            return false;
+        }
+        return heading_text !== "" && heading_text === collapse_whitespace(page_title);
+    }
     //パスが移った直後に空にしたリスト系ページのタイトルを、ページのヘッダーと照合して取り込む確認ポーリングの間隔と回数 (遷移の観測から最大 30 秒)
     const column_title_confirm_interval_ms = 1500;
     const column_title_confirm_limit = 20;
@@ -2324,22 +2342,6 @@ function run(settings){
                 }
                 return frame_page;
             }
-            //ページタイトルが X のヘッダーのリスト名と一致するか (中身を読めない・ヘッダーが未描画・不一致なら false)
-            //X はリスト名の絵文字を img (alt に絵文字) で描画するため、ヘッダーの文字列はテキストノードと img の alt を文書順につないで作る
-            //document.title はブラウザが空白を 1 つに畳んで返すため、比較は両側の空白を畳んで trim した形で行う
-            function is_list_title_confirmed(frame_page){
-                if(frame_page.page_title === "") return false;
-                let heading_text = "";
-                try{
-                    const heading_element = column_frame.contentDocument?.querySelector(list_page_heading_selector);
-                    if(!heading_element) return false;
-                    heading_text = collapse_whitespace(read_text_with_image_alt(heading_element));
-                }catch(e){
-                    //別オリジンなどで中身を読めない場合は確かめられない
-                    return false;
-                }
-                return heading_text !== "" && heading_text === collapse_whitespace(frame_page.page_title);
-            }
             //確認ポーリングを予約する。ヘッダーと一致したタイトルを読めたら取得時刻を付けずに取り込んで保存し、続ける状態でなくなるか回数の上限に達したら止める
             function schedule_column_title_confirm(remaining_count = column_title_confirm_limit){
                 cancel_column_title_confirm();
@@ -2348,7 +2350,7 @@ function run(settings){
                     title_confirm_timer = null;
                     const frame_page = read_unconfirmed_list_page();
                     if(frame_page === null) return;
-                    if(!is_list_title_confirmed(frame_page)){
+                    if(!is_list_title_confirmed(column_frame, frame_page.page_title)){
                         schedule_column_title_confirm(remaining_count - 1);
                         return;
                     }
