@@ -2172,8 +2172,9 @@ function run(settings){
     //      (オーバーレイを閉じて元のページへ戻った観測は、オーバーレイのパスからの移動として上の扱いになり、オーバーレイのタイトルを取り込まない)
     //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直す
     //      (取得時刻が今より先 (時計の補正や別の環境で保存したプロファイル) のときも取り直す。リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
-    //      取得時刻を今にするのは、そのタイトルが X のヘッダーのリスト名と一致する (is_list_title_confirmed) ときだけとし、一致しなければ取得時刻を付けずに取り込む
-    //      (パスが変わった後に遅れて届く移る前のページのタイトル (ポストを開いてすぐ戻った場合等) を、取り直し間隔のあいだ固定しないため。取得時刻の無いタイトルは次のタイトル変化や確認ポーリングで取り直される)
+    //      取得時刻を今にするのは、そのタイトルが X のヘッダーのリスト名と一致し (is_list_title_confirmed)、かつヘッダーが別のパスへ移った観測の時点 (opd_heading_text_at_move) から変わっているときだけとし、それ以外は取得時刻を付けずに取り込む
+    //      (パスが変わった後に遅れて届く移る前のページのタイトル (ポストを開いてすぐ戻った場合や、移る前のヘッダーが残ったまま届いた場合等) を、取り直し間隔のあいだ固定しないため。取得時刻の無いタイトルは次のタイトル変化や確認ポーリングで取り直される)
+    //  別のパスへ移った観測ではその時点のヘッダーのリスト名を column_div.opd_heading_text_at_move に記録し、load (previous_frame_path 無し) では記録を消す
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page, previous_frame_path = null){
         if(column_div == null || frame_page == null) return;
@@ -2194,7 +2195,10 @@ function run(settings){
             return;
         }
         const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
+        const column_frame = column_div.querySelector("iframe");
+        if(previous_frame_path === null) column_div.opd_heading_text_at_move = null;
         if(frame_path !== previous_explore_path){
+            column_div.opd_heading_text_at_move = read_list_page_heading_text(column_frame);
             if(frame_path === previous_return_path && saved_title !== "") return;
             set_column_page_title(column_div, "", null);
             return;
@@ -2204,7 +2208,10 @@ function run(settings){
         const now = Date.now();
         const elapsed_ms = fetched_at === null ? null : now - fetched_at;
         if(saved_title !== "" && elapsed_ms !== null && elapsed_ms >= 0 && elapsed_ms < LIST_TITLE_REFRESH_INTERVAL_MS) return;
-        set_column_page_title(column_div, page_title, is_list_title_confirmed(column_div.querySelector("iframe"), page_title) ? now : null);
+        const heading_text = read_list_page_heading_text(column_frame);
+        const is_confirmed = heading_text !== "" && heading_text === collapse_whitespace(page_title);
+        const is_heading_renewed = heading_text !== (column_div.opd_heading_text_at_move ?? "");
+        set_column_page_title(column_div, page_title, is_confirmed && is_heading_renewed ? now : null);
     }
     //ログイン中の screen_name を最後に取りに行った時刻 (全カラム共有)
     let last_login_screen_name_retry_time = 0;
@@ -2263,20 +2270,23 @@ function run(settings){
     }
     //リスト系ページの X のヘッダーにあるリスト名の見出し (トップ非表示 CSS が隠すヘッダーと同じ要素の中の h2)
     const list_page_heading_selector = 'div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2';
+    //カラムの iframe が表示している X のヘッダーのリスト名を読む (中身を読めない・ヘッダーが未描画なら空文字)
+    //X はリスト名の絵文字を img (alt に絵文字) で描画するため、テキストノードと img の alt を文書順につなぎ、空白を畳んだ形にする
+    function read_list_page_heading_text(column_frame){
+        try{
+            const heading_element = column_frame?.contentDocument?.querySelector(list_page_heading_selector);
+            if(!heading_element) return "";
+            return collapse_whitespace(read_text_with_image_alt(heading_element));
+        }catch(e){
+            //別オリジンなどで中身を読めない場合
+            return "";
+        }
+    }
     //ページタイトル (正規化済み) が、カラムの iframe が表示している X のヘッダーのリスト名と一致するか (中身を読めない・ヘッダーが未描画・不一致なら false)
-    //X はリスト名の絵文字を img (alt に絵文字) で描画するため、ヘッダーの文字列はテキストノードと img の alt を文書順につないで作る
     //document.title はブラウザが空白を 1 つに畳んで返すため、比較は両側の空白を畳んで trim した形で行う
     function is_list_title_confirmed(column_frame, page_title){
         if(page_title === "") return false;
-        let heading_text = "";
-        try{
-            const heading_element = column_frame?.contentDocument?.querySelector(list_page_heading_selector);
-            if(!heading_element) return false;
-            heading_text = collapse_whitespace(read_text_with_image_alt(heading_element));
-        }catch(e){
-            //別オリジンなどで中身を読めない場合は確かめられない
-            return false;
-        }
+        const heading_text = read_list_page_heading_text(column_frame);
         return heading_text !== "" && heading_text === collapse_whitespace(page_title);
     }
     //パスが移った直後に空にしたリスト系ページのタイトルを、ページのヘッダーと照合して取り込む確認ポーリングの間隔と回数 (遷移の観測から最大 30 秒)
