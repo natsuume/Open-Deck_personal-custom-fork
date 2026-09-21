@@ -2226,18 +2226,19 @@ function run(settings){
     }
     //リスト系ページの X のヘッダーにあるリスト名の見出し (トップ非表示 CSS が隠すヘッダーと同じ要素の中の h2)
     const list_page_heading_selector = 'div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2';
-    //パスが移った直後に空にしたリスト系ページのタイトルを、ページのヘッダーと照合して取り込む確認ポーリングの間隔と回数 (遷移の観測から最大 9 秒)
+    //パスが移った直後に空にしたリスト系ページのタイトルを、ページのヘッダーと照合して取り込む確認ポーリングの間隔と回数 (遷移の観測から最大 30 秒)
     const column_title_confirm_interval_ms = 1500;
-    const column_title_confirm_limit = 6;
+    const column_title_confirm_limit = 20;
     //カラムの iframe 内のページ内遷移を MutationObserver で検知し、表示中のページを属性・見出し・副見出しへ反映する
     //X はページを切り替えた後に document.title を書き換えるため、href とページタイトルのどちらが変わっても反映し直す
     //タイトルは title 要素のテキストノードの書き換えで変わることがあるため、childList に加えて characterData も観察する
     //explore カラムでは表示中のパスとページタイトルを保存する
     //explore カラムがリスト系ページへ移った直後はタイトルを空にしている (apply_column_frame_page) ため、観測のたびに確認ポーリングを予約する
     //ポーリングは column_title_confirm_interval_ms ごとに最大 column_title_confirm_limit 回、保存したタイトルが空で同じリスト系ページを表示しているあいだ、
-    //ページタイトルが X のヘッダーのリスト名 (list_page_heading_selector) と一致するかを確かめ、一致したときだけ表示中のリストのタイトルと確定して取得時刻付きで取り込み、保存する
+    //ページタイトルが X のヘッダーのリスト名 (list_page_heading_selector) と一致するかを確かめ、一致したときだけ表示中のリストのタイトルとみなして取り込み、保存する
     //(ページタイトルだけでは「移る前のページのものが残っている」と「同じ名前のリストで書き換わらない」を区別できないため、ヘッダーとの一致を証拠にする。一致しなければ取り込まず、その後のタイトル変化の観測に任せる)
-    //予約は最新の観測のものだけ残し、load ごとに捨てる
+    //遷移直後はヘッダーも移る前のページのまま残りうるため、この経路で取り込むタイトルには取得時刻を付けない (その後にタイトルが変われば取り直しガードに掛からず取得時刻付きで取り直される)
+    //上限まで一致しなければタイトルは空のまま保存され、次に iframe を読み込み直したときの観測で取り込む。予約は最新の観測のものだけ残し、load ごとに捨てる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2277,7 +2278,7 @@ function run(settings){
                 }
                 return heading_text !== "" && heading_text === frame_page.page_title;
             }
-            //確認ポーリングを予約する。ヘッダーと一致したタイトルを読めたら取得時刻付きで取り込んで保存し、続ける状態でなくなるか回数の上限に達したら止める
+            //確認ポーリングを予約する。ヘッダーと一致したタイトルを読めたら取得時刻を付けずに取り込んで保存し、続ける状態でなくなるか回数の上限に達したら止める
             function schedule_column_title_confirm(remaining_count = column_title_confirm_limit){
                 cancel_column_title_confirm();
                 if(remaining_count <= 0) return;
@@ -2289,7 +2290,7 @@ function run(settings){
                         schedule_column_title_confirm(remaining_count - 1);
                         return;
                     }
-                    set_column_page_title(column_div, frame_page.page_title, Date.now());
+                    set_column_page_title(column_div, frame_page.page_title, null);
                     update_column_heading(column_div);
                     column_settings_save("", last_load_profile);
                 }, column_title_confirm_interval_ms);
