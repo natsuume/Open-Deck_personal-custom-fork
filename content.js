@@ -2157,10 +2157,10 @@ function run(settings){
     //  ページタイトルの取り込み方はページの種類で分ける:
     //    リスト系ページ以外: ページタイトルをそのまま取り込む (取得時刻は持たない)
     //    リスト系ページで、直前の観測 (opd_explore_path) と別のパスへ移った直後のとき: X はパスを切り替えた後にタイトルを書き換えるため、この時点のタイトルは移る前のページのものでありうる
-    //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で、保存したタイトルが空でなく取得時刻もあれば、保存したタイトルと取得時刻をそのまま使い続ける
-    //      (取得時刻の無いタイトルは移る前のページのものでありうる暫定値なので使い続けず、下の扱いで取り直す)
+    //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で、保存したタイトルか見出しの暫定値 (opd_explore_title_provisional) があれば、それをそのまま使い続ける
+    //      (どちらもその戻り先のページのものであり、この時点のタイトルはポストのものでありうるため取り込まない)
     //      それ以外はタイトルを空にし (この時点のタイトルは取り込まない)、次に空でないタイトルを読んだときに取り直す
-    //      (X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) は、遷移監視の遅延再読が取得時刻の無い暫定値として埋める)
+    //      (X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) は、遷移監視の遅延再読が暫定値として見出しに出し、さらに落ち着けば取得時刻の無い保存名へ昇格させる)
     //    リスト系ページで、直前の観測と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
     //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直して取得時刻を今にする
     //      (取得時刻が今より先 (時計の補正や別の環境で保存したプロファイル) のときも取り直す。リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
@@ -2184,13 +2184,13 @@ function run(settings){
             return;
         }
         const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
-        const fetched_at = read_column_title_fetched_at(column_div);
         if(frame_path !== previous_explore_path){
-            if(frame_path === previous_return_path && saved_title !== "" && fetched_at !== null) return;
+            if(frame_path === previous_return_path && (saved_title !== "" || column_div.hasAttribute("opd_explore_title_provisional"))) return;
             set_column_page_title(column_div, "", null);
             return;
         }
         if(page_title === "") return;
+        const fetched_at = read_column_title_fetched_at(column_div);
         const now = Date.now();
         const elapsed_ms = fetched_at === null ? null : now - fetched_at;
         if(saved_title !== "" && elapsed_ms !== null && elapsed_ms >= 0 && elapsed_ms < LIST_TITLE_REFRESH_INTERVAL_MS) return;
@@ -2226,16 +2226,20 @@ function run(settings){
         if(get_login_screen_name() === null) return;
         update_login_dependent_headings();
     }
-    //パスが移った直後に空にしたリスト系ページのタイトルを、遷移の観測からこの時間が経っても空のままなら iframe のページタイトルで埋める
+    //パスが移った直後に空にしたリスト系ページのタイトルを、遷移の観測からこの時間が経っても空のままなら iframe のページタイトルで見出しに出す (暫定値)
     const column_title_fill_delay_ms = 1500;
+    //暫定値を出してからさらにこの時間、同じページで同じタイトルのままなら落ち着いたとみなし、暫定値を取得時刻の無い保存名へ昇格させる
+    const column_title_settle_delay_ms = 10000;
     //カラムの iframe 内のページ内遷移を MutationObserver で検知し、表示中のページを属性・見出し・副見出しへ反映する
     //X はページを切り替えた後に document.title を書き換えるため、href とページタイトルのどちらが変わっても反映し直す
     //タイトルは title 要素のテキストノードの書き換えで変わることがあるため、childList に加えて characterData も観察する
     //explore カラムでは表示中のパスとページタイトルを保存する
     //explore カラムがリスト系ページへ移った直後はタイトルを空にしている (apply_column_frame_page) ため、観測のたびに遅延再読を予約し、
     //column_title_fill_delay_ms 後もタイトルが空で同じページを表示していれば、そのとき読めるページタイトルを暫定値 (opd_explore_title_provisional) として見出しだけに出す
-    //遅延後に読んだタイトルは移る前のページのものでありうる (X がまだ名前を解決していない場合) ため opd_explore_title には書かず、プロファイルの保存 (opd_explore_title の読み取り) にも載らない
-    //(暫定値のまま deck を再読込しても誤った名前は初期見出しに出ない)。暫定値はその後のタイトル変化で opd_explore_title を書くときに捨てる。予約は最新の観測のものだけ残し、load ごとに捨てる
+    //遅延後に読んだタイトルは移る前のページのものでありうる (X がまだ名前を解決していない場合) ため、この時点では opd_explore_title に書かず、プロファイルの保存 (opd_explore_title の読み取り) にも載せない
+    //暫定値を出してからさらに column_title_settle_delay_ms のあいだ同じページで同じタイトルのままなら落ち着いたとみなし、取得時刻を付けずに opd_explore_title へ昇格させて保存する
+    //(X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) でも保存名が空のまま終わらないようにする。取得時刻が無いため、後から違うタイトルを読めれば取得時刻付きで取り直す)
+    //暫定値はその後のタイトル変化で opd_explore_title を書くときに捨てる。予約は最新の観測のものだけ残し、load ごとに捨てる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2244,25 +2248,43 @@ function run(settings){
         column_frame.opd_navigation_watch_bound = true;
         let navigation_observer = null;
         let title_fill_timer = null;
-        column_frame.addEventListener("load", function(){
-            navigation_observer?.disconnect();
+        function cancel_column_title_fill(){
             clearTimeout(title_fill_timer);
             title_fill_timer = null;
+        }
+        column_frame.addEventListener("load", function(){
+            navigation_observer?.disconnect();
+            cancel_column_title_fill();
             let last_page = read_column_frame_page(column_frame);
             if(last_page === null) return;
-            //最新の観測のページが遅延後も表示されたままで、タイトルが空のリスト系ページなら、読めるページタイトルを暫定値として見出しに出す
+            //最新の観測のページが表示されたままで、保存したタイトルが空のリスト系ページなら、iframe のページタイトルを読む (それ以外は null)
+            function read_settling_list_title(){
+                if(!column_div.isConnected) return null;
+                if((column_div.getAttribute("opd_explore_title") ?? "") !== "") return null;
+                const frame_page = read_column_frame_page(column_frame);
+                if(frame_page === null || frame_page.href !== last_page.href || frame_page.page_title === "") return null;
+                const frame_url = new URL(frame_page.href);
+                if(frame_url.protocol !== "https:" || !is_list_page_path(frame_url.pathname) || match_post_page_path(frame_url.pathname) !== null) return null;
+                return frame_page.page_title;
+            }
+            //遅延後に読めるページタイトルを暫定値として見出しに出し、さらに落ち着けば取得時刻の無い保存名へ昇格させて保存する
             function schedule_column_title_fill(){
-                clearTimeout(title_fill_timer);
+                cancel_column_title_fill();
                 title_fill_timer = setTimeout(function(){
-                    title_fill_timer = null;
-                    if(!column_div.isConnected) return;
-                    if((column_div.getAttribute("opd_explore_title") ?? "") !== "") return;
-                    const frame_page = read_column_frame_page(column_frame);
-                    if(frame_page === null || frame_page.href !== last_page.href || frame_page.page_title === "") return;
-                    const frame_url = new URL(frame_page.href);
-                    if(frame_url.protocol !== "https:" || !is_list_page_path(frame_url.pathname) || match_post_page_path(frame_url.pathname) !== null) return;
-                    column_div.setAttribute("opd_explore_title_provisional", frame_page.page_title);
+                    const provisional_title = read_settling_list_title();
+                    if(provisional_title === null){
+                        title_fill_timer = null;
+                        return;
+                    }
+                    column_div.setAttribute("opd_explore_title_provisional", provisional_title);
                     update_column_heading(column_div);
+                    title_fill_timer = setTimeout(function(){
+                        title_fill_timer = null;
+                        if(read_settling_list_title() !== provisional_title) return;
+                        set_column_page_title(column_div, provisional_title, null);
+                        update_column_heading(column_div);
+                        column_settings_save("", last_load_profile);
+                    }, column_title_settle_delay_ms);
                 }, column_title_fill_delay_ms);
             }
             let frame_document = null;
