@@ -2005,7 +2005,10 @@ function run(settings){
                 //console.log(preload_desc_array)
                 if(!(await show_confirm_dialog(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\n")])}`))) return;
                 //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
-                get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
+                get_settings_target_columns().forEach((column_div) => {
+                    stop_column_auto_reload(column_div);
+                    cancel_column_title_timers(column_div);
+                });
                 teardown_post_form_popover();
                 side_rack_resize_observer.disconnect();
                 document.querySelector("#opd_main_element").remove();
@@ -2224,6 +2227,10 @@ function run(settings){
         if(get_login_screen_name() === null) return;
         update_login_dependent_headings();
     }
+    //カラムの遷移監視が予約したタイトルの確認ポーリングと再評価を捨てる。カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前に呼ぶ (監視を登録していないカラムでは何もしない)
+    function cancel_column_title_timers(column_div){
+        column_div?.querySelector("iframe")?.opd_cancel_title_timers?.();
+    }
     //リスト系ページの X のヘッダーにあるリスト名の見出し (トップ非表示 CSS が隠すヘッダーと同じ要素の中の h2)
     const list_page_heading_selector = 'div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2';
     //パスが移った直後に空にしたリスト系ページのタイトルを、ページのヘッダーと照合して取り込む確認ポーリングの間隔と回数 (遷移の観測から最大 30 秒)
@@ -2238,7 +2245,7 @@ function run(settings){
     //ページタイトルが X のヘッダーのリスト名 (list_page_heading_selector) と一致するかを確かめ、一致したときだけ表示中のリストのタイトルとみなして取り込み、保存する
     //(ページタイトルだけでは「移る前のページのものが残っている」と「同じ名前のリストで書き換わらない」を区別できないため、ヘッダーとの一致を証拠にする。一致しなければ取り込まず、その後のタイトル変化の観測に任せる)
     //遷移直後はヘッダーも移る前のページのまま残りうるため、この経路で取り込むタイトルには取得時刻を付けない (その後にタイトルが変われば取り直しガードに掛からず取得時刻付きで取り直される)
-    //上限まで一致しなければタイトルは空のまま保存され、次に iframe を読み込み直したときの観測で取り込む。予約は最新の観測のものだけ残し、load ごとに捨てる
+    //上限まで一致しなければタイトルは空のまま保存され、次に iframe を読み込み直したときの観測で取り込む。予約は最新の観測のものだけ残し、load ごとに捨てる。カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前には cancel_column_title_timers で捨てる
     //load の時点で既にタイトルが解決していて以後変化しない場合 (別のリストの URL へリダイレクトされた場合等) も取り込めるよう、load でも確認ポーリングを予約する
     //リスト系ページで読めたタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送ったときは、間隔が明ける時刻に再評価を予約し、deck を開いたままでも新しい名前に収束させる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
@@ -2258,6 +2265,11 @@ function run(settings){
             clearTimeout(title_refresh_timer);
             title_refresh_timer = null;
         }
+        //カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前に、予約した確認と再評価を捨てる (cancel_column_title_timers から呼ぶ)
+        column_frame.opd_cancel_title_timers = function(){
+            cancel_column_title_confirm();
+            cancel_column_title_refresh();
+        };
         column_frame.addEventListener("load", function(){
             navigation_observer?.disconnect();
             cancel_column_title_confirm();
@@ -2428,7 +2440,7 @@ function run(settings){
     }
     //カラムの section を DOM 上の別の位置へ移す前に、読み込み先を整える
     //DOM 上の移動で iframe は src から読み込み直されるため、explore カラムはピン止め中ならピン止めしたパス、そうでなければ表示中のパスを src に張り直し、読み込み先に合わせて見出しを組み立て直す
-    //表示中と違うページを読み込むときはページタイトルと取得時刻を空にし、読み込み後に取り込むまで見出しには種別の名称を出す。全種別で副見出しを読み込み先に合わせて先に整える
+    //表示中と違うページを読み込むときはページタイトルと取得時刻を空にし、読み込み後に取り込むまで見出しには種別の名称を出す。予約済みのタイトルの確認と再評価は読み込み先を張り直す前に捨てる。全種別で副見出しを読み込み先に合わせて先に整える
     function prepare_column_for_dom_move(column_section){
         const column_div = column_section.querySelector("div[opd_column_type]");
         if(column_div === null) return;
@@ -2436,6 +2448,7 @@ function run(settings){
         if(column_div.getAttribute("opd_column_type") === "explore"){
             const pinned_path = column_div.getAttribute("opd_pinned_path") ?? "";
             const reload_path = pinned_path !== "" ? pinned_path : column_div.getAttribute("opd_explore_path");
+            cancel_column_title_timers(column_div);
             if(column_frame !== null) column_frame.src = `https://x.com${reload_path}`;
             if(column_div.getAttribute("opd_explore_path") !== reload_path) set_column_page_title(column_div, "", null);
             column_div.setAttribute("opd_explore_path", reload_path);
@@ -2505,6 +2518,7 @@ function run(settings){
         closing_sections.forEach((section) => {
             if(!section.isConnected) return;
             stop_column_auto_reload(section.querySelector("div[opd_column_type]"));
+            cancel_column_title_timers(section.querySelector("div[opd_column_type]"));
             section.remove();
         });
         ["main", "side"].forEach((rack_id) => {
@@ -3640,6 +3654,7 @@ function run(settings){
                 const is_pinned = target_column_div?.getAttribute("opd_column_type") === "explore" && effective_column_setting(target_column_div, "pinned", global_settings) === true;
                 if(!is_pinned){
                     stop_column_auto_reload(target_column_div);
+                    cancel_column_title_timers(target_column_div);
                     target_column.remove();
                     append_object_css();
                     update_side_rack_state();
@@ -3647,6 +3662,7 @@ function run(settings){
                 }else{
                     if(!(await show_confirm_dialog(i18n_message("msg_pinned_column_close_confirm")))) return;
                     stop_column_auto_reload(target_column_div);
+                    cancel_column_title_timers(target_column_div);
                     target_column.remove();
                     append_object_css();
                     update_side_rack_state();
