@@ -2239,6 +2239,8 @@ function run(settings){
     //(ページタイトルだけでは「移る前のページのものが残っている」と「同じ名前のリストで書き換わらない」を区別できないため、ヘッダーとの一致を証拠にする。一致しなければ取り込まず、その後のタイトル変化の観測に任せる)
     //遷移直後はヘッダーも移る前のページのまま残りうるため、この経路で取り込むタイトルには取得時刻を付けない (その後にタイトルが変われば取り直しガードに掛からず取得時刻付きで取り直される)
     //上限まで一致しなければタイトルは空のまま保存され、次に iframe を読み込み直したときの観測で取り込む。予約は最新の観測のものだけ残し、load ごとに捨てる
+    //load の時点で既にタイトルが解決していて以後変化しない場合 (別のリストの URL へリダイレクトされた場合等) も取り込めるよう、load でも確認ポーリングを予約する
+    //リスト系ページで読めたタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送ったときは、間隔が明ける時刻に再評価を予約し、deck を開いたままでも新しい名前に収束させる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2247,13 +2249,19 @@ function run(settings){
         column_frame.opd_navigation_watch_bound = true;
         let navigation_observer = null;
         let title_confirm_timer = null;
+        let title_refresh_timer = null;
         function cancel_column_title_confirm(){
             clearTimeout(title_confirm_timer);
             title_confirm_timer = null;
         }
+        function cancel_column_title_refresh(){
+            clearTimeout(title_refresh_timer);
+            title_refresh_timer = null;
+        }
         column_frame.addEventListener("load", function(){
             navigation_observer?.disconnect();
             cancel_column_title_confirm();
+            cancel_column_title_refresh();
             let last_page = read_column_frame_page(column_frame);
             if(last_page === null) return;
             //確認ポーリングを続ける状態 (最新の観測のページが表示されたままで、保存したタイトルが空のリスト系ページ) なら、iframe の読み取り結果を返す (それ以外は null)
@@ -2295,6 +2303,27 @@ function run(settings){
                     column_settings_save("", last_load_profile);
                 }, column_title_confirm_interval_ms);
             }
+            //最新の観測でリスト系ページのタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送った場合、間隔が明ける時刻に同じページを表示したままなら取り込み直す
+            function schedule_column_title_refresh(){
+                cancel_column_title_refresh();
+                if(column_div.getAttribute("opd_column_type") !== "explore") return;
+                const explore_path = column_div.getAttribute("opd_explore_path") ?? "";
+                if(!is_list_page_path(explore_path) || match_post_page_path(explore_path) !== null) return;
+                const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
+                const fetched_at = read_column_title_fetched_at(column_div);
+                if(saved_title === "" || fetched_at === null || last_page.page_title === "" || last_page.page_title === saved_title) return;
+                const remaining_ms = fetched_at + LIST_TITLE_REFRESH_INTERVAL_MS - Date.now();
+                if(remaining_ms <= 0 || remaining_ms > LIST_TITLE_REFRESH_INTERVAL_MS) return;
+                title_refresh_timer = setTimeout(function(){
+                    title_refresh_timer = null;
+                    if(!column_div.isConnected) return;
+                    const frame_page = read_column_frame_page(column_frame);
+                    if(frame_page === null || frame_page.href !== last_page.href) return;
+                    apply_column_frame_page(column_div, frame_page);
+                    update_column_heading(column_div);
+                    column_settings_save("", last_load_profile);
+                }, remaining_ms);
+            }
             let frame_document = null;
             try{
                 frame_document = column_frame.contentWindow.document;
@@ -2314,9 +2343,15 @@ function run(settings){
                 update_column_subbar(column_div);
                 if(column_div.getAttribute("opd_column_type") !== "explore") return;
                 schedule_column_title_confirm();
+                schedule_column_title_refresh();
                 column_settings_save("", last_load_profile);
             });
             navigation_observer.observe(frame_document, {childList: true, subtree: true, characterData: true});
+            //load の時点のページに対しても確認と再評価を予約する (取り込み自体は load 時の apply_column_frame_page が済ませている)
+            if(column_div.getAttribute("opd_column_type") === "explore"){
+                schedule_column_title_confirm();
+                schedule_column_title_refresh();
+            }
         });
     }
     //メインバーイベント
