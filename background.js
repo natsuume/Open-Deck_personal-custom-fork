@@ -1,4 +1,11 @@
 const EXTENSION_DOMAIN = new URL(chrome.runtime.getURL('')).hostname;
+//デッキを開く URL。content script の起動判定と同じ完全一致で比べる
+const DECK_URLS = Object.freeze(["https://x.com/run-opdeck", "https://twitter.com/run-opdeck"]);
+//タブがデッキを表示しているか。ズーム無効化の 3 箇所 (sender 検証・無効化直前の再確認・解除判定) はこの判定を共有する。
+//url が空・未定義のときは false。host permission を持つのは x.com のページだけで、ほかのページでは url が読めず空になるが、それはデッキでない証拠として扱える
+function is_deck_url(url){
+    return typeof url === "string" && DECK_URLS.includes(url);
+}
 
 //インストール時にあらかじめDNRを設定しておく
 chrome.runtime.onInstalled.addListener(() => {
@@ -44,12 +51,79 @@ chrome.runtime.onMessage.addListener(
                 }
             })();
         }
+        if(request.message == "deck_zoom_disable"){
+            disable_deck_tab_zoom(sender, sendResponse);
+        }
         if(request.message == "ext_reload"){
             chrome.runtime.reload();
         }
         return true;
     }
 )
+//===== デッキのタブのブラウザ標準ズーム無効化 (契約は content.js の「表示サイズ (display scale)」節) =====
+//ズーム系のメソッド・tabs.get・onUpdated の status には "tabs" permission が要らないため追加していない。
+//Firefox は mode: "disabled" を受け付けず lastError (Unsupported zoom settings) になるため、ズーム無効化は Chromium 限定の機能になる。
+//ズーム系の API は Firefox 互換のため callback 形式で呼ぶ
+
+//デッキのタブのズームを無効化する。sender 検証 → タブの現在の url の再確認 → setZoomSettings の順に進み、
+//どの経路でも sendResponse を 1 回で完結させる (onMessage のリスナーは末尾で return true して応答を非同期にしているため)
+function disable_deck_tab_zoom(sender, sendResponse){
+    const tab_id = sender.tab?.id;
+    //tab id が無いときにアクティブタブへ代替しない (tabId を省略したズーム API はアクティブタブを対象にするため、無関係なタブのズームを固定してしまう)
+    if(typeof tab_id !== "number" || sender.frameId !== 0 || !is_deck_url(sender.url)){
+        sendResponse(false);
+        return;
+    }
+    //送信は読み込みの開始から数段の非同期処理を経た後で、そのあいだにタブが別のページへ移っていることがあるため、
+    //sender.url だけに頼らず、今そのタブが表示しているページを確かめてから固定する
+    chrome.tabs.get(tab_id, function(tab){
+        if(chrome.runtime.lastError){
+            console.warn("deck_zoom_disable failed->", chrome.runtime.lastError.message);
+            sendResponse(false);
+            return;
+        }
+        if(!is_deck_url(tab?.url)){
+            sendResponse(false);
+            return;
+        }
+        chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, function(){
+            if(chrome.runtime.lastError){
+                console.warn("deck_zoom_disable failed->", chrome.runtime.lastError.message);
+                sendResponse(false);
+                return;
+            }
+            sendResponse(true);
+        });
+    });
+}
+
+//デッキを離れたタブのズーム無効化を元に戻す。
+//Chromium の disabled はブラウザ既定倍率へ戻して固定するモードでナビゲーションでは解除されないため、background が戻す。
+//無効化中のタブは覚えず、そのつどタブの現在の状態から判定するので、service worker が待機で停止・再起動しても次のイベントで解除できる。
+//mode が disabled のタブはこの拡張が固定したものとみなして戻す。どの拡張が固定したかは判別できないため、
+//ほかの拡張がタブのズームを disabled にしていた場合も、ブラウザの全タブ (この拡張が host permission を持たないサイトのタブを含む) で次の読み込み状態の変化時に automatic に戻る。
+//status を "loading" と "complete" の両方で見るのは、トップフレームの遷移開始の時点では tab.url がまだ遷移前 (デッキ) のことがあるためで、遷移完了時にも判定して確実に戻す
+chrome.tabs.onUpdated.addListener(function(tab_id, changeInfo){
+    if(changeInfo.status !== "loading" && changeInfo.status !== "complete") return;
+    chrome.tabs.getZoomSettings(tab_id, function(zoom_settings){
+        if(chrome.runtime.lastError){
+            console.warn("deck zoom restore failed->", chrome.runtime.lastError.message);
+            return;
+        }
+        if(zoom_settings?.mode !== "disabled") return;
+        chrome.tabs.get(tab_id, function(tab){
+            if(chrome.runtime.lastError){
+                console.warn("deck zoom restore failed->", chrome.runtime.lastError.message);
+                return;
+            }
+            //デッキを表示したままなら何もしない (カラム iframe の自動更新・再読み込みなど子フレームの遷移でも status は立つため)
+            if(is_deck_url(tab?.url)) return;
+            chrome.tabs.setZoomSettings(tab_id, {mode: "automatic"}, function(){
+                if(chrome.runtime.lastError) console.warn("deck zoom restore failed->", chrome.runtime.lastError.message);
+            });
+        });
+    });
+});
 //
 let access_limit = {
     search:{limit: null, remaining: null, reset_unix_time: null, expires_unix_time: null},

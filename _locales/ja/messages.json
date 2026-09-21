@@ -360,7 +360,7 @@
     "message": "全体設定"
   },
   "ui_global_settings_description": {
-    "message": "カラムごとに「全体設定に従う」になっている項目に適用されます。"
+    "message": "カラムごとに「全体設定に従う」になっている項目に適用されます。表示サイズはプロファイル全体に適用されます。"
   },
   "ui_global_settings_pinned_label": {
     "message": "Explore / リストカラムのピン止め"
@@ -370,6 +370,15 @@
   },
   "ui_global_settings_side_rack_position_label": {
     "message": "サイドラックの位置"
+  },
+  "ui_global_settings_text_scale_label": {
+    "message": "文字サイズ (%、50〜200)"
+  },
+  "ui_global_settings_ui_scale_label": {
+    "message": "UI サイズ: アイコン・余白・カラム幅 (%、50〜200)"
+  },
+  "ui_global_settings_column_content_scale_label": {
+    "message": "カラム内容のサイズ (%、50〜200)"
   },
   "ui_side_rack_position_left": {
     "message": "左"
@@ -451,5 +460,8 @@
   },
   "msg_global_settings_invalid_interval": {
     "message": "自動更新間隔は1秒以上86400秒以下の半角数字で入力してください"
+  },
+  "msg_global_settings_invalid_scale": {
+    "message": "表示サイズは50以上200以下の整数で入力してください"
   }
 }

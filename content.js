@@ -78,6 +78,29 @@ document.addEventListener("visibilitychange", function(){
     if(typeof deck_visible_handler !== "function") return;
     deck_visible_handler();
 });
+//このタブのブラウザ標準ズームを無効化するよう background へ依頼する (契約は「表示サイズ」節)。
+//無効化できなくてもデッキは動くため、応答が false でも例外でも warn だけで続行する
+function request_deck_zoom_disable(){
+    try{
+        chrome.runtime.sendMessage({message: "deck_zoom_disable"}, function(response){
+            if(chrome.runtime.lastError){
+                console.warn("deck_zoom_disable failed->", chrome.runtime.lastError.message);
+                return;
+            }
+            if(response !== true) console.warn("deck_zoom_disable rejected");
+        });
+    }catch(error){
+        console.warn("deck_zoom_disable failed->", error);
+    }
+}
+//bfcache から復元されたときは document が再実行されず run() の送信が効かない一方、
+//background はデッキを離れたタブのズーム無効化を automatic へ戻しているため、ここで送り直す。
+//run() はプロファイル切替で同じ document 上を再実行するため、ここ (最上位) で 1 回だけ登録する
+window.addEventListener("pageshow", function(event){
+    if(event.persisted !== true) return;
+    if(document.getElementById("opd_main_element") === null) return;
+    request_deck_zoom_disable();
+});
 const ui_icon_define = {
     banner_hide:"icon/banner_hide.svg",
     top_bar_hide:"icon/top_hide.svg",
@@ -335,6 +358,8 @@ function run(settings){
     document.querySelector("head").insertAdjacentHTML("afterbegin", `<style opd_default_css>
     html{
         overflow-y:hidden !important;
+        /*UI 倍率で rem の基準を伸縮する。rem で書いた寸法とカラム幅 (rem) がここに追従する*/
+        font-size: calc(100% * var(--opd-ui-scale, 1));
     }
     body{
         margin: 0 !important;
@@ -367,12 +392,14 @@ function run(settings){
         --opd-radius-full: 9999px;
         --opd-shadow-sm: 0 1px 2px rgba(15, 20, 25, 0.08);
         --opd-shadow-lg: 0 16px 48px rgba(15, 20, 25, 0.28);
-        --opd-sidebar-width: 60px;
-        --opd-column-gap: 8px;
+        --opd-sidebar-width: 3.75rem;
+        --opd-column-gap: 0.5rem;
+        /*親 UI の文字の 1 単位。UI 倍率で rem が伸びても割り戻すため、文字の大きさは文字倍率だけで決まる*/
+        --opd-text-em: calc(1rem * var(--opd-text-scale, 1) / var(--opd-ui-scale, 1));
         --opd-column-burn-in: 1;
         --opd_side_rack_width: 0px;
         font-family: var(--opd-font);
-        font-size: 0.875rem;
+        font-size: calc(0.875 * var(--opd-text-em));
         line-height: 1.4;
         color: var(--opd-text);
         background: var(--opd-bg) !important;
@@ -436,7 +463,7 @@ function run(settings){
         background: var(--opd-surface);
         color: var(--opd-text);
         font: inherit;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         font-weight: 600;
         line-height: 1;
         cursor: pointer;
@@ -462,7 +489,7 @@ function run(settings){
     .opd_btn_sm{
         min-height: 1.75rem;
         padding: 0 0.75rem;
-        font-size: 0.75rem;
+        font-size: calc(0.75 * var(--opd-text-em));
     }
     /*フォーム入力 primitive*/
     .opd_input,
@@ -475,7 +502,7 @@ function run(settings){
         background: var(--opd-surface);
         color: var(--opd-text);
         font: inherit;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         transition: border-color 0.15s, box-shadow 0.15s;
     }
     .opd_input:hover,
@@ -500,6 +527,8 @@ function run(settings){
         -webkit-appearance: none;
         background-image: var(--opd-select-arrow);
         background-repeat: no-repeat;
+        /*矢印の SVG は 16×16 固定なので、UI 倍率に追従させるため描画サイズを rem で指定する*/
+        background-size: 1rem 1rem;
         background-position: right 0.5rem center;
         cursor: pointer;
     }
@@ -590,7 +619,7 @@ function run(settings){
         transform: scale(1.06);
     }
     .opd_version_span{
-        font-size: 0.625rem;
+        font-size: calc(0.625 * var(--opd-text-em));
         font-variant-numeric: tabular-nums;
         color: var(--opd-text-muted);
         cursor: pointer;
@@ -603,14 +632,14 @@ function run(settings){
         gap: 0.25rem;
         width: 100%;
         padding: 0 0.25rem 0.25rem;
-        font-size: 0.625rem;
+        font-size: calc(0.625 * var(--opd-text-em));
         text-align: center;
         color: var(--opd-text-muted);
     }
     .opd_debug_menu .opd_btn{
         min-height: 1.5rem;
         padding: 0 0.25rem;
-        font-size: 0.5625rem;
+        font-size: calc(0.5625 * var(--opd-text-em));
         white-space: normal;
     }
     #api_limit_status{
@@ -622,7 +651,7 @@ function run(settings){
         padding: 0 0.375rem;
         border-radius: var(--opd-radius-full);
         background: var(--opd-surface-2);
-        font-size: 0.6875rem;
+        font-size: calc(0.6875 * var(--opd-text-em));
         font-weight: 600;
         font-variant-numeric: tabular-nums;
         color: var(--opd-text-muted);
@@ -680,14 +709,14 @@ function run(settings){
         border-radius: var(--opd-radius-full);
         background: var(--opd-accent);
         color: var(--opd-on-accent);
-        font-size: 0.6875rem;
+        font-size: calc(0.6875 * var(--opd-text-em));
         font-weight: 700;
         font-variant-numeric: tabular-nums;
         cursor: default;
     }
     .dsp_profile_list{
         width: 100%;
-        max-height: 1000px;
+        max-height: 62.5rem;
         overflow-y: auto;
         scrollbar-width: none;
     }
@@ -711,7 +740,7 @@ function run(settings){
         color: var(--opd-accent);
     }
     .dsp_btn_change_profile_btn{
-        font-size: 0.6875rem;
+        font-size: calc(0.6875 * var(--opd-text-em));
         font-weight: 700;
         font-variant-numeric: tabular-nums;
         line-height: 1;
@@ -800,7 +829,7 @@ function run(settings){
     .dsp_column_emptycolumn p{
         margin: 0.75rem 0 0;
         text-align: center;
-        font-size: 0.875rem;
+        font-size: calc(0.875 * var(--opd-text-em));
     }
     /*カラム*/
     .dsp_column_draggable_true{
@@ -818,6 +847,12 @@ function run(settings){
     }
     .dsp_column iframe{
         border: 0;
+        /*カラム内容 (iframe が表示している X のページ) だけを拡大縮小する。
+          zoom は入れ子の frame の自然な大きさに掛かるため中身が伸縮し、width / height の 100 % は zoom で乗じられないのでカラムの枠は変わらない*/
+        zoom: var(--opd-column-content-scale, 1);
+        /*カラムバー・副見出し・設定パネルと同じ縦 flex の中で残り高さを受け持つ (縦に短いウィンドウで内容を拡大しても押し出されない)*/
+        flex: 1 1 0;
+        min-height: 0;
     }
     .column_bar{
         display: flex;
@@ -878,7 +913,7 @@ function run(settings){
         line-height: 1.25;
     }
     .opd_column_label{
-        font-size: 0.75rem;
+        font-size: calc(0.75 * var(--opd-text-em));
         color: var(--opd-text-muted);
         white-space: nowrap;
         overflow: hidden;
@@ -888,7 +923,7 @@ function run(settings){
         content: "\\00a0";
     }
     .opd_column_name{
-        font-size: 0.9375rem;
+        font-size: calc(0.9375 * var(--opd-text-em));
         font-weight: 700;
         white-space: nowrap;
         overflow: hidden;
@@ -991,7 +1026,7 @@ function run(settings){
     }
     .dsp_column_settings_panel_content h2{
         margin: 0;
-        font-size: 0.75rem;
+        font-size: calc(0.75 * var(--opd-text-em));
         font-weight: 700;
         letter-spacing: 0.04em;
         text-transform: uppercase;
@@ -1015,7 +1050,7 @@ function run(settings){
         gap: 0.25rem 0.75rem;
         min-height: 2.25rem;
         padding: 0.25rem 0;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
     }
     .dsp_column_settings_content_div + .dsp_column_settings_content_div{
         border-top: 1px solid var(--opd-border-soft);
@@ -1029,7 +1064,7 @@ function run(settings){
         gap: 0.375rem;
         flex: 1 1 auto;
         margin-left: auto;
-        font-size: 0.75rem;
+        font-size: calc(0.75 * var(--opd-text-em));
         color: var(--opd-text-muted);
     }
     /*入力欄と単位の接尾辞は折り返しで離れないよう 1 つの塊にする*/
@@ -1048,7 +1083,7 @@ function run(settings){
     .dsp_column_settings_content_div .opd_select,
     .dsp_column_settings_content_div .opd_input{
         min-height: 1.75rem;
-        font-size: 0.75rem;
+        font-size: calc(0.75 * var(--opd-text-em));
     }
     .opd_column_settings_input_text{
         width: 4.5rem;
@@ -1096,17 +1131,17 @@ function run(settings){
     }
     .opd_dialog h2{
         margin: 0;
-        font-size: 1.125rem;
+        font-size: calc(1.125 * var(--opd-text-em));
         font-weight: 700;
         line-height: 1.3;
     }
     .opd_dialog h3{
         margin: 0;
-        font-size: 0.875rem;
+        font-size: calc(0.875 * var(--opd-text-em));
         font-weight: 700;
     }
     .opd_dialog label{
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
     }
     .opd_dialog_actions{
         display: flex;
@@ -1131,7 +1166,7 @@ function run(settings){
         margin: 0;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
-        font-size: 0.875rem;
+        font-size: calc(0.875 * var(--opd-text-em));
         color: var(--opd-text);
     }
     .opd_message_dialog_input{
@@ -1147,7 +1182,7 @@ function run(settings){
     }
     .opd_global_settings_description{
         margin: 0 0 0.75rem;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         color: var(--opd-text-muted);
     }
     .opd_global_settings_row{
@@ -1164,13 +1199,13 @@ function run(settings){
         display: inline-flex;
         align-items: center;
         gap: 0.375rem;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         color: var(--opd-text-muted);
     }
     .opd_global_settings_status{
         min-height: 1.5rem;
         margin-top: 0.5rem;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         color: var(--opd-danger);
     }
     .opd_global_settings_actions{
@@ -1216,7 +1251,7 @@ function run(settings){
         align-items: center;
         flex-wrap: wrap;
         gap: 0.75rem;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
     }
     .opd_column_manager_target_row label{
         display: inline-flex;
@@ -1273,7 +1308,7 @@ function run(settings){
     .opd_list_picker_status,
     .opd_column_manager_selection_status{
         min-height: 1.5rem;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         color: var(--opd-text-muted);
     }
     .opd_list_picker_frame_wrap{
@@ -1303,7 +1338,7 @@ function run(settings){
     }
     .opd_column_manager_hint{
         margin: 0;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         color: var(--opd-text-muted);
     }
     .opd_column_manager_racks{
@@ -1322,7 +1357,7 @@ function run(settings){
     }
     .opd_column_manager_rack_title{
         margin: 0;
-        font-size: 0.75rem;
+        font-size: calc(0.75 * var(--opd-text-em));
         font-weight: 700;
         color: var(--opd-text-muted);
     }
@@ -1349,7 +1384,7 @@ function run(settings){
         border-top: 2px solid transparent;
         border-bottom: 2px solid transparent;
         border-radius: var(--opd-radius-sm);
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         cursor: grab;
         transition: background-color 0.15s;
     }
@@ -1379,6 +1414,8 @@ function run(settings){
     }
     .opd_column_manager_drag_handle{
         color: var(--opd-text-muted);
+        /*"⋮⋮" は文字で描いたアイコンなので、行から継承する文字サイズではなく UI 倍率に追従させる*/
+        font-size: 0.8125rem;
         user-select: none;
     }
     .opd_column_manager_order{
@@ -1396,7 +1433,7 @@ function run(settings){
         line-height: 1.25;
     }
     .opd_column_manager_item_label{
-        font-size: 0.6875rem;
+        font-size: calc(0.6875 * var(--opd-text-em));
         color: var(--opd-text-muted);
         overflow-wrap: anywhere;
     }
@@ -1412,7 +1449,7 @@ function run(settings){
         border-radius: var(--opd-radius-full);
         background: var(--opd-accent-soft);
         color: var(--opd-accent);
-        font-size: 0.6875rem;
+        font-size: calc(0.6875 * var(--opd-text-em));
         font-weight: 600;
         line-height: 1.4;
     }
@@ -1433,13 +1470,14 @@ function run(settings){
         background: transparent;
         color: var(--opd-text-muted);
         font: inherit;
+        /*削除ボタンの "×" は文字で描いたアイコンなので、UI 倍率に追従させる。「復元」の文字を出す .opd_column_manager_restore_btn 側で文字サイズへ上書きする*/
         font-size: 1rem;
         line-height: 1;
         cursor: pointer;
     }
     .opd_column_manager_restore_btn{
         padding: 0 0.5rem;
-        font-size: 0.75rem;
+        font-size: calc(0.75 * var(--opd-text-em));
         font-weight: 600;
     }
     .opd_column_manager_remove_btn:hover{
@@ -1454,7 +1492,7 @@ function run(settings){
         margin: 0;
         padding: 0.75rem;
         text-align: center;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         color: var(--opd-text-muted);
     }
     .opd_column_manager_rack_empty[hidden]{
@@ -1462,7 +1500,7 @@ function run(settings){
     }
     .opd_column_manager_count{
         min-height: 1.5rem;
-        font-size: 0.8125rem;
+        font-size: calc(0.8125 * var(--opd-text-em));
         color: var(--opd-text-muted);
     }
     @media (max-width: 60rem){
@@ -1504,7 +1542,7 @@ function run(settings){
         --opd-frame-skeleton: var(--opd-skeleton);
         position: fixed;
         left: calc(var(--opd-sidebar-width) + 0.5rem);
-        top: 8px;
+        top: 0.5rem;
         z-index: 999;
         display: flex;
         flex-direction: column;
@@ -1533,7 +1571,7 @@ function run(settings){
     }
     .opd_post_form_title{
         margin: 0;
-        font-size: 0.9375rem;
+        font-size: calc(0.9375 * var(--opd-text-em));
         font-weight: 700;
     }
     .opd_post_form_close_btn,
@@ -1834,6 +1872,10 @@ function run(settings){
     document.body.insertAdjacentElement("afterbegin", ins_html);
     //サイドラックの位置を属性へ反映する
     apply_side_rack_position();
+    //表示サイズ (文字 / UI / カラム内容) の倍率を CSS 変数へ反映する
+    apply_display_scale();
+    //このタブのブラウザ標準ズームを無効化する (拡大縮小は表示サイズ設定で行う)
+    request_deck_zoom_disable();
     //サイドラックの描画幅の変化を --opd_side_rack_width へ反映する
     const side_rack_resize_observer = new ResizeObserver(function(){
         update_side_rack_width();
@@ -1884,6 +1926,15 @@ function run(settings){
     //#opd_main_element の opd_side_rack_position 属性を全体設定のサイドラックの位置にする
     function apply_side_rack_position(){
         document.getElementById("opd_main_element")?.setAttribute("opd_side_rack_position", global_settings.side_rack_position);
+    }
+    //表示サイズの 3 値 (%) を倍率にして html 要素の CSS 変数へ書く (契約は「表示サイズ」節)。
+    //CSS 変数は html 要素に残るのに対しプロファイル切替で置き換わるのは #opd_main_element なので、
+    //前のプロファイルの値が残らないよう 100 % のときも 3 つとも毎回書く
+    function apply_display_scale(){
+        const root_element = document.documentElement;
+        root_element.style.setProperty("--opd-ui-scale", String(global_settings.ui_scale_percent / 100));
+        root_element.style.setProperty("--opd-text-scale", String(global_settings.text_scale_percent / 100));
+        root_element.style.setProperty("--opd-column-content-scale", String(global_settings.column_content_scale_percent / 100));
     }
     //サイドラックの現在の描画幅を --opd_side_rack_width へ書く (非表示なら 0px。小数精度を保つため getBoundingClientRect を使う)
     function update_side_rack_width(){
@@ -4371,10 +4422,12 @@ function run(settings){
     //全体設定ダイアログを開く。opener_element: 閉じたときにフォーカスを戻す要素
     //#opd_main_element の直下にオーバーレイ #opd_global_settings_overlay (class "opd_dialog_overlay opd_global_settings_overlay") を 1 つだけ生成する (既に開いていればそこへフォーカスを移す)
     //ダイアログ本体は role="dialog" aria-modal="true" aria-labelledby で、次のフォームを持つ:
-    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM) / 自動更新 checkbox / 自動更新間隔 number (秒、AUTO_RELOAD_TIME_MIN_MS 〜 AUTO_RELOAD_TIME_MAX_MS を秒に直した範囲) / 自動更新後の先頭保持 checkbox / サイドラックの位置 select (left / right)
+    //  ピン止め checkbox / バナー表示 checkbox / トップ表示 checkbox / 表示モード select / カラム幅 number (rem、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM) / 自動更新 checkbox / 自動更新間隔 number (秒、AUTO_RELOAD_TIME_MIN_MS 〜 AUTO_RELOAD_TIME_MAX_MS を秒に直した範囲) / 自動更新後の先頭保持 checkbox / サイドラックの位置 select (left / right) /
+    //  文字サイズ number (%、DISPLAY_SCALE_MIN_PERCENT 〜 DISPLAY_SCALE_MAX_PERCENT の整数) / UI サイズ number (同じ範囲) / カラム内容のサイズ number (同じ範囲)
     //  status 領域 (id 付き、role="status" aria-live="polite"、高さを予約) と 適用 / キャンセル ボタン
-    //適用: 検証に失敗したら status 領域へ msg_global_settings_invalid_width / msg_global_settings_invalid_interval を表示し、該当欄へ aria-invalid と status 領域を指す aria-describedby を付けてフォーカスし、閉じない
-    //      成功したら該当欄の aria-invalid / aria-describedby を外し、global_settings を更新 → apply_global_settings_to_columns → apply_side_rack_position → 閉じる
+    //適用: 検証は入力欄の表示順 (カラム幅 → 自動更新間隔 → 文字サイズ → UI サイズ → カラム内容のサイズ) に見て、最初に見つかった不正な欄だけへ aria-invalid と status 領域を指す aria-describedby を付けてフォーカスし、
+    //      status 領域へ msg_global_settings_invalid_width / msg_global_settings_invalid_interval / msg_global_settings_invalid_scale (表示サイズの 3 欄は共通) を表示して閉じない
+    //      成功したら各欄の aria-invalid / aria-describedby を外し、global_settings を更新 → apply_global_settings_to_columns → apply_side_rack_position → apply_display_scale → (ポップオーバーが開いていれば position_post_form_popover) → 閉じる
     //閉じる: キャンセル / Esc / 背景クリック (オーバーレイ上で mousedown と mouseup が揃ったときのみ)。閉じるときは inert を解除し opener_element にフォーカスを戻す
     //オーバーレイが close_dialog を経由せず外された場合も MutationObserver が後始末を通す
     //フォーカストラップ・inert は get_dialog_focusable_elements / create_dialog_keydown_handler / set_inert_except を使う
@@ -4404,6 +4457,9 @@ function run(settings){
         <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload_time">${i18n_message("ui_settings_auto_reload_interval_label")}</label><span><input class="opd_input opd_global_settings_auto_reload_time opd_column_settings_input_text" id="opd_global_settings_auto_reload_time" type="number" min="${AUTO_RELOAD_TIME_MIN_MS / 1000}" max="${AUTO_RELOAD_TIME_MAX_MS / 1000}">${i18n_message("ui_settings_seconds_suffix")}</span></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_auto_reload_keep_top">${i18n_message("ui_global_settings_auto_reload_keep_top_label")}</label><input class="opd_switch opd_global_settings_auto_reload_keep_top" id="opd_global_settings_auto_reload_keep_top" type="checkbox"></div>
         <div class="opd_global_settings_row"><label for="opd_global_settings_side_rack_position">${i18n_message("ui_global_settings_side_rack_position_label")}</label><select class="opd_select opd_global_settings_side_rack_position" id="opd_global_settings_side_rack_position"><option value="left">${i18n_message("ui_side_rack_position_left")}</option><option value="right">${i18n_message("ui_side_rack_position_right")}</option></select></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_text_scale">${i18n_message("ui_global_settings_text_scale_label")}</label><input class="opd_input opd_global_settings_text_scale opd_column_settings_input_text" id="opd_global_settings_text_scale" type="number" min="${DISPLAY_SCALE_MIN_PERCENT}" max="${DISPLAY_SCALE_MAX_PERCENT}" step="1"></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_ui_scale">${i18n_message("ui_global_settings_ui_scale_label")}</label><input class="opd_input opd_global_settings_ui_scale opd_column_settings_input_text" id="opd_global_settings_ui_scale" type="number" min="${DISPLAY_SCALE_MIN_PERCENT}" max="${DISPLAY_SCALE_MAX_PERCENT}" step="1"></div>
+        <div class="opd_global_settings_row"><label for="opd_global_settings_column_content_scale">${i18n_message("ui_global_settings_column_content_scale_label")}</label><input class="opd_input opd_global_settings_column_content_scale opd_column_settings_input_text" id="opd_global_settings_column_content_scale" type="number" min="${DISPLAY_SCALE_MIN_PERCENT}" max="${DISPLAY_SCALE_MAX_PERCENT}" step="1"></div>
         <div class="opd_global_settings_status" id="opd_global_settings_status" role="status" aria-live="polite"></div>
         <div class="opd_global_settings_actions"><input class="opd_btn opd_btn_primary opd_global_settings_apply_btn" type="button" value="${i18n_message("ui_global_settings_apply_button")}"><input class="opd_btn opd_global_settings_cancel_btn" type="button" value="${i18n_message("ui_global_settings_cancel_button")}"></div>
         </div>`;
@@ -4427,6 +4483,9 @@ function run(settings){
         const auto_reload_time_input = overlay.querySelector(".opd_global_settings_auto_reload_time");
         const auto_reload_keep_top_checkbox = overlay.querySelector(".opd_global_settings_auto_reload_keep_top");
         const side_rack_position_select = overlay.querySelector(".opd_global_settings_side_rack_position");
+        const text_scale_input = overlay.querySelector(".opd_global_settings_text_scale");
+        const ui_scale_input = overlay.querySelector(".opd_global_settings_ui_scale");
+        const column_content_scale_input = overlay.querySelector(".opd_global_settings_column_content_scale");
         const status_area = overlay.querySelector(".opd_global_settings_status");
         const apply_btn = overlay.querySelector(".opd_global_settings_apply_btn");
         const cancel_btn = overlay.querySelector(".opd_global_settings_cancel_btn");
@@ -4444,6 +4503,9 @@ function run(settings){
         auto_reload_time_input.value = String(global_settings.auto_reload_time / 1000);
         auto_reload_keep_top_checkbox.checked = global_settings.auto_reload_keep_top;
         side_rack_position_select.value = global_settings.side_rack_position;
+        text_scale_input.value = String(global_settings.text_scale_percent);
+        ui_scale_input.value = String(global_settings.ui_scale_percent);
+        column_content_scale_input.value = String(global_settings.column_content_scale_percent);
 
         //ダイアログを閉じ、背景の inert を解除してフォーカスを開いた要素へ戻す
         function close_dialog(){
@@ -4464,6 +4526,12 @@ function run(settings){
             input_element.removeAttribute("aria-invalid");
             input_element.removeAttribute("aria-describedby");
         }
+        //表示サイズの入力欄 (%) が不正か。空欄・非有限・非整数・範囲外を不正とする
+        function is_display_scale_input_invalid(input_element){
+            const percent_value = Number(input_element.value);
+            return input_element.value.trim() === "" || !Number.isInteger(percent_value)
+                || percent_value < DISPLAY_SCALE_MIN_PERCENT || percent_value > DISPLAY_SCALE_MAX_PERCENT;
+        }
         //入力を検証して全体設定を更新し、全カラムへ反映する
         function apply_global_settings(){
             const column_width_value = Number(column_width_input.value);
@@ -4472,17 +4540,24 @@ function run(settings){
             const auto_reload_time_ms = auto_reload_time_seconds * 1000;
             const is_interval_invalid = auto_reload_time_input.value.trim() === "" || !Number.isFinite(auto_reload_time_seconds)
                 || auto_reload_time_ms < AUTO_RELOAD_TIME_MIN_MS || auto_reload_time_ms > AUTO_RELOAD_TIME_MAX_MS;
+            const text_scale_value = Number(text_scale_input.value);
+            const ui_scale_value = Number(ui_scale_input.value);
+            const column_content_scale_value = Number(column_content_scale_input.value);
+            //検証する欄を表示順に並べる。表示サイズの 3 欄は共通のメッセージを使う
+            const validation_entries = [
+                {input: column_width_input, is_invalid: is_width_invalid, message_name: "msg_global_settings_invalid_width"},
+                {input: auto_reload_time_input, is_invalid: is_interval_invalid, message_name: "msg_global_settings_invalid_interval"},
+                {input: text_scale_input, is_invalid: is_display_scale_input_invalid(text_scale_input), message_name: "msg_global_settings_invalid_scale"},
+                {input: ui_scale_input, is_invalid: is_display_scale_input_invalid(ui_scale_input), message_name: "msg_global_settings_invalid_scale"},
+                {input: column_content_scale_input, is_invalid: is_display_scale_input_invalid(column_content_scale_input), message_name: "msg_global_settings_invalid_scale"},
+            ];
             //status 領域は 1 つなので、印を付けるのは status に表示する欄 (先に見つかった不正な欄) だけにする
-            mark_input_validity(column_width_input, is_width_invalid);
-            mark_input_validity(auto_reload_time_input, !is_width_invalid && is_interval_invalid);
-            if(is_width_invalid){
-                status_area.textContent = i18n_message("msg_global_settings_invalid_width");
-                column_width_input.focus();
-                return;
-            }
-            if(is_interval_invalid){
-                status_area.textContent = i18n_message("msg_global_settings_invalid_interval");
-                auto_reload_time_input.focus();
+            const first_invalid_entry = validation_entries.find(entry => entry.is_invalid) ?? null;
+            for(const entry of validation_entries) mark_input_validity(entry.input, entry === first_invalid_entry);
+            //1 欄でも不正なら global_settings も CSS 変数も保存値も変えない
+            if(first_invalid_entry !== null){
+                status_area.textContent = i18n_message(first_invalid_entry.message_name);
+                first_invalid_entry.input.focus();
                 return;
             }
             status_area.textContent = "";
@@ -4498,9 +4573,15 @@ function run(settings){
                 auto_reload_keep_top: auto_reload_keep_top_checkbox.checked,
                 pinned: pinned_checkbox.checked,
                 side_rack_position: side_rack_position_select.value,
+                text_scale_percent: text_scale_value,
+                ui_scale_percent: ui_scale_value,
+                column_content_scale_percent: column_content_scale_value,
             });
             apply_global_settings_to_columns();
             apply_side_rack_position();
+            apply_display_scale();
+            //root の font-size が変わっても window の resize は起きないため、開いているポップオーバーの位置は自力で合わせ直す
+            if(is_post_form_popover_open()) position_post_form_popover();
             close_dialog();
         }
 
@@ -4754,6 +4835,89 @@ function main_dsp(react_root){
 //  更新前に先頭 (scrollY が 1 以下) だったカラムは、X が新着を先頭に挿入するときに表示位置を旧先頭ポストに合わせ直す (見かけ上スクロールが下がる) のを打ち消して、更新後も先頭に保ち新着を見せる。
 //  更新前に先頭でなかったカラムには何もしない。
 //
+//===== 表示サイズ (display scale) =====
+//デッキの表示サイズは全体設定の 3 項目で決める。デッキのタブではブラウザ標準ズーム (Ctrl +/-) を無効化し、拡大縮小はこの 3 項目だけで行う。
+//  text_scale_percent              文字サイズ。親 UI (サイドバー・カラムバー・設定パネル・ダイアログ) の文字だけを伸縮する
+//  ui_scale_percent                UI サイズ。アイコン・余白・カラム幅など寸法の側を伸縮する
+//  column_content_scale_percent    カラム内容のサイズ。カラムの iframe が表示している X のページだけを伸縮する
+//いずれも % の整数で DISPLAY_SCALE_MIN_PERCENT (50) 以上 DISPLAY_SCALE_MAX_PERCENT (200) 以下、既定は 100。
+//100 % は「ブラウザ既定倍率での表示」を指す (ズーム無効化はブラウザ既定倍率へ戻して固定する操作であり、必ず 100 % に固定されるわけではない)。
+//
+//保存形式: 3 項目ともプロファイルの global_settings に持ち、既存の保存・clone・正規化の経路にそのまま乗る。
+//  GLOBAL_SETTINGS_DEFAULT に既定値 100 を置き、normalize_global_settings では to_number_in_range_or_null(value, DISPLAY_SCALE_MIN_PERCENT, DISPLAY_SCALE_MAX_PERCENT) が null でなく、かつ Number.isInteger を満たす値だけを通し、満たさなければ既定値 100 に落とす。
+//  カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない (カラム個別の値は持たない)。全体設定のキーの追加に SETTINGS_SCHEMA_VERSION の更新は要らない。
+//  他タブへの即時同期は行わない (ほかの全体設定と同じ)。
+//
+//CSS 変数 (html 要素に置く。値は percent / 100 の倍率):
+//  --opd-ui-scale                  UI 倍率。html{font-size: calc(100% * var(--opd-ui-scale, 1))} で rem の基準を伸縮するため、rem で書いた寸法とカラム幅 (rem) がすべて追従する
+//  --opd-text-scale                文字倍率
+//  --opd-column-content-scale      カラム内容の倍率。.dsp_column iframe の zoom に使う
+//  #opd_main_element のトークン --opd-text-em: calc(1rem * var(--opd-text-scale, 1) / var(--opd-ui-scale, 1)) が親 UI の文字の 1 単位。
+//    UI 倍率で rem が伸びても割り戻されるため、文字の大きさは文字倍率だけで決まる。
+//
+//<style opd_default_css> ブロックの書き方:
+//  親 UI の文字サイズは font-size: calc(<N> * var(--opd-text-em)) で書く (font-size: <N>rem は使わない)。
+//  例外 1 — 文字で描いているアイコンは寸法の一部なので rem のまま残し、UI 倍率に追従させる。対象はカラム管理ダイアログのドラッグハンドル (.opd_column_manager_drag_handle の "⋮⋮") と削除ボタン (.opd_column_manager_remove_btn の "×")。
+//    ドラッグハンドルは行 (.opd_column_manager_item) から font-size を継承しているため、文字側へ移った継承値を受けないよう自分の font-size を rem で持つ。
+//    削除ボタンと復元ボタンはクラスが分かれている (.opd_column_manager_action_btn の基底値が "×" の大きさ、.opd_column_manager_restore_btn の上書きが「復元」の文字) ため、基底値は rem のまま残し、復元ボタン側の上書きだけを文字サイズの扱いにする。
+//  例外 2 — iframe の head へ注入する CSS 文字列 (COLUMN_IFRAME_CSS、ensure_frame_style や insertAdjacentHTML でリスト選択 iframe に入れる装飾など) は親 UI ではないため置換しない。
+//  レイアウト用の寸法は rem で書いて UI 倍率に追従させる (--opd-sidebar-width、--opd-column-gap、プロファイル一覧の max-height、投稿ポップオーバーの top など)。
+//  px のまま据え置くもの: border 幅・角丸・影・outline と outline-offset・1〜2px の微調整・アニメーションの translateY・JS が測定して書く --opd_side_rack_width・JS の screen_margin (実測値に対する調整であり、UI 倍率で伸ばすと二重に掛かる)。
+//  select の矢印 (--opd-select-arrow、SVG 16×16) は background-size: 1rem 1rem を付けて UI 倍率に追従させる。
+//  既知の制約: @media (max-width: 60rem) の rem は初期の文字サイズが基準で root の font-size 変更に追従しないため、UI 倍率を変えても切替点は動かない。
+//
+//カラム内容の拡大縮小 (.dsp_column iframe{zoom: var(--opd-column-content-scale, 1)}):
+//  zoom は入れ子の frame の自然な大きさと子 frame の devicePixelRatio に掛かるため、ブラウザズームと同じように iframe 内の X のページが拡大縮小される。
+//  iframe の width / height は 100 % で、percent は zoom で乗じられないため、カラムの枠の大きさは変わらない。
+//  iframe はカラムバー・副見出し・設定パネルと同じ縦 flex の中にあるので flex: 1 1 0; min-height: 0; で残り高さを受け持たせる (縦に短いウィンドウで設定パネルを開き、内容を拡大しても iframe が押し出されない)。
+//  対象はカラムの iframe だけで、投稿フォーム (.opd_post_form_frame) とリスト選択 (.opd_list_picker_frame) は対象外。
+//  zoom が iframe の中身に及ぶのは Chrome 128 以降の標準の挙動。Firefox は 126 で CSS zoom を実装しているが、iframe の中身への波及は未検証。
+//  manifest の対応最低バージョンは変えない。zoom が iframe の中身に及ばないブラウザでは、カラム内容のサイズを変えても表示が変わらないだけで、ほかの機能には影響しない (必要なバージョンは README に書く)。
+//
+//run() スコープの関数:
+//  apply_display_scale()
+//    正規化済みの global_settings の 3 値を percent / 100 にして、document.documentElement の style へ --opd-ui-scale / --opd-text-scale / --opd-column-content-scale を設定する。
+//    値が 100 のときも 3 つとも毎回書く。CSS 変数は html 要素に残るのに対しプロファイル切替で置き換わるのは #opd_main_element なので、書かない経路を作ると前のプロファイルの値が残る。
+//    CSS 変数の更新だけを行い、ほかの DOM には触らない。
+//    呼ぶ場所は 2 つ: run() の初期構築で apply_side_rack_position() を呼んだ直後と、全体設定ダイアログの適用 (apply_global_settings_to_columns → apply_side_rack_position → apply_display_scale の順)。
+//    ダイアログの適用側では apply_display_scale の後に、投稿ポップオーバーが開いているときだけ position_post_form_popover() を呼び直す (root の font-size が変わっても window の resize は起きないため、位置は自力で合わせ直す)。
+//
+//全体設定ダイアログ (open_global_settings_dialog) のフォーム:
+//  サイドラックの位置の行の後ろに 文字サイズ / UI サイズ / カラム内容のサイズ の 3 行を、既存の行と同じ構造 (id 付き label + 入力欄) で並べる。
+//  入力欄は <input type="number" min="50" max="200" step="1"> で、class は opd_global_settings_text_scale / opd_global_settings_ui_scale / opd_global_settings_column_content_scale。
+//  検証は既存のパターンに従う: 空欄・非有限・非整数・範囲外を不正とし、カラム幅 → 自動更新間隔 → 文字サイズ → UI サイズ → カラム内容のサイズ の順に見て、最初に見つかった不正な欄だけに aria-invalid と status 領域を指す aria-describedby を付けてフォーカスし、ほかの欄の印は外す。
+//  3 項目とも共通のメッセージ msg_global_settings_invalid_scale を status 領域へ表示する。全項目の検証を通るまで global_settings も CSS 変数も保存値も変えない。
+//
+//ブラウザ標準ズームの無効化 (content script → background):
+//  content script は run() の初期構築 (DOM 挿入後、apply_side_rack_position() の付近) で chrome.runtime.sendMessage({message: "deck_zoom_disable"}) を送る。
+//  加えて window の pageshow で event.persisted が true のとき (bfcache から復元されたとき) も同じ "deck_zoom_disable" を送り直す。
+//    background はデッキを離れたタブを automatic へ戻すため、履歴で戻って document が再実行されないまま復元されると、送り直さなければ無効化が失われたままになる。
+//  応答が false でも例外でも console.warn するだけでデッキの構築は止めない。
+//  background は onMessage の request.message == "deck_zoom_disable" で受ける:
+//    sender 検証は sender.tab?.id が数値、sender.frameId === 0、sender.url がデッキの URL (https://x.com/run-opdeck または https://twitter.com/run-opdeck に等しい。content script の起動判定と同じ完全一致) の 3 つで、満たさなければ sendResponse(false) で終える。
+//      tab id が無いときにアクティブタブへ代替しない (tabId を省略したズーム API はアクティブタブを対象にするため、無関係なタブのズームを固定してしまう)。
+//    sender 検証を通ったら chrome.tabs.get(tab_id, callback) でタブの現在の url を読み、解除側と同じ判定でデッキの URL でなければ setZoomSettings を呼ばず sendResponse(false) で終える。
+//      送信は読み込みの開始から数段の非同期処理を経た後で、そのあいだにタブが別のページへ移っていることがあるため、sender.url だけでは今そのタブが表示しているページを保証できない。
+//    デッキの URL なら chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, callback) を callback 形式で呼び、成功していれば sendResponse(true) する。
+//    どの callback でも chrome.runtime.lastError を確かめ、あれば console.warn して sendResponse(false) する。
+//    どの経路でも sendResponse を 1 回で完結させる (onMessage のリスナーは末尾で return true して応答を非同期にしているため、返さないと応答が来ない)。
+//  ズーム無効化の解除 (Chromium の disabled はブラウザ既定倍率へ戻して固定するモードで、ナビゲーションでは解除されないため、デッキを離れたタブは background が戻す):
+//    background はズーム無効化中のタブを覚えない。解除するかはそのつどタブの現在の状態から判定するため、service worker が待機で止まって再起動しても次の chrome.tabs.onUpdated のイベントで解除できる。
+//    chrome.tabs.onUpdated を購読し、changeInfo.status が "loading" または "complete" のイベントごとに次の順で見る:
+//      1. chrome.tabs.getZoomSettings(tab_id, callback) で mode を読み、"disabled" でなければ何もしない。
+//         mode が disabled のタブはこの拡張が固定したものとみなして戻す。どの拡張が固定したかは判別できないため、ほかの拡張がタブのズームを disabled にしていた場合も、ブラウザの全タブ (この拡張が host permission を持たないサイトのタブを含む) で次の読み込み状態の変化時に automatic に戻ることを意図的に受け入れる。
+//      2. chrome.tabs.get(tab_id, callback) でタブの url を読み、デッキの URL (https://x.com/run-opdeck または https://twitter.com/run-opdeck に等しい) ならデッキを表示したままなので何もしない。
+//         カラム iframe の自動更新・再読み込みなど子フレームの遷移でも status は立つため、デッキ表示中の解除はこの url の判定で防ぐ。
+//         url が空・未定義のときは解除する側に倒す。host permission を持つのは x.com のページだけで、ほかのページでは url が読めず空になるが、それはデッキでない証拠として扱える。
+//      3. それ以外なら setZoomSettings(tab_id, {mode: "automatic"}, callback) で戻す。
+//    status を "loading" と "complete" の両方で見るのは、トップフレームの遷移開始の時点では tab.url がまだ遷移前 (デッキ) のことがあるためで、遷移完了時にも判定して確実に戻す。
+//    どの callback でも chrome.runtime.lastError を確かめ、あれば console.warn して終える (判定の途中でタブが閉じた場合など)。
+//    デッキを読み込み直した場合も履歴で戻った場合も、content script が改めて "deck_zoom_disable" を送るので再び無効化される。
+//  デッキの URL の判定は background.js の is_deck_url() に 1 つ置き、無効化側の 2 箇所 (sender.url と tabs.get の url) と解除側の 1 箇所で共有する。
+//  ズーム系のメソッド・onUpdated の status・chrome.tabs.get には "tabs" permission が要らないため追加しない (tabs.get が返す url は host permission のある x.com のページでだけ読める)。
+//  Firefox は mode: "disabled" を受け付けず lastError (Unsupported zoom settings) になる。これは想定内の失敗として warn だけで扱い、Firefox ではズーム無効化が効かない (ブラウザ標準ズームがデッキに掛かったまま残る) ため、この機能は Chromium 限定とする。
+//    解除の側も Firefox では getZoomSettings が常に "automatic" を返すため何も起きない。
+//
 //===== 全体設定 (global settings) =====
 //全体設定はプロファイルごと (opd_profile_store[n].global_settings) に持つ既定設定で、
 //各カラムの設定値が null (= 全体設定に従う) になっている項目に適用される。
@@ -4820,12 +4984,18 @@ const GLOBAL_SETTINGS_DEFAULT = Object.freeze({
     auto_reload_keep_top: true,
     pinned: false,
     side_rack_position: "right",
+    text_scale_percent: 100,
+    ui_scale_percent: 100,
+    column_content_scale_percent: 100,
 });
 //カラム幅の下限・上限 (rem) と自動更新間隔の下限・上限 (ms、上限は 24 時間)
 const COLUMN_WIDTH_MIN_REM = 12;
 const COLUMN_WIDTH_MAX_REM = 300;
 const AUTO_RELOAD_TIME_MIN_MS = 1000;
 const AUTO_RELOAD_TIME_MAX_MS = 86400000;
+//表示サイズ (文字 / UI / カラム内容) の下限・上限 (%)
+const DISPLAY_SCALE_MIN_PERCENT = 50;
+const DISPLAY_SCALE_MAX_PERCENT = 200;
 //カラム側で全体設定に従える項目名と、その個別値を保持するカラム div の属性名
 const COLUMN_INHERITABLE_SETTINGS = Object.freeze({
     banner: "opd_setting_banner",
@@ -4867,6 +5037,12 @@ function to_number_in_range_or_null(value, min_value, max_value){
     if(number_value === null) return null;
     return (number_value < min_value || number_value > max_value) ? null : number_value;
 }
+//表示サイズ (%) は範囲内の整数だけを通す。小数・範囲外・非数値は null に落とす
+function to_display_scale_percent_or_null(value){
+    const percent_value = to_number_in_range_or_null(value, DISPLAY_SCALE_MIN_PERCENT, DISPLAY_SCALE_MAX_PERCENT);
+    if(percent_value === null || !Number.isInteger(percent_value)) return null;
+    return percent_value;
+}
 //カラム側の項目 key の値を保存形式へ正規化する。型不正・範囲外・未知の key は null (全体設定に従う) にする
 //プロファイルの保存値もカラム div の属性値も、利用する前にこれを通して型と範囲を確定させる
 function normalize_column_setting_value(key, value){
@@ -4901,6 +5077,9 @@ function normalize_global_settings(global_settings){
     if(to_boolean_or_null(normalized.auto_reload_keep_top) === null) normalized.auto_reload_keep_top = GLOBAL_SETTINGS_DEFAULT.auto_reload_keep_top;
     if(to_boolean_or_null(normalized.pinned) === null) normalized.pinned = GLOBAL_SETTINGS_DEFAULT.pinned;
     if(to_side_rack_position_or_null(normalized.side_rack_position) === null) normalized.side_rack_position = GLOBAL_SETTINGS_DEFAULT.side_rack_position;
+    if(to_display_scale_percent_or_null(normalized.text_scale_percent) === null) normalized.text_scale_percent = GLOBAL_SETTINGS_DEFAULT.text_scale_percent;
+    if(to_display_scale_percent_or_null(normalized.ui_scale_percent) === null) normalized.ui_scale_percent = GLOBAL_SETTINGS_DEFAULT.ui_scale_percent;
+    if(to_display_scale_percent_or_null(normalized.column_content_scale_percent) === null) normalized.column_content_scale_percent = GLOBAL_SETTINGS_DEFAULT.column_content_scale_percent;
     return normalized;
 }
 //既定プロファイルのカラム配列を新しく作って返す (呼び出しごとに別の配列・別のカラムオブジェクトになる)
