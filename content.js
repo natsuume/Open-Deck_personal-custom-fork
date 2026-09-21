@@ -2238,6 +2238,23 @@ function run(settings){
     function cancel_column_title_timers(column_div){
         column_div?.querySelector("iframe")?.opd_cancel_title_timers?.();
     }
+    //要素の中のテキストを文書順に集める。img は alt (X が絵文字の描画に使う) をテキストとして数える
+    function read_text_with_image_alt(element){
+        let text = "";
+        const collect = (node) => {
+            if(node.nodeType === Node.TEXT_NODE){
+                text += node.nodeValue;
+                return;
+            }
+            if(node.nodeName === "IMG"){
+                text += node.getAttribute("alt") ?? "";
+                return;
+            }
+            node.childNodes.forEach(collect);
+        };
+        collect(element);
+        return text;
+    }
     //リスト系ページの X のヘッダーにあるリスト名の見出し (トップ非表示 CSS が隠すヘッダーと同じ要素の中の h2)
     const list_page_heading_selector = 'div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2';
     //パスが移った直後に空にしたリスト系ページのタイトルを、ページのヘッダーと照合して取り込む確認ポーリングの間隔と回数 (遷移の観測から最大 30 秒)
@@ -2254,7 +2271,7 @@ function run(settings){
     //遷移直後はヘッダーも移る前のページのまま残りうるため、この経路で取り込むタイトルには取得時刻を付けない (その後にタイトルが変われば取り直しガードに掛からず取得時刻付きで取り直される)
     //上限まで一致しなければタイトルはそのまま (空なら空のまま) 保存され、次に iframe を読み込み直したときの観測で取り込む。予約は最新の観測のものだけ残し、load ごとに捨てる。カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前には cancel_column_title_timers で捨てる
     //load の時点で既にタイトルが解決していて以後変化しない場合 (別のリストの URL へリダイレクトされた場合等) も取り込めるよう、load でも確認ポーリングを予約する
-    //リスト系ページで読めたタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送ったときは、間隔が明ける時刻に再評価を予約し、deck を開いたままでも新しい名前に収束させる
+    //リスト系ページで読めたタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送ったときは、間隔が明ける時刻に確認ポーリングを予約し直し、deck を開いたままでも新しい名前に収束させる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2304,11 +2321,14 @@ function run(settings){
                 return frame_page;
             }
             //ページタイトルが X のヘッダーのリスト名と一致するか (中身を読めない・ヘッダーが未描画・不一致なら false)
+            //X はリスト名の絵文字を img (alt に絵文字) で描画するため、ヘッダーの文字列はテキストノードと img の alt を文書順につないで作る
             function is_list_title_confirmed(frame_page){
                 if(frame_page.page_title === "") return false;
                 let heading_text = "";
                 try{
-                    heading_text = column_frame.contentDocument?.querySelector(list_page_heading_selector)?.textContent?.trim() ?? "";
+                    const heading_element = column_frame.contentDocument?.querySelector(list_page_heading_selector);
+                    if(!heading_element) return false;
+                    heading_text = read_text_with_image_alt(heading_element).trim();
                 }catch(e){
                     //別オリジンなどで中身を読めない場合は確かめられない
                     return false;
@@ -2332,7 +2352,8 @@ function run(settings){
                     column_settings_save("", last_load_profile);
                 }, column_title_confirm_interval_ms);
             }
-            //最新の観測でリスト系ページのタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送った場合、間隔が明ける時刻に同じページを表示したままなら取り込み直す
+            //最新の観測でリスト系ページのタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送った場合、間隔が明ける時刻に確認ポーリングを予約し直す
+            //(明けた時点のタイトルをそのまま取り込むと、ポストから戻った直後などに残っている別のページのタイトルを取得時刻付きで固定しうるため、ヘッダーとの一致を経て取り込む)
             function schedule_column_title_refresh(){
                 cancel_column_title_refresh();
                 if(column_div.getAttribute("opd_column_type") !== "explore") return;
@@ -2346,11 +2367,7 @@ function run(settings){
                 title_refresh_timer = setTimeout(function(){
                     title_refresh_timer = null;
                     if(!column_div.isConnected) return;
-                    const frame_page = read_column_frame_page(column_frame);
-                    if(frame_page === null || frame_page.href !== last_page.href) return;
-                    apply_column_frame_page(column_div, frame_page, frame_path_of_href(last_page.href));
-                    update_column_heading(column_div);
-                    column_settings_save("", last_load_profile);
+                    schedule_column_title_confirm();
                 }, remaining_ms);
             }
             let frame_document = null;
