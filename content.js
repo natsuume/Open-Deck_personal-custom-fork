@@ -2238,6 +2238,10 @@ function run(settings){
     function cancel_column_title_timers(column_div){
         column_div?.querySelector("iframe")?.opd_cancel_title_timers?.();
     }
+    //連続する空白 (改行を含む) を 1 つの空白に畳み、前後の空白を落とす
+    function collapse_whitespace(text){
+        return text.replace(/\s+/g, " ").trim();
+    }
     //要素の中のテキストを文書順に集める。img は alt (X が絵文字の描画に使う) をテキストとして数える
     function read_text_with_image_alt(element){
         let text = "";
@@ -2322,18 +2326,19 @@ function run(settings){
             }
             //ページタイトルが X のヘッダーのリスト名と一致するか (中身を読めない・ヘッダーが未描画・不一致なら false)
             //X はリスト名の絵文字を img (alt に絵文字) で描画するため、ヘッダーの文字列はテキストノードと img の alt を文書順につないで作る
+            //document.title はブラウザが空白を 1 つに畳んで返すため、比較は両側の空白を畳んで trim した形で行う
             function is_list_title_confirmed(frame_page){
                 if(frame_page.page_title === "") return false;
                 let heading_text = "";
                 try{
                     const heading_element = column_frame.contentDocument?.querySelector(list_page_heading_selector);
                     if(!heading_element) return false;
-                    heading_text = read_text_with_image_alt(heading_element).trim();
+                    heading_text = collapse_whitespace(read_text_with_image_alt(heading_element));
                 }catch(e){
                     //別オリジンなどで中身を読めない場合は確かめられない
                     return false;
                 }
-                return heading_text !== "" && heading_text === frame_page.page_title;
+                return heading_text !== "" && heading_text === collapse_whitespace(frame_page.page_title);
             }
             //確認ポーリングを予約する。ヘッダーと一致したタイトルを読めたら取得時刻を付けずに取り込んで保存し、続ける状態でなくなるか回数の上限に達したら止める
             function schedule_column_title_confirm(remaining_count = column_title_confirm_limit){
