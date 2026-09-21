@@ -2241,11 +2241,11 @@ function run(settings){
     //タイトルは title 要素のテキストノードの書き換えで変わることがあるため、childList に加えて characterData も観察する
     //explore カラムでは表示中のパスとページタイトルを保存する
     //explore カラムがリスト系ページへ移った直後はタイトルを空にしている (apply_column_frame_page) ため、観測のたびに確認ポーリングを予約する
-    //ポーリングは column_title_confirm_interval_ms ごとに最大 column_title_confirm_limit 回、保存したタイトルが空で同じリスト系ページを表示しているあいだ、
+    //ポーリングは column_title_confirm_interval_ms ごとに最大 column_title_confirm_limit 回、同じリスト系ページを表示したまま保存したタイトルが空 (または保存したタイトルと違うタイトルを読めていて取得時刻が無いか明けている) のあいだ、
     //ページタイトルが X のヘッダーのリスト名 (list_page_heading_selector) と一致するかを確かめ、一致したときだけ表示中のリストのタイトルとみなして取り込み、保存する
     //(ページタイトルだけでは「移る前のページのものが残っている」と「同じ名前のリストで書き換わらない」を区別できないため、ヘッダーとの一致を証拠にする。一致しなければ取り込まず、その後のタイトル変化の観測に任せる)
     //遷移直後はヘッダーも移る前のページのまま残りうるため、この経路で取り込むタイトルには取得時刻を付けない (その後にタイトルが変われば取り直しガードに掛からず取得時刻付きで取り直される)
-    //上限まで一致しなければタイトルは空のまま保存され、次に iframe を読み込み直したときの観測で取り込む。予約は最新の観測のものだけ残し、load ごとに捨てる。カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前には cancel_column_title_timers で捨てる
+    //上限まで一致しなければタイトルはそのまま (空なら空のまま) 保存され、次に iframe を読み込み直したときの観測で取り込む。予約は最新の観測のものだけ残し、load ごとに捨てる。カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前には cancel_column_title_timers で捨てる
     //load の時点で既にタイトルが解決していて以後変化しない場合 (別のリストの URL へリダイレクトされた場合等) も取り込めるよう、load でも確認ポーリングを予約する
     //リスト系ページで読めたタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送ったときは、間隔が明ける時刻に再評価を予約し、deck を開いたままでも新しい名前に収束させる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
@@ -2276,14 +2276,24 @@ function run(settings){
             cancel_column_title_refresh();
             let last_page = read_column_frame_page(column_frame);
             if(last_page === null) return;
-            //確認ポーリングを続ける状態 (最新の観測のページが表示されたままで、保存したタイトルが空のリスト系ページ) なら、iframe の読み取り結果を返す (それ以外は null)
+            //確認ポーリングを続ける状態なら iframe の読み取り結果を返す (それ以外は null)
+            //続ける状態: 最新の観測のページが表示されたままのリスト系ページで、保存したタイトルが空か、
+            //            読めたタイトルが保存したタイトルと違い、かつ取得時刻が無いか取り直し間隔が明けている (戻り先へ戻った観測で保持した保存名が既に古い場合等)
             function read_unconfirmed_list_page(){
                 if(!column_div.isConnected) return null;
-                if((column_div.getAttribute("opd_explore_title") ?? "") !== "") return null;
                 const frame_page = read_column_frame_page(column_frame);
                 if(frame_page === null || frame_page.href !== last_page.href) return null;
                 const frame_url = new URL(frame_page.href);
                 if(frame_url.protocol !== "https:" || !is_list_page_path(frame_url.pathname) || match_post_page_path(frame_url.pathname) !== null) return null;
+                const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
+                if(saved_title !== ""){
+                    if(frame_page.page_title === "" || frame_page.page_title === saved_title) return null;
+                    const fetched_at = read_column_title_fetched_at(column_div);
+                    if(fetched_at !== null){
+                        const elapsed_ms = Date.now() - fetched_at;
+                        if(elapsed_ms >= 0 && elapsed_ms < LIST_TITLE_REFRESH_INTERVAL_MS) return null;
+                    }
+                }
                 return frame_page;
             }
             //ページタイトルが X のヘッダーのリスト名と一致するか (中身を読めない・ヘッダーが未描画・不一致なら false)
