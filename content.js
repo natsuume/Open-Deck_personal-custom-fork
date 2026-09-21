@@ -2231,8 +2231,9 @@ function run(settings){
     //タイトルは title 要素のテキストノードの書き換えで変わることがあるため、childList に加えて characterData も観察する
     //explore カラムでは表示中のパスとページタイトルを保存する
     //explore カラムがリスト系ページへ移った直後はタイトルを空にしている (apply_column_frame_page) ため、観測のたびに遅延再読を予約し、
-    //column_title_fill_delay_ms 後もタイトルが空で同じページを表示していれば、そのとき読めるページタイトルで埋めて保存する
-    //遅延後に読んだタイトルは移る前のページのものでありうるため取得時刻を付けず (暫定値)、その後のタイトル変化で取り直す。予約は最新の観測のものだけ残し、load ごとに捨てる
+    //column_title_fill_delay_ms 後もタイトルが空で同じページを表示していれば、そのとき読めるページタイトルで見出しだけ埋める
+    //遅延後に読んだタイトルは移る前のページのものでありうる (X がまだ名前を解決していない場合) ため取得時刻を付けず (暫定値)、プロファイルにも保存せず、その後のタイトル変化で取り直す
+    //(保存しないため、暫定値のまま deck を再読込しても誤った名前は初期見出しに出ない)。予約は最新の観測のものだけ残し、load ごとに捨てる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2260,7 +2261,6 @@ function run(settings){
                     if(frame_url.protocol !== "https:" || !is_list_page_path(frame_url.pathname) || match_post_page_path(frame_url.pathname) !== null) return;
                     set_column_page_title(column_div, frame_page.page_title, null);
                     update_column_heading(column_div);
-                    column_settings_save("", last_load_profile);
                 }, column_title_fill_delay_ms);
             }
             let frame_document = null;
