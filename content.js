@@ -2152,21 +2152,28 @@ function run(settings){
         const fetched_at = Number(attribute_value);
         return Number.isFinite(fetched_at) ? fetched_at : null;
     }
+    //href からパスと検索文字列 (opd_explore_path と同じ形) を取り出す
+    function frame_path_of_href(href){
+        const url = new URL(href);
+        return `${url.pathname}${url.search}`;
+    }
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
     //  opd_column_return_path: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパス)
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル。ポスト単体のページではパスだけ更新し、タイトルは残す (見出しは元のページのまま薄く表示するため)
     //  ページタイトルの取り込み方はページの種類で分ける:
     //    リスト系ページ以外: ページタイトルをそのまま取り込む (取得時刻は持たない)
-    //    リスト系ページで、直前の観測 (opd_explore_path) と別のパスへ移った直後のとき: X はパスを切り替えた後にタイトルを書き換えるため、この時点のタイトルは移る前のページのものでありうる
+    //    リスト系ページで、直前の観測のパスと別のパスへ移った直後のとき: X はパスを切り替えた後にタイトルを書き換えるため、この時点のタイトルは移る前のページのものでありうる
+    //      直前の観測のパスは previous_frame_path (遷移監視が直前に読んだ href のパス。オーバーレイのパスを含む) で受け取り、無ければ (load 時) opd_explore_path を使う
     //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で保存したタイトルが空でなければ、それをそのまま使い続ける
     //      (保存したタイトルはその戻り先のページのものであり、この時点のタイトルはポストのものでありうるため取り込まない)
     //      それ以外はタイトルを空にし (この時点のタイトルは取り込まない)、次に空でないタイトルを読んだときに取り直す
     //      (X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) は、遷移監視の確認ポーリングがページのヘッダーと照合して取り込む)
     //    リスト系ページで、直前の観測と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
+    //      (オーバーレイを閉じて元のページへ戻った観測は、オーバーレイのパスからの移動として上の扱いになり、オーバーレイのタイトルを取り込まない)
     //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直して取得時刻を今にする
     //      (取得時刻が今より先 (時計の補正や別の環境で保存したプロファイル) のときも取り直す。リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
-    function apply_column_frame_page(column_div, frame_page){
+    function apply_column_frame_page(column_div, frame_page, previous_frame_path = null){
         if(column_div == null || frame_page == null) return;
         const frame_url = new URL(frame_page.href);
         if(frame_url.protocol !== "https:") return;
@@ -2176,7 +2183,7 @@ function run(settings){
         const previous_return_path = column_div.getAttribute("opd_column_return_path") ?? "";
         if(!is_post_page) column_div.setAttribute("opd_column_return_path", frame_path);
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
-        const previous_explore_path = column_div.getAttribute("opd_explore_path") ?? "";
+        const previous_explore_path = previous_frame_path ?? (column_div.getAttribute("opd_explore_path") ?? "");
         column_div.setAttribute("opd_explore_path", frame_path);
         if(is_post_page) return;
         const page_title = frame_page.page_title;
@@ -2341,7 +2348,7 @@ function run(settings){
                     if(!column_div.isConnected) return;
                     const frame_page = read_column_frame_page(column_frame);
                     if(frame_page === null || frame_page.href !== last_page.href) return;
-                    apply_column_frame_page(column_div, frame_page);
+                    apply_column_frame_page(column_div, frame_page, frame_path_of_href(last_page.href));
                     update_column_heading(column_div);
                     column_settings_save("", last_load_profile);
                 }, remaining_ms);
@@ -2359,8 +2366,9 @@ function run(settings){
                 const frame_page = read_column_frame_page(column_frame);
                 if(frame_page === null) return;
                 if(frame_page.href === last_page.href && frame_page.page_title === last_page.page_title) return;
+                const previous_frame_path = frame_path_of_href(last_page.href);
                 last_page = frame_page;
-                apply_column_frame_page(column_div, frame_page);
+                apply_column_frame_page(column_div, frame_page, previous_frame_path);
                 update_column_heading(column_div);
                 update_column_subbar(column_div);
                 if(column_div.getAttribute("opd_column_type") !== "explore") return;
