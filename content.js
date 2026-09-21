@@ -2155,7 +2155,8 @@ function run(settings){
     //  ページタイトルの取り込み方はページの種類で分ける:
     //    リスト系ページ以外: ページタイトルをそのまま取り込む (取得時刻は持たない)
     //    リスト系ページで、直前の観測 (opd_explore_path) と別のパスへ移った直後のとき: X はパスを切り替えた後にタイトルを書き換えるため、この時点のタイトルは移る前のページのものでありうる
-    //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で保存したタイトルが空でなければ、保存したタイトルと取得時刻をそのまま使い続ける
+    //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で、保存したタイトルが空でなく取得時刻もあれば、保存したタイトルと取得時刻をそのまま使い続ける
+    //      (取得時刻の無いタイトルは移る前のページのものでありうる暫定値なので使い続けず、下の扱いで取り直す)
     //      それ以外はページタイトルを取り込むが取得時刻は空のままにし、次に空でないタイトルを読んだときに取り直す
     //    リスト系ページで、直前の観測と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
     //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直して取得時刻を今にする
@@ -2180,13 +2181,13 @@ function run(settings){
             return;
         }
         const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
+        const fetched_at = read_column_title_fetched_at(column_div);
         if(frame_path !== previous_explore_path){
-            if(frame_path === previous_return_path && saved_title !== "") return;
+            if(frame_path === previous_return_path && saved_title !== "" && fetched_at !== null) return;
             set_column_page_title(column_div, page_title, null);
             return;
         }
         if(page_title === "") return;
-        const fetched_at = read_column_title_fetched_at(column_div);
         const now = Date.now();
         const elapsed_ms = fetched_at === null ? null : now - fetched_at;
         if(saved_title !== "" && elapsed_ms !== null && elapsed_ms >= 0 && elapsed_ms < LIST_TITLE_REFRESH_INTERVAL_MS) return;
