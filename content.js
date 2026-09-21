@@ -2154,10 +2154,12 @@ function run(settings){
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル。ポスト単体のページではパスだけ更新し、タイトルは残す (見出しは元のページのまま薄く表示するため)
     //  ページタイトルの取り込み方はページの種類で分ける:
     //    リスト系ページ以外: ページタイトルをそのまま取り込む (取得時刻は持たない)
-    //    リスト系ページで、直前の戻り先 (opd_column_return_path) と別のパスへ移ったとき: ページタイトルを取り込み、空でなければ取得時刻を今にする
-    //    リスト系ページで、直前の戻り先と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
+    //    リスト系ページで、直前の観測 (opd_explore_path) と別のパスへ移った直後のとき: X はパスを切り替えた後にタイトルを書き換えるため、この時点のタイトルは移る前のページのものでありうる
+    //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で保存したタイトルが空でなければ、保存したタイトルと取得時刻をそのまま使い続ける
+    //      それ以外はページタイトルを取り込むが取得時刻は空のままにし、次に空でないタイトルを読んだときに取り直す
+    //    リスト系ページで、直前の観測と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
     //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直して取得時刻を今にする
-    //      (リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
+    //      (取得時刻が今より先 (時計の補正や別の環境で保存したプロファイル) のときも取り直す。リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
     function apply_column_frame_page(column_div, frame_page){
         if(column_div == null || frame_page == null) return;
@@ -2169,6 +2171,7 @@ function run(settings){
         const previous_return_path = column_div.getAttribute("opd_column_return_path") ?? "";
         if(!is_post_page) column_div.setAttribute("opd_column_return_path", frame_path);
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
+        const previous_explore_path = column_div.getAttribute("opd_explore_path") ?? "";
         column_div.setAttribute("opd_explore_path", frame_path);
         if(is_post_page) return;
         const page_title = frame_page.page_title;
@@ -2176,15 +2179,17 @@ function run(settings){
             set_column_page_title(column_div, page_title, null);
             return;
         }
-        const now = Date.now();
-        if(frame_path !== previous_return_path){
-            set_column_page_title(column_div, page_title, page_title === "" ? null : now);
+        const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
+        if(frame_path !== previous_explore_path){
+            if(frame_path === previous_return_path && saved_title !== "") return;
+            set_column_page_title(column_div, page_title, null);
             return;
         }
         if(page_title === "") return;
-        const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
         const fetched_at = read_column_title_fetched_at(column_div);
-        if(saved_title !== "" && fetched_at !== null && now - fetched_at < LIST_TITLE_REFRESH_INTERVAL_MS) return;
+        const now = Date.now();
+        const elapsed_ms = fetched_at === null ? null : now - fetched_at;
+        if(saved_title !== "" && elapsed_ms !== null && elapsed_ms >= 0 && elapsed_ms < LIST_TITLE_REFRESH_INTERVAL_MS) return;
         set_column_page_title(column_div, page_title, now);
     }
     //ログイン中の screen_name を最後に取りに行った時刻 (全カラム共有)
