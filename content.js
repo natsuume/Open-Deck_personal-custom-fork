@@ -2157,7 +2157,8 @@ function run(settings){
     //    リスト系ページで、直前の観測 (opd_explore_path) と別のパスへ移った直後のとき: X はパスを切り替えた後にタイトルを書き換えるため、この時点のタイトルは移る前のページのものでありうる
     //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で、保存したタイトルが空でなく取得時刻もあれば、保存したタイトルと取得時刻をそのまま使い続ける
     //      (取得時刻の無いタイトルは移る前のページのものでありうる暫定値なので使い続けず、下の扱いで取り直す)
-    //      それ以外は、ページタイトルが保存したタイトルと同じなら移る前のページからの持ち越しとみなして空にし、違えば取り込む。どちらも取得時刻は空のままにし、次に空でないタイトルを読んだときに取り直す
+    //      それ以外はタイトルを空にし (この時点のタイトルは取り込まない)、次に空でないタイトルを読んだときに取り直す
+    //      (X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) は、遷移監視の遅延再読が取得時刻の無い暫定値として埋める)
     //    リスト系ページで、直前の観測と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
     //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直して取得時刻を今にする
     //      (取得時刻が今より先 (時計の補正や別の環境で保存したプロファイル) のときも取り直す。リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
@@ -2184,7 +2185,7 @@ function run(settings){
         const fetched_at = read_column_title_fetched_at(column_div);
         if(frame_path !== previous_explore_path){
             if(frame_path === previous_return_path && saved_title !== "" && fetched_at !== null) return;
-            set_column_page_title(column_div, page_title === saved_title ? "" : page_title, null);
+            set_column_page_title(column_div, "", null);
             return;
         }
         if(page_title === "") return;
@@ -2223,10 +2224,15 @@ function run(settings){
         if(get_login_screen_name() === null) return;
         update_login_dependent_headings();
     }
+    //パスが移った直後に空にしたリスト系ページのタイトルを、遷移の観測からこの時間が経っても空のままなら iframe のページタイトルで埋める
+    const column_title_fill_delay_ms = 1500;
     //カラムの iframe 内のページ内遷移を MutationObserver で検知し、表示中のページを属性・見出し・副見出しへ反映する
     //X はページを切り替えた後に document.title を書き換えるため、href とページタイトルのどちらが変わっても反映し直す
     //タイトルは title 要素のテキストノードの書き換えで変わることがあるため、childList に加えて characterData も観察する
     //explore カラムでは表示中のパスとページタイトルを保存する
+    //explore カラムがリスト系ページへ移った直後はタイトルを空にしている (apply_column_frame_page) ため、観測のたびに遅延再読を予約し、
+    //column_title_fill_delay_ms 後もタイトルが空で同じページを表示していれば、そのとき読めるページタイトルで埋めて保存する
+    //遅延後に読んだタイトルは移る前のページのものでありうるため取得時刻を付けず (暫定値)、その後のタイトル変化で取り直す。予約は最新の観測のものだけ残し、load ごとに捨てる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2234,10 +2240,29 @@ function run(settings){
         if(column_frame.opd_navigation_watch_bound === true) return;
         column_frame.opd_navigation_watch_bound = true;
         let navigation_observer = null;
+        let title_fill_timer = null;
         column_frame.addEventListener("load", function(){
             navigation_observer?.disconnect();
+            clearTimeout(title_fill_timer);
+            title_fill_timer = null;
             let last_page = read_column_frame_page(column_frame);
             if(last_page === null) return;
+            //最新の観測のページが遅延後も表示されたままで、タイトルが空のリスト系ページなら、読めるページタイトルを暫定値として埋める
+            function schedule_column_title_fill(){
+                clearTimeout(title_fill_timer);
+                title_fill_timer = setTimeout(function(){
+                    title_fill_timer = null;
+                    if(!column_div.isConnected) return;
+                    if((column_div.getAttribute("opd_explore_title") ?? "") !== "") return;
+                    const frame_page = read_column_frame_page(column_frame);
+                    if(frame_page === null || frame_page.href !== last_page.href || frame_page.page_title === "") return;
+                    const frame_url = new URL(frame_page.href);
+                    if(frame_url.protocol !== "https:" || !is_list_page_path(frame_url.pathname) || match_post_page_path(frame_url.pathname) !== null) return;
+                    set_column_page_title(column_div, frame_page.page_title, null);
+                    update_column_heading(column_div);
+                    column_settings_save("", last_load_profile);
+                }, column_title_fill_delay_ms);
+            }
             let frame_document = null;
             try{
                 frame_document = column_frame.contentWindow.document;
@@ -2256,6 +2281,7 @@ function run(settings){
                 update_column_heading(column_div);
                 update_column_subbar(column_div);
                 if(column_div.getAttribute("opd_column_type") !== "explore") return;
+                schedule_column_title_fill();
                 column_settings_save("", last_load_profile);
             });
             navigation_observer.observe(frame_document, {childList: true, subtree: true, characterData: true});
