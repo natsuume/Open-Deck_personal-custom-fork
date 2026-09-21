@@ -1788,7 +1788,7 @@ function run(settings){
         empty_column:{html:`<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_emptycolumn"><div opd_column_type="empty_column" opd_column_width="%column_width_attr%"><div><span class="opd_icon opd_icon_column_add_1" aria-hidden="true"></span><p>${i18n_message("ui_empty_column_message")}</p></div></div></section>`},
         home:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="home" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${home_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com/home" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
         notification:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="notification" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${notification_settings_panel}<iframe allow="fullscreen" src="https://x.com/notifications" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
-        explore:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="explore" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_setting_pinned="%column_setting_pinned%" opd_explore_path="%column_save_path%" opd_explore_title="%column_save_title%" opd_pinned_path="%column_pinned_save_path%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${explore_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com%column_save_path%" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`}
+        explore:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="explore" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_setting_pinned="%column_setting_pinned%" opd_explore_path="%column_save_path%" opd_explore_title="%column_save_title%" opd_explore_title_fetched_at="%column_save_title_fetched_at%" opd_pinned_path="%column_pinned_save_path%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${explore_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com%column_save_path%" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`}
     };
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
@@ -1825,13 +1825,16 @@ function run(settings){
                 let init_pinned_path = "";
                 let init_column_save_path = column_setting.column_save_path;
                 //保存したタイトルが無いプロファイルでは空文字にし、テンプレートへ "undefined" を埋めない (保存したタイトルは読み取り時に整えた形なのでそのまま使う)
+                //取得時刻は有限の数値のときだけ属性に埋め、それ以外は未取得 (空文字) にする
                 let init_column_save_title = column_setting.column_save_title ?? "";
+                let init_column_save_title_fetched_at = Number.isFinite(column_setting.column_save_title_fetched_at) ? String(column_setting.column_save_title_fetched_at) : "";
                 //Exproleピン止め。実効ピン止め中はピン止めしたパスを開き直す (記録が無い場合は reconcile_column_pinned が現在のパスで補う)
                 //保存したパスと違うページを開くときは保存したタイトルを使わず、読み込み後に取り込むまで見出しには種別の名称を出す
                 if(column_setting.type == "explore" && effective_pinned && (column_setting.column_pinned_path ?? "") != ""){
                     init_pinned_path = column_setting.column_pinned_path;
                     init_column_save_path = column_setting.column_pinned_path;
                     if(init_column_save_path !== column_setting.column_save_path) init_column_save_title = "";
+                    if(init_column_save_path !== column_setting.column_save_path) init_column_save_title_fetched_at = "";
                 }
                 //見出しの文脈ラベルとタイトル (構造用カラムは見出しを持たないため null になる)
                 const init_heading = build_column_heading(column_setting.type, init_column_save_path, init_column_save_title, init_login_screen_name);
@@ -1850,6 +1853,7 @@ function run(settings){
                     column_title: init_heading?.name ?? "",
                     column_return_path: initial_column_return_path(column_setting.type, init_column_save_path),
                     column_save_title: init_column_save_title,
+                    column_save_title_fetched_at: init_column_save_title_fetched_at,
                     column_pinned_save_path: init_pinned_path,
                     column_save_path: init_column_save_path,
                 });
@@ -2001,7 +2005,10 @@ function run(settings){
                 //console.log(preload_desc_array)
                 if(!(await show_confirm_dialog(`${i18n_message("msg_profile_load_confirm", [index, preload_desc_array.join("\n")])}`))) return;
                 //切り替え前のカラムの自動更新を止め、ポストフォームのポップオーバーの資源を解放する
-                get_settings_target_columns().forEach((column_div) => stop_column_auto_reload(column_div));
+                get_settings_target_columns().forEach((column_div) => {
+                    stop_column_auto_reload(column_div);
+                    cancel_column_title_timers(column_div);
+                });
                 teardown_post_form_popover();
                 side_rack_resize_observer.disconnect();
                 document.querySelector("#opd_main_element").remove();
@@ -2133,20 +2140,78 @@ function run(settings){
             return null;
         }
     }
+    //explore カラムの表示中ページのタイトルと、それを iframe のページタイトルから取り込んだ時刻を属性へ書く (fetched_at が null なら取得時刻を空にする)
+    function set_column_page_title(column_div, page_title, fetched_at){
+        column_div.setAttribute("opd_explore_title", page_title);
+        column_div.setAttribute("opd_explore_title_fetched_at", fetched_at === null ? "" : String(fetched_at));
+    }
+    //explore カラムのページタイトルの取得時刻を属性から読む (未取得・数値でない場合は null)
+    function read_column_title_fetched_at(column_div){
+        const attribute_value = column_div.getAttribute("opd_explore_title_fetched_at") ?? "";
+        if(attribute_value === "") return null;
+        const fetched_at = Number(attribute_value);
+        return Number.isFinite(fetched_at) ? fetched_at : null;
+    }
+    //href からパスと検索文字列 (opd_explore_path と同じ形) を取り出す
+    function frame_path_of_href(href){
+        const url = new URL(href);
+        return `${url.pathname}${url.search}`;
+    }
     //読み取ったページ (read_column_frame_page の戻り値) をカラムの属性へ取り込む
     //  opd_column_return_path: ポスト単体以外のページのときだけ更新する (副見出しの ✕ で開き直す先のパス)
     //  opd_explore_path / opd_explore_title: explore カラムが表示しているパスとページタイトル。ポスト単体のページではパスだけ更新し、タイトルは残す (見出しは元のページのまま薄く表示するため)
+    //  ページタイトルの取り込み方はページの種類で分ける:
+    //    リスト系ページ以外: ページタイトルをそのまま取り込む (取得時刻は持たない)
+    //    リスト系ページで、直前の観測のパスと別のパスへ移った直後のとき: X はパスを切り替えた後にタイトルを書き換えるため、この時点のタイトルは移る前のページのものでありうる
+    //      直前の観測のパスは previous_frame_path (遷移監視が直前に読んだ href のパス。オーバーレイのパスを含む) で受け取り、無ければ (load 時) opd_explore_path を使う
+    //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で保存したタイトルが空でなければ、それをそのまま使い続ける
+    //      (保存したタイトルはその戻り先のページのものであり、この時点のタイトルはポストのものでありうるため取り込まない)
+    //      それ以外はタイトルを空にし (この時点のタイトルは取り込まない)、次に空でないタイトルを読んだときに取り直す
+    //      (X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) は、遷移監視の確認ポーリングがページのヘッダーと照合して取り込む)
+    //    リスト系ページで、直前の観測と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
+    //      (オーバーレイを閉じて元のページへ戻った観測は、オーバーレイのパスからの移動として上の扱いになり、オーバーレイのタイトルを取り込まない)
+    //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直す
+    //      (取得時刻が今より先 (時計の補正や別の環境で保存したプロファイル) のときも取り直す。リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
+    //      取得時刻を今にするのは、そのタイトルが X のヘッダーのリスト名と一致し (is_list_title_confirmed)、かつヘッダーが別のパスへ移った観測の時点 (opd_heading_text_at_move) から変わっているときだけとし、それ以外は取得時刻を付けずに取り込む
+    //      (パスが変わった後に遅れて届く移る前のページのタイトル (ポストを開いてすぐ戻った場合や、移る前のヘッダーが残ったまま届いた場合等) を、取り直し間隔のあいだ固定しないため。取得時刻の無いタイトルは次のタイトル変化や確認ポーリングで取り直される)
+    //  別のパスへ移った観測ではその時点のヘッダーのリスト名を column_div.opd_heading_text_at_move に記録し、load (previous_frame_path 無し) では記録を消す
     //読み込み前の about:blank など https 以外のページと、表示中のページに重ねて開くオーバーレイの経路 (返信コンポーザー等) では何も変えない
-    function apply_column_frame_page(column_div, frame_page){
+    function apply_column_frame_page(column_div, frame_page, previous_frame_path = null){
         if(column_div == null || frame_page == null) return;
         const frame_url = new URL(frame_page.href);
         if(frame_url.protocol !== "https:") return;
         if(is_overlay_page_path(frame_url.pathname)) return;
         const frame_path = `${frame_url.pathname}${frame_url.search}`;
-        if(match_post_page_path(frame_url.pathname) === null) column_div.setAttribute("opd_column_return_path", frame_path);
+        const is_post_page = match_post_page_path(frame_url.pathname) !== null;
+        const previous_return_path = column_div.getAttribute("opd_column_return_path") ?? "";
+        if(!is_post_page) column_div.setAttribute("opd_column_return_path", frame_path);
         if(column_div.getAttribute("opd_column_type") !== "explore") return;
+        const previous_explore_path = previous_frame_path ?? (column_div.getAttribute("opd_explore_path") ?? "");
         column_div.setAttribute("opd_explore_path", frame_path);
-        if(match_post_page_path(frame_url.pathname) === null) column_div.setAttribute("opd_explore_title", frame_page.page_title);
+        if(is_post_page) return;
+        const page_title = frame_page.page_title;
+        if(!is_list_page_path(frame_url.pathname)){
+            set_column_page_title(column_div, page_title, null);
+            return;
+        }
+        const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
+        const column_frame = column_div.querySelector("iframe");
+        if(previous_frame_path === null) column_div.opd_heading_text_at_move = null;
+        if(frame_path !== previous_explore_path){
+            column_div.opd_heading_text_at_move = read_list_page_heading_text(column_frame);
+            if(frame_path === previous_return_path && saved_title !== "") return;
+            set_column_page_title(column_div, "", null);
+            return;
+        }
+        if(page_title === "") return;
+        const fetched_at = read_column_title_fetched_at(column_div);
+        const now = Date.now();
+        const elapsed_ms = fetched_at === null ? null : now - fetched_at;
+        if(saved_title !== "" && elapsed_ms !== null && elapsed_ms >= 0 && elapsed_ms < LIST_TITLE_REFRESH_INTERVAL_MS) return;
+        const heading_text = read_list_page_heading_text(column_frame);
+        const is_confirmed = heading_text !== "" && heading_text === collapse_whitespace(page_title);
+        const is_heading_renewed = heading_text !== (column_div.opd_heading_text_at_move ?? "");
+        set_column_page_title(column_div, page_title, is_confirmed && is_heading_renewed ? now : null);
     }
     //ログイン中の screen_name を最後に取りに行った時刻 (全カラム共有)
     let last_login_screen_name_retry_time = 0;
@@ -2178,10 +2243,67 @@ function run(settings){
         if(get_login_screen_name() === null) return;
         update_login_dependent_headings();
     }
+    //カラムの遷移監視が予約したタイトルの確認ポーリングと再評価を捨てる。カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前に呼ぶ (監視を登録していないカラムでは何もしない)
+    function cancel_column_title_timers(column_div){
+        column_div?.querySelector("iframe")?.opd_cancel_title_timers?.();
+    }
+    //連続する空白 (改行を含む) を 1 つの空白に畳み、前後の空白を落とす
+    function collapse_whitespace(text){
+        return text.replace(/\s+/g, " ").trim();
+    }
+    //要素の中のテキストを文書順に集める。img は alt (X が絵文字の描画に使う) をテキストとして数える
+    function read_text_with_image_alt(element){
+        let text = "";
+        const collect = (node) => {
+            if(node.nodeType === Node.TEXT_NODE){
+                text += node.nodeValue;
+                return;
+            }
+            if(node.nodeName === "IMG"){
+                text += node.getAttribute("alt") ?? "";
+                return;
+            }
+            node.childNodes.forEach(collect);
+        };
+        collect(element);
+        return text;
+    }
+    //リスト系ページの X のヘッダーにあるリスト名の見出し (トップ非表示 CSS が隠すヘッダーと同じ要素の中の h2)
+    const list_page_heading_selector = 'div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2';
+    //カラムの iframe が表示している X のヘッダーのリスト名を読む (中身を読めない・ヘッダーが未描画なら空文字)
+    //X はリスト名の絵文字を img (alt に絵文字) で描画するため、テキストノードと img の alt を文書順につなぎ、空白を畳んだ形にする
+    function read_list_page_heading_text(column_frame){
+        try{
+            const heading_element = column_frame?.contentDocument?.querySelector(list_page_heading_selector);
+            if(!heading_element) return "";
+            return collapse_whitespace(read_text_with_image_alt(heading_element));
+        }catch(e){
+            //別オリジンなどで中身を読めない場合
+            return "";
+        }
+    }
+    //ページタイトル (正規化済み) が、カラムの iframe が表示している X のヘッダーのリスト名と一致するか (中身を読めない・ヘッダーが未描画・不一致なら false)
+    //document.title はブラウザが空白を 1 つに畳んで返すため、比較は両側の空白を畳んで trim した形で行う
+    function is_list_title_confirmed(column_frame, page_title){
+        if(page_title === "") return false;
+        const heading_text = read_list_page_heading_text(column_frame);
+        return heading_text !== "" && heading_text === collapse_whitespace(page_title);
+    }
+    //パスが移った直後に空にしたリスト系ページのタイトルを、ページのヘッダーと照合して取り込む確認ポーリングの間隔と回数 (遷移の観測から最大 30 秒)
+    const column_title_confirm_interval_ms = 1500;
+    const column_title_confirm_limit = 20;
     //カラムの iframe 内のページ内遷移を MutationObserver で検知し、表示中のページを属性・見出し・副見出しへ反映する
     //X はページを切り替えた後に document.title を書き換えるため、href とページタイトルのどちらが変わっても反映し直す
     //タイトルは title 要素のテキストノードの書き換えで変わることがあるため、childList に加えて characterData も観察する
     //explore カラムでは表示中のパスとページタイトルを保存する
+    //explore カラムがリスト系ページへ移った直後はタイトルを空にしている (apply_column_frame_page) ため、観測のたびに確認ポーリングを予約する
+    //ポーリングは column_title_confirm_interval_ms ごとに最大 column_title_confirm_limit 回、同じリスト系ページを表示したまま保存したタイトルが空 (または保存したタイトルと違うタイトルを読めていて取得時刻が無いか明けている) のあいだ、
+    //ページタイトルが X のヘッダーのリスト名 (list_page_heading_selector) と一致するかを確かめ、一致したときだけ表示中のリストのタイトルとみなして取り込み、保存する
+    //(ページタイトルだけでは「移る前のページのものが残っている」と「同じ名前のリストで書き換わらない」を区別できないため、ヘッダーとの一致を証拠にする。一致しなければ取り込まず、その後のタイトル変化の観測に任せる)
+    //遷移直後はヘッダーも移る前のページのまま残りうるため、この経路で取り込むタイトルには取得時刻を付けない (その後にタイトルが変われば取り直しガードに掛からず取得時刻付きで取り直される)
+    //上限まで一致しなければタイトルはそのまま (空なら空のまま) 保存され、次に iframe を読み込み直したときの観測で取り込む。予約は最新の観測のものだけ残し、load ごとに捨てる。カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前には cancel_column_title_timers で捨てる
+    //load の時点で既にタイトルが解決していて以後変化しない場合 (別のリストの URL へリダイレクトされた場合等) も取り込めるよう、load でも確認ポーリングを予約する
+    //リスト系ページで読めたタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送ったときは、間隔が明ける時刻に確認ポーリングを予約し直し、deck を開いたままでも新しい名前に収束させる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2189,10 +2311,82 @@ function run(settings){
         if(column_frame.opd_navigation_watch_bound === true) return;
         column_frame.opd_navigation_watch_bound = true;
         let navigation_observer = null;
+        let title_confirm_timer = null;
+        let title_refresh_timer = null;
+        function cancel_column_title_confirm(){
+            clearTimeout(title_confirm_timer);
+            title_confirm_timer = null;
+        }
+        function cancel_column_title_refresh(){
+            clearTimeout(title_refresh_timer);
+            title_refresh_timer = null;
+        }
+        //カラムを閉じる・プロファイルを切り替える・DOM 移動で読み込み直す前に、予約した確認と再評価を捨てる (cancel_column_title_timers から呼ぶ)
+        column_frame.opd_cancel_title_timers = function(){
+            cancel_column_title_confirm();
+            cancel_column_title_refresh();
+        };
         column_frame.addEventListener("load", function(){
             navigation_observer?.disconnect();
+            cancel_column_title_confirm();
+            cancel_column_title_refresh();
             let last_page = read_column_frame_page(column_frame);
             if(last_page === null) return;
+            //確認ポーリングを続ける状態なら iframe の読み取り結果を返す (それ以外は null)
+            //続ける状態: 最新の観測のページが表示されたままのリスト系ページで、保存したタイトルが空か、
+            //            読めたタイトルが保存したタイトルと違い、かつ取得時刻が無いか取り直し間隔が明けている (戻り先へ戻った観測で保持した保存名が既に古い場合等)
+            function read_unconfirmed_list_page(){
+                if(!column_div.isConnected) return null;
+                const frame_page = read_column_frame_page(column_frame);
+                if(frame_page === null || frame_page.href !== last_page.href) return null;
+                const frame_url = new URL(frame_page.href);
+                if(frame_url.protocol !== "https:" || !is_list_page_path(frame_url.pathname) || match_post_page_path(frame_url.pathname) !== null) return null;
+                const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
+                if(saved_title !== ""){
+                    if(frame_page.page_title === "" || frame_page.page_title === saved_title) return null;
+                    const fetched_at = read_column_title_fetched_at(column_div);
+                    if(fetched_at !== null){
+                        const elapsed_ms = Date.now() - fetched_at;
+                        if(elapsed_ms >= 0 && elapsed_ms < LIST_TITLE_REFRESH_INTERVAL_MS) return null;
+                    }
+                }
+                return frame_page;
+            }
+            //確認ポーリングを予約する。ヘッダーと一致したタイトルを読めたら取得時刻を付けずに取り込んで保存し、続ける状態でなくなるか回数の上限に達したら止める
+            function schedule_column_title_confirm(remaining_count = column_title_confirm_limit){
+                cancel_column_title_confirm();
+                if(remaining_count <= 0) return;
+                title_confirm_timer = setTimeout(function(){
+                    title_confirm_timer = null;
+                    const frame_page = read_unconfirmed_list_page();
+                    if(frame_page === null) return;
+                    if(!is_list_title_confirmed(column_frame, frame_page.page_title)){
+                        schedule_column_title_confirm(remaining_count - 1);
+                        return;
+                    }
+                    set_column_page_title(column_div, frame_page.page_title, null);
+                    update_column_heading(column_div);
+                    column_settings_save("", last_load_profile);
+                }, column_title_confirm_interval_ms);
+            }
+            //最新の観測でリスト系ページのタイトルが保存したタイトルと違うのに取り直し間隔のガードで見送った場合、間隔が明ける時刻に確認ポーリングを予約し直す
+            //(明けた時点のタイトルをそのまま取り込むと、ポストから戻った直後などに残っている別のページのタイトルを取得時刻付きで固定しうるため、ヘッダーとの一致を経て取り込む)
+            function schedule_column_title_refresh(){
+                cancel_column_title_refresh();
+                if(column_div.getAttribute("opd_column_type") !== "explore") return;
+                const explore_path = column_div.getAttribute("opd_explore_path") ?? "";
+                if(!is_list_page_path(explore_path) || match_post_page_path(explore_path) !== null) return;
+                const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
+                const fetched_at = read_column_title_fetched_at(column_div);
+                if(saved_title === "" || fetched_at === null || last_page.page_title === "" || last_page.page_title === saved_title) return;
+                const remaining_ms = fetched_at + LIST_TITLE_REFRESH_INTERVAL_MS - Date.now();
+                if(remaining_ms <= 0 || remaining_ms > LIST_TITLE_REFRESH_INTERVAL_MS) return;
+                title_refresh_timer = setTimeout(function(){
+                    title_refresh_timer = null;
+                    if(!column_div.isConnected) return;
+                    schedule_column_title_confirm();
+                }, remaining_ms);
+            }
             let frame_document = null;
             try{
                 frame_document = column_frame.contentWindow.document;
@@ -2206,14 +2400,22 @@ function run(settings){
                 const frame_page = read_column_frame_page(column_frame);
                 if(frame_page === null) return;
                 if(frame_page.href === last_page.href && frame_page.page_title === last_page.page_title) return;
+                const previous_frame_path = frame_path_of_href(last_page.href);
                 last_page = frame_page;
-                apply_column_frame_page(column_div, frame_page);
+                apply_column_frame_page(column_div, frame_page, previous_frame_path);
                 update_column_heading(column_div);
                 update_column_subbar(column_div);
                 if(column_div.getAttribute("opd_column_type") !== "explore") return;
+                schedule_column_title_confirm();
+                schedule_column_title_refresh();
                 column_settings_save("", last_load_profile);
             });
             navigation_observer.observe(frame_document, {childList: true, subtree: true, characterData: true});
+            //load の時点のページに対しても確認と再評価を予約する (取り込み自体は load 時の apply_column_frame_page が済ませている)
+            if(column_div.getAttribute("opd_column_type") === "explore"){
+                schedule_column_title_confirm();
+                schedule_column_title_refresh();
+            }
         });
     }
     //メインバーイベント
@@ -2290,7 +2492,7 @@ function run(settings){
     }
     //カラムの section を DOM 上の別の位置へ移す前に、読み込み先を整える
     //DOM 上の移動で iframe は src から読み込み直されるため、explore カラムはピン止め中ならピン止めしたパス、そうでなければ表示中のパスを src に張り直し、読み込み先に合わせて見出しを組み立て直す
-    //表示中と違うページを読み込むときはページタイトルを空にし、読み込み後に取り込むまで見出しには種別の名称を出す。全種別で副見出しを読み込み先に合わせて先に整える
+    //表示中と違うページを読み込むときはページタイトルと取得時刻を空にし、読み込み後に取り込むまで見出しには種別の名称を出す。予約済みのタイトルの確認と再評価は読み込み先を張り直す前に捨てる。全種別で副見出しを読み込み先に合わせて先に整える
     function prepare_column_for_dom_move(column_section){
         const column_div = column_section.querySelector("div[opd_column_type]");
         if(column_div === null) return;
@@ -2298,8 +2500,9 @@ function run(settings){
         if(column_div.getAttribute("opd_column_type") === "explore"){
             const pinned_path = column_div.getAttribute("opd_pinned_path") ?? "";
             const reload_path = pinned_path !== "" ? pinned_path : column_div.getAttribute("opd_explore_path");
+            cancel_column_title_timers(column_div);
             if(column_frame !== null) column_frame.src = `https://x.com${reload_path}`;
-            if(column_div.getAttribute("opd_explore_path") !== reload_path) column_div.setAttribute("opd_explore_title", "");
+            if(column_div.getAttribute("opd_explore_path") !== reload_path) set_column_page_title(column_div, "", null);
             column_div.setAttribute("opd_explore_path", reload_path);
             update_column_heading(column_div);
         }
@@ -2367,6 +2570,7 @@ function run(settings){
         closing_sections.forEach((section) => {
             if(!section.isConnected) return;
             stop_column_auto_reload(section.querySelector("div[opd_column_type]"));
+            cancel_column_title_timers(section.querySelector("div[opd_column_type]"));
             section.remove();
         });
         ["main", "side"].forEach((rack_id) => {
@@ -3502,6 +3706,7 @@ function run(settings){
                 const is_pinned = target_column_div?.getAttribute("opd_column_type") === "explore" && effective_column_setting(target_column_div, "pinned", global_settings) === true;
                 if(!is_pinned){
                     stop_column_auto_reload(target_column_div);
+                    cancel_column_title_timers(target_column_div);
                     target_column.remove();
                     append_object_css();
                     update_side_rack_state();
@@ -3509,6 +3714,7 @@ function run(settings){
                 }else{
                     if(!(await show_confirm_dialog(i18n_message("msg_pinned_column_close_confirm")))) return;
                     stop_column_auto_reload(target_column_div);
+                    cancel_column_title_timers(target_column_div);
                     target_column.remove();
                     append_object_css();
                     update_side_rack_state();
@@ -3839,6 +4045,7 @@ function run(settings){
             column_setting_pinned: "inherit",
             column_pinned_save_path: "",
             column_save_title: "",
+            column_save_title_fetched_at: "",
             column_save_path: "",
             column_label: heading?.label ?? "",
             column_title: heading?.name ?? "",
@@ -4579,6 +4786,7 @@ function run(settings){
             let column_open_path = "";
             let column_pinned_save_path = "";
             let column_page_title = null;
+            let column_page_title_fetched_at = null;
             //exploreの処理
             if(column_type == 'explore'){
                 //ポスト単体を表示中は、表示中のポストではなく戻り先を保存してリスト / 検索としての識別を保つ (explore_column_persist_path)
@@ -4587,6 +4795,7 @@ function run(settings){
                 column_pinned_save_path = column_div.getAttribute("opd_pinned_path");
                 //タイトル
                 column_page_title = column_div.getAttribute("opd_explore_title");
+                column_page_title_fetched_at = read_column_title_fetched_at(column_div);
             }
             settings_array["column_settings"].push({
                 type: column_type,
@@ -4595,6 +4804,7 @@ function run(settings){
                 tw_view_mode: read_column_setting(column_div, "tw_view_mode"),
                 column_save_path: column_open_path,
                 column_save_title: column_page_title,
+                column_save_title_fetched_at: column_page_title_fetched_at,
                 column_pinned_path: column_pinned_save_path,
                 column_pinned_override: read_column_setting(column_div, "pinned"),
                 auto_reload: read_column_setting(column_div, "auto_reload"),
@@ -4894,6 +5104,7 @@ function main_dsp(react_root){
 //  profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック
 //  column = {
 //    type, column_save_path, column_save_title,
+//    column_save_title_fetched_at: number(epoch ms)|null   // column_save_title を iframe のページタイトルから取り込んだ時刻。リスト系ページの取り直し間隔の判定に使う (null = 未取得)
 //    banner: boolean|null, top_visible: boolean|null, tw_view_mode: "0"|"1"|"2"|null,
 //    column_width: number(rem)|null, auto_reload: boolean|null, auto_reload_time: number(ms)|null,
 //    column_pinned_override: boolean|null,   // null = 全体設定の pinned に従う
@@ -4915,6 +5126,7 @@ function main_dsp(react_root){
 //  opd_column_kind                 "list" | "explore" (explore カラムのみ。見出しの丸アイコンの絵柄を選ぶ)
 //  opd_column_detail               "post" (ポスト単体を表示中のあいだだけ付く。副見出しの表示と元の見出しの減衰に使う)
 //  opd_column_return_path          副見出しの ✕ で開き直すパス (ポスト以外で最後に表示したページ。初期値はカラム種別の基準パス)
+//  opd_explore_title_fetched_at    opd_explore_title を iframe のページタイトルから取り込んだ時刻 (epoch ms の数値文字列。未取得は空文字。explore カラムのみ)
 //カラムバーは見出し (カラム種別の丸アイコン・文脈ラベル・タイトル) と更新・設定・閉じるボタンを持ち、個別値の変更はカラム設定パネルから行う。
 //更新ボタン (.dsp_column_reload_btn_wrap) は home カラムで実効 auto_reload が false のときだけ表示し (hidden 属性で出し分ける)、タイムラインを更新して先頭へスクロールする。
 //カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
@@ -4935,6 +5147,8 @@ function main_dsp(react_root){
 //起動時 (run() の初期化でプロファイルからカラムを組み立てたとき) とカラム追加時は、挿入直後に bind_column_events と apply_column_dom_state を同期で呼ぶ (追加時はその後 column_settings_save する)。
 //全体設定の変更時は、その項目が inherit の全カラムに対して apply_column_dom_state と apply_column_iframe_styles を呼び直す。
 const SETTINGS_SCHEMA_VERSION = 2;
+//リスト系ページの保存したページタイトル (リスト名) を、iframe が解決したページタイトルで取り直すまでの最小間隔
+const LIST_TITLE_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const GLOBAL_SETTINGS_DEFAULT = Object.freeze({
     banner: false,
     top_visible: true,
@@ -5055,6 +5269,7 @@ function create_default_profile_columns(){
             tw_view_mode: null,
             column_save_path: "",
             column_save_title: "",
+            column_save_title_fetched_at: null,
             column_pinned_path: "",
             column_pinned_override: null,
             auto_reload: null,
@@ -5135,6 +5350,7 @@ function normalize_profile_store(store){
                     tw_view_mode: null,
                     column_save_path: "",
                     column_save_title: "",
+                    column_save_title_fetched_at: null,
                     column_pinned_path: "",
                     column_pinned_override: null,
                     auto_reload: null,
@@ -5188,6 +5404,11 @@ function normalize_profile_store(store){
                 const normalized_value = normalize_column_setting_value(column_save_keys[save_key], column[save_key]);
                 if(column[save_key] === normalized_value) continue;
                 column[save_key] = normalized_value;
+                is_changed = true;
+            }
+            //取得時刻は有限の数値だけを保存値として認め、それ以外 (欠損を含む) は null にする
+            if(column.column_save_title_fetched_at !== null && !Number.isFinite(column.column_save_title_fetched_at)){
+                column.column_save_title_fetched_at = null;
                 is_changed = true;
             }
             if(typeof column.column_pinned_path !== "string"){
