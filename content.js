@@ -2069,7 +2069,7 @@ function run(settings){
             watch_column_navigation(opd_column_div);
         }
     }
-    //カラム見出しの文脈ラベルとタイトルを、カラム種別・表示中のパス (opd_explore_path)・ページタイトル (opd_explore_title。空なら暫定値 opd_explore_title_provisional)・ログイン中の screen_name から決めて書き換える
+    //カラム見出しの文脈ラベルとタイトルを、カラム種別・表示中のパス (opd_explore_path)・ページタイトル (opd_explore_title)・ログイン中の screen_name から決めて書き換える
     //explore カラムには表示中のページ種別を opd_column_kind ("list" | "explore") として持たせ、見出しの丸アイコンの絵柄に使う
     //ポスト単体を表示中は見出しをそのまま残すため、種別は戻り先のページ (opd_column_return_path) で決める (ポストのパスからは種別が分からない)
     function update_column_heading(column_div){
@@ -2077,7 +2077,7 @@ function run(settings){
         const column_type = column_div.getAttribute("opd_column_type");
         const explore_path = column_div.getAttribute("opd_explore_path");
         const heading_path = match_post_page_path(explore_path) !== null ? (column_div.getAttribute("opd_column_return_path") || explore_path) : explore_path;
-        const heading = build_column_heading(column_type, heading_path, column_div.getAttribute("opd_explore_title") || column_div.getAttribute("opd_explore_title_provisional"), get_login_screen_name());
+        const heading = build_column_heading(column_type, heading_path, column_div.getAttribute("opd_explore_title"), get_login_screen_name());
         if(heading === null) return;
         if(column_type === "explore") column_div.setAttribute("opd_column_kind", is_list_page_path(heading_path) ? "list" : "explore");
         const label_element = column_div.querySelector(".column_bar .opd_column_label");
@@ -2138,11 +2138,9 @@ function run(settings){
         }
     }
     //explore カラムの表示中ページのタイトルと、それを iframe のページタイトルから取り込んだ時刻を属性へ書く (fetched_at が null なら取得時刻を空にする)
-    //見出しにだけ出していた暫定値 (opd_explore_title_provisional) はここで捨てる
     function set_column_page_title(column_div, page_title, fetched_at){
         column_div.setAttribute("opd_explore_title", page_title);
         column_div.setAttribute("opd_explore_title_fetched_at", fetched_at === null ? "" : String(fetched_at));
-        column_div.removeAttribute("opd_explore_title_provisional");
     }
     //explore カラムのページタイトルの取得時刻を属性から読む (未取得・数値でない場合は null)
     function read_column_title_fetched_at(column_div){
@@ -2157,10 +2155,10 @@ function run(settings){
     //  ページタイトルの取り込み方はページの種類で分ける:
     //    リスト系ページ以外: ページタイトルをそのまま取り込む (取得時刻は持たない)
     //    リスト系ページで、直前の観測 (opd_explore_path) と別のパスへ移った直後のとき: X はパスを切り替えた後にタイトルを書き換えるため、この時点のタイトルは移る前のページのものでありうる
-    //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で、保存したタイトルか見出しの暫定値 (opd_explore_title_provisional) があれば、それをそのまま使い続ける
-    //      (どちらもその戻り先のページのものであり、この時点のタイトルはポストのものでありうるため取り込まない)
+    //      移った先が直前の戻り先 (opd_column_return_path。ポスト単体から元のページへ戻った場合) で保存したタイトルが空でなければ、それをそのまま使い続ける
+    //      (保存したタイトルはその戻り先のページのものであり、この時点のタイトルはポストのものでありうるため取り込まない)
     //      それ以外はタイトルを空にし (この時点のタイトルは取り込まない)、次に空でないタイトルを読んだときに取り直す
-    //      (X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) は、遷移監視の遅延再読が暫定値として見出しに出し、さらに落ち着けば取得時刻の無い保存名へ昇格させる)
+    //      (X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) は、遷移監視の確認ポーリングがページのヘッダーと照合して取り込む)
     //    リスト系ページで、直前の観測と同じパスのとき: 保存したタイトルを見出しの正とし、X が読み込み中に出す仮タイトル (空文字) では上書きしない
     //      ページタイトルが空でなく、保存したタイトルが空か取得時刻が無いか取得から LIST_TITLE_REFRESH_INTERVAL_MS 以上経っているときだけ、ページタイトルで取り直して取得時刻を今にする
     //      (取得時刻が今より先 (時計の補正や別の環境で保存したプロファイル) のときも取り直す。リスト名の変更は次にこの条件を満たしたときに見出しへ反映される)
@@ -2185,7 +2183,7 @@ function run(settings){
         }
         const saved_title = column_div.getAttribute("opd_explore_title") ?? "";
         if(frame_path !== previous_explore_path){
-            if(frame_path === previous_return_path && (saved_title !== "" || column_div.hasAttribute("opd_explore_title_provisional"))) return;
+            if(frame_path === previous_return_path && saved_title !== "") return;
             set_column_page_title(column_div, "", null);
             return;
         }
@@ -2226,20 +2224,20 @@ function run(settings){
         if(get_login_screen_name() === null) return;
         update_login_dependent_headings();
     }
-    //パスが移った直後に空にしたリスト系ページのタイトルを、遷移の観測からこの時間が経っても空のままなら iframe のページタイトルで見出しに出す (暫定値)
-    const column_title_fill_delay_ms = 1500;
-    //暫定値を出してからさらにこの時間、同じページで同じタイトルのままなら落ち着いたとみなし、暫定値を取得時刻の無い保存名へ昇格させる
-    const column_title_settle_delay_ms = 10000;
+    //リスト系ページの X のヘッダーにあるリスト名の見出し (トップ非表示 CSS が隠すヘッダーと同じ要素の中の h2)
+    const list_page_heading_selector = 'div[data-testid="primaryColumn"]>[tabindex="0"][aria-label]>div:nth-child(1) h2';
+    //パスが移った直後に空にしたリスト系ページのタイトルを、ページのヘッダーと照合して取り込む確認ポーリングの間隔と回数 (遷移の観測から最大 9 秒)
+    const column_title_confirm_interval_ms = 1500;
+    const column_title_confirm_limit = 6;
     //カラムの iframe 内のページ内遷移を MutationObserver で検知し、表示中のページを属性・見出し・副見出しへ反映する
     //X はページを切り替えた後に document.title を書き換えるため、href とページタイトルのどちらが変わっても反映し直す
     //タイトルは title 要素のテキストノードの書き換えで変わることがあるため、childList に加えて characterData も観察する
     //explore カラムでは表示中のパスとページタイトルを保存する
-    //explore カラムがリスト系ページへ移った直後はタイトルを空にしている (apply_column_frame_page) ため、観測のたびに遅延再読を予約し、
-    //column_title_fill_delay_ms 後もタイトルが空で同じページを表示していれば、そのとき読めるページタイトルを暫定値 (opd_explore_title_provisional) として見出しだけに出す
-    //遅延後に読んだタイトルは移る前のページのものでありうる (X がまだ名前を解決していない場合) ため、この時点では opd_explore_title に書かず、プロファイルの保存 (opd_explore_title の読み取り) にも載せない
-    //暫定値を出してからさらに column_title_settle_delay_ms のあいだ同じページで同じタイトルのままなら落ち着いたとみなし、取得時刻を付けずに opd_explore_title へ昇格させて保存する
-    //(X がタイトルを書き換えないまま落ち着く場合 (移る前と同じ名前のリスト等) でも保存名が空のまま終わらないようにする。取得時刻が無いため、後から違うタイトルを読めれば取得時刻付きで取り直す)
-    //暫定値はその後のタイトル変化で opd_explore_title を書くときに捨てる。予約は最新の観測のものだけ残し、load ごとに捨てる
+    //explore カラムがリスト系ページへ移った直後はタイトルを空にしている (apply_column_frame_page) ため、観測のたびに確認ポーリングを予約する
+    //ポーリングは column_title_confirm_interval_ms ごとに最大 column_title_confirm_limit 回、保存したタイトルが空で同じリスト系ページを表示しているあいだ、
+    //ページタイトルが X のヘッダーのリスト名 (list_page_heading_selector) と一致するかを確かめ、一致したときだけ表示中のリストのタイトルと確定して取得時刻付きで取り込み、保存する
+    //(ページタイトルだけでは「移る前のページのものが残っている」と「同じ名前のリストで書き換わらない」を区別できないため、ヘッダーとの一致を証拠にする。一致しなければ取り込まず、その後のタイトル変化の観測に任せる)
+    //予約は最新の観測のものだけ残し、load ごとに捨てる
     //observer は iframe の load ごとに作り直し、そのとき前回の observer を切る。登録済みの iframe には二重に登録しない
     function watch_column_navigation(column_div){
         const column_frame = column_div?.querySelector("iframe");
@@ -2247,45 +2245,54 @@ function run(settings){
         if(column_frame.opd_navigation_watch_bound === true) return;
         column_frame.opd_navigation_watch_bound = true;
         let navigation_observer = null;
-        let title_fill_timer = null;
-        function cancel_column_title_fill(){
-            clearTimeout(title_fill_timer);
-            title_fill_timer = null;
+        let title_confirm_timer = null;
+        function cancel_column_title_confirm(){
+            clearTimeout(title_confirm_timer);
+            title_confirm_timer = null;
         }
         column_frame.addEventListener("load", function(){
             navigation_observer?.disconnect();
-            cancel_column_title_fill();
+            cancel_column_title_confirm();
             let last_page = read_column_frame_page(column_frame);
             if(last_page === null) return;
-            //最新の観測のページが表示されたままで、保存したタイトルが空のリスト系ページなら、iframe のページタイトルを読む (それ以外は null)
-            function read_settling_list_title(){
+            //確認ポーリングを続ける状態 (最新の観測のページが表示されたままで、保存したタイトルが空のリスト系ページ) なら、iframe の読み取り結果を返す (それ以外は null)
+            function read_unconfirmed_list_page(){
                 if(!column_div.isConnected) return null;
                 if((column_div.getAttribute("opd_explore_title") ?? "") !== "") return null;
                 const frame_page = read_column_frame_page(column_frame);
-                if(frame_page === null || frame_page.href !== last_page.href || frame_page.page_title === "") return null;
+                if(frame_page === null || frame_page.href !== last_page.href) return null;
                 const frame_url = new URL(frame_page.href);
                 if(frame_url.protocol !== "https:" || !is_list_page_path(frame_url.pathname) || match_post_page_path(frame_url.pathname) !== null) return null;
-                return frame_page.page_title;
+                return frame_page;
             }
-            //遅延後に読めるページタイトルを暫定値として見出しに出し、さらに落ち着けば取得時刻の無い保存名へ昇格させて保存する
-            function schedule_column_title_fill(){
-                cancel_column_title_fill();
-                title_fill_timer = setTimeout(function(){
-                    const provisional_title = read_settling_list_title();
-                    if(provisional_title === null){
-                        title_fill_timer = null;
+            //ページタイトルが X のヘッダーのリスト名と一致するか (中身を読めない・ヘッダーが未描画・不一致なら false)
+            function is_list_title_confirmed(frame_page){
+                if(frame_page.page_title === "") return false;
+                let heading_text = "";
+                try{
+                    heading_text = column_frame.contentDocument?.querySelector(list_page_heading_selector)?.textContent?.trim() ?? "";
+                }catch(e){
+                    //別オリジンなどで中身を読めない場合は確かめられない
+                    return false;
+                }
+                return heading_text !== "" && heading_text === frame_page.page_title;
+            }
+            //確認ポーリングを予約する。ヘッダーと一致したタイトルを読めたら取得時刻付きで取り込んで保存し、続ける状態でなくなるか回数の上限に達したら止める
+            function schedule_column_title_confirm(remaining_count = column_title_confirm_limit){
+                cancel_column_title_confirm();
+                if(remaining_count <= 0) return;
+                title_confirm_timer = setTimeout(function(){
+                    title_confirm_timer = null;
+                    const frame_page = read_unconfirmed_list_page();
+                    if(frame_page === null) return;
+                    if(!is_list_title_confirmed(frame_page)){
+                        schedule_column_title_confirm(remaining_count - 1);
                         return;
                     }
-                    column_div.setAttribute("opd_explore_title_provisional", provisional_title);
+                    set_column_page_title(column_div, frame_page.page_title, Date.now());
                     update_column_heading(column_div);
-                    title_fill_timer = setTimeout(function(){
-                        title_fill_timer = null;
-                        if(read_settling_list_title() !== provisional_title) return;
-                        set_column_page_title(column_div, provisional_title, null);
-                        update_column_heading(column_div);
-                        column_settings_save("", last_load_profile);
-                    }, column_title_settle_delay_ms);
-                }, column_title_fill_delay_ms);
+                    column_settings_save("", last_load_profile);
+                }, column_title_confirm_interval_ms);
             }
             let frame_document = null;
             try{
@@ -2305,7 +2312,7 @@ function run(settings){
                 update_column_heading(column_div);
                 update_column_subbar(column_div);
                 if(column_div.getAttribute("opd_column_type") !== "explore") return;
-                schedule_column_title_fill();
+                schedule_column_title_confirm();
                 column_settings_save("", last_load_profile);
             });
             navigation_observer.observe(frame_document, {childList: true, subtree: true, characterData: true});
@@ -5016,7 +5023,6 @@ function main_dsp(react_root){
 //  opd_column_detail               "post" (ポスト単体を表示中のあいだだけ付く。副見出しの表示と元の見出しの減衰に使う)
 //  opd_column_return_path          副見出しの ✕ で開き直すパス (ポスト以外で最後に表示したページ。初期値はカラム種別の基準パス)
 //  opd_explore_title_fetched_at    opd_explore_title を iframe のページタイトルから取り込んだ時刻 (epoch ms の数値文字列。未取得は空文字。explore カラムのみ)
-//  opd_explore_title_provisional   opd_explore_title が空のあいだ見出しにだけ出す暫定のページタイトル (遷移監視の遅延再読が付け、opd_explore_title を書くときに外す。保存しない。explore カラムのみ)
 //カラムバーは見出し (カラム種別の丸アイコン・文脈ラベル・タイトル) と更新・設定・閉じるボタンを持ち、個別値の変更はカラム設定パネルから行う。
 //更新ボタン (.dsp_column_reload_btn_wrap) は home カラムで実効 auto_reload が false のときだけ表示し (hidden 属性で出し分ける)、タイムラインを更新して先頭へスクロールする。
 //カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
