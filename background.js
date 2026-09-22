@@ -65,7 +65,7 @@ chrome.runtime.onMessage.addListener(
 //Firefox は mode: "disabled" を受け付けず lastError (Unsupported zoom settings) になるため、ズーム無効化は Chromium 限定の機能になる。
 //ズーム系の API は Firefox 互換のため callback 形式で呼ぶ
 
-//デッキのタブのズームを無効化する。sender 検証 → タブの現在の url の再確認 → setZoomSettings の順に進み、
+//デッキのタブのズームを無効化する。sender 検証 → タブの現在の url の再確認 → 無効化中なら automatic へ戻す → setZoomSettings の順に進み、
 //どの経路でも sendResponse を 1 回で完結させる (onMessage のリスナーは末尾で return true して応答を非同期にしているため)
 function disable_deck_tab_zoom(sender, sendResponse){
     const tab_id = sender.tab?.id;
@@ -86,13 +86,48 @@ function disable_deck_tab_zoom(sender, sendResponse){
             sendResponse(false);
             return;
         }
-        chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, function(){
-            if(chrome.runtime.lastError){
-                console.warn("deck_zoom_disable failed->", chrome.runtime.lastError.message);
+        release_disabled_zoom_mode(tab_id, function(released){
+            if(!released){
                 sendResponse(false);
                 return;
             }
-            sendResponse(true);
+            chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, function(){
+                if(chrome.runtime.lastError){
+                    console.warn("deck_zoom_disable failed->", chrome.runtime.lastError.message);
+                    sendResponse(false);
+                    return;
+                }
+                sendResponse(true);
+            });
+        });
+    });
+}
+
+//既にズームを無効化しているタブを、無効化し直す前にいったん automatic へ戻す。
+//Chromium は同じモードの再設定を無視するため、無効化中のタブへ disabled を送り直しても既定倍率へは戻らない。
+//disabled が既定倍率へ固定するのはページの document 単位の一時倍率で、デッキの再読み込みで document が作り直されると失われ、
+//x.com に設定されたブラウザ標準ズームが掛かった状態になる。再読み込みではタブの url がデッキのままなので解除側も automatic へ戻さず、
+//mode は disabled のまま残る。そこで automatic → disabled の切り替えにして、既定倍率への固定をやり直す。
+//mode が disabled でなければ何もせず done(true) を呼ぶ (Firefox は getZoomSettings が常に automatic を返すため、automatic を送る経路には入らない)。
+//API の失敗は warn して done(false) を呼ぶ
+function release_disabled_zoom_mode(tab_id, done){
+    chrome.tabs.getZoomSettings(tab_id, function(zoom_settings){
+        if(chrome.runtime.lastError){
+            console.warn("deck_zoom_disable failed->", chrome.runtime.lastError.message);
+            done(false);
+            return;
+        }
+        if(zoom_settings?.mode !== "disabled"){
+            done(true);
+            return;
+        }
+        chrome.tabs.setZoomSettings(tab_id, {mode: "automatic"}, function(){
+            if(chrome.runtime.lastError){
+                console.warn("deck_zoom_disable failed->", chrome.runtime.lastError.message);
+                done(false);
+                return;
+            }
+            done(true);
         });
     });
 }
