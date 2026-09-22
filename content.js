@@ -5069,11 +5069,14 @@ function main_dsp(react_root){
 //      tab id が無いときにアクティブタブへ代替しない (tabId を省略したズーム API はアクティブタブを対象にするため、無関係なタブのズームを固定してしまう)。
 //    sender 検証を通ったら chrome.tabs.get(tab_id, callback) でタブの現在の url を読み、解除側と同じ判定でデッキの URL でなければ setZoomSettings を呼ばず sendResponse(false) で終える。
 //      送信は読み込みの開始から数段の非同期処理を経た後で、そのあいだにタブが別のページへ移っていることがあるため、sender.url だけでは今そのタブが表示しているページを保証できない。
-//    デッキの URL なら chrome.tabs.getZoomSettings(tab_id, callback) で mode を読み、既に "disabled" なら setZoomSettings(tab_id, {mode: "automatic"}, callback) でいったん戻す。
+//    デッキの URL なら chrome.tabs.getZoomSettings(tab_id, callback) で mode を読み、既に "disabled" なら chrome.tabs.getZoom(tab_id, callback) で現在の倍率を読む。
+//      倍率が既定 (getZoomSettings の defaultZoomFactor。丸め誤差 0.001 未満は一致とみなす) からずれていれば setZoomSettings(tab_id, {mode: "automatic"}, callback) でいったん戻す。
 //      Chromium は同じモードの再設定を無視するため、無効化中のタブへ "disabled" を送り直しても既定倍率へは戻らない。
 //      disabled が既定倍率へ固定するのはページの document 単位の一時倍率で、デッキの再読み込みで document が作り直されると失われ、x.com に設定されたブラウザ標準ズームが掛かった状態になる。
 //      再読み込みではタブの url がデッキのままなので解除側も automatic へ戻さず mode は disabled のまま残るため、automatic → disabled の切り替えにして既定倍率への固定をやり直す。
 //      mode が disabled でなければ automatic は送らない (Firefox は getZoomSettings が常に automatic を返すため、automatic を送る経路には入らない)。
+//      mode が disabled でも倍率が既定のままなら固定は生きているので automatic は送らない (プロファイル切替は同じ document 上でデッキを組み直して無効化を依頼し直すため、切り替えるとブラウザ標準ズームで一瞬描画されてから戻る)。
+//      defaultZoomFactor が数値でなければ一致とみなさず、固定のやり直し側に倒す。
 //    続けて chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, callback) を callback 形式で呼び、成功していれば sendResponse(true) する。
 //    どの callback でも chrome.runtime.lastError を確かめ、あれば console.warn して sendResponse(false) する。
 //    どの経路でも sendResponse を 1 回で完結させる (onMessage のリスナーは末尾で return true して応答を非同期にしているため、返さないと応答が来ない)。
