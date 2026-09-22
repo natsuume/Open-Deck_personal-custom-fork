@@ -5069,7 +5069,15 @@ function main_dsp(react_root){
 //      tab id が無いときにアクティブタブへ代替しない (tabId を省略したズーム API はアクティブタブを対象にするため、無関係なタブのズームを固定してしまう)。
 //    sender 検証を通ったら chrome.tabs.get(tab_id, callback) でタブの現在の url を読み、解除側と同じ判定でデッキの URL でなければ setZoomSettings を呼ばず sendResponse(false) で終える。
 //      送信は読み込みの開始から数段の非同期処理を経た後で、そのあいだにタブが別のページへ移っていることがあるため、sender.url だけでは今そのタブが表示しているページを保証できない。
-//    デッキの URL なら chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, callback) を callback 形式で呼び、成功していれば sendResponse(true) する。
+//    デッキの URL なら chrome.tabs.getZoomSettings(tab_id, callback) で mode を読み、既に "disabled" なら chrome.tabs.getZoom(tab_id, callback) で現在の倍率を読む。
+//      倍率が既定 (getZoomSettings の defaultZoomFactor。丸め誤差 0.001 未満は一致とみなす) からずれていれば setZoomSettings(tab_id, {mode: "automatic"}, callback) でいったん戻す。
+//      Chromium は同じモードの再設定を無視するため、無効化中のタブへ "disabled" を送り直しても既定倍率へは戻らない。
+//      disabled が既定倍率へ固定するのはページの document 単位の一時倍率で、デッキの再読み込みで document が作り直されると失われ、x.com に設定されたブラウザ標準ズームが掛かった状態になる。
+//      再読み込みではタブの url がデッキのままなので解除側も automatic へ戻さず mode は disabled のまま残るため、automatic → disabled の切り替えにして既定倍率への固定をやり直す。
+//      mode が disabled でなければ automatic は送らない (Firefox は getZoomSettings が常に automatic を返すため、automatic を送る経路には入らない)。
+//      mode が disabled でも倍率が既定のままなら固定は生きているので automatic は送らない (プロファイル切替は同じ document 上でデッキを組み直して無効化を依頼し直すため、切り替えるとブラウザ標準ズームで一瞬描画されてから戻る)。
+//      defaultZoomFactor が数値でなければ一致とみなさず、固定のやり直し側に倒す。
+//    続けて chrome.tabs.setZoomSettings(tab_id, {mode: "disabled"}, callback) を callback 形式で呼び、成功していれば sendResponse(true) する。
 //    どの callback でも chrome.runtime.lastError を確かめ、あれば console.warn して sendResponse(false) する。
 //    どの経路でも sendResponse を 1 回で完結させる (onMessage のリスナーは末尾で return true して応答を非同期にしているため、返さないと応答が来ない)。
 //  ズーム無効化の解除 (Chromium の disabled はブラウザ既定倍率へ戻して固定するモードで、ナビゲーションでは解除されないため、デッキを離れたタブは background が戻す):
@@ -5083,7 +5091,7 @@ function main_dsp(react_root){
 //      3. それ以外なら setZoomSettings(tab_id, {mode: "automatic"}, callback) で戻す。
 //    status を "loading" と "complete" の両方で見るのは、トップフレームの遷移開始の時点では tab.url がまだ遷移前 (デッキ) のことがあるためで、遷移完了時にも判定して確実に戻す。
 //    どの callback でも chrome.runtime.lastError を確かめ、あれば console.warn して終える (判定の途中でタブが閉じた場合など)。
-//    デッキを読み込み直した場合も履歴で戻った場合も、content script が改めて "deck_zoom_disable" を送るので再び無効化される。
+//    履歴で戻った場合は content script が改めて "deck_zoom_disable" を送るので再び無効化される。読み込み直した場合は解除側を経ず mode が disabled のまま残るため、無効化側が automatic を挟んで固定をやり直す。
 //  デッキの URL の判定は background.js の is_deck_url() に 1 つ置き、無効化側の 2 箇所 (sender.url と tabs.get の url) と解除側の 1 箇所で共有する。
 //  ズーム系のメソッド・onUpdated の status・chrome.tabs.get には "tabs" permission が要らないため追加しない (tabs.get が返す url は host permission のある x.com のページでだけ読める)。
 //  Firefox は mode: "disabled" を受け付けず lastError (Unsupported zoom settings) になる。これは想定内の失敗として warn だけで扱い、Firefox ではズーム無効化が効かない (ブラウザ標準ズームがデッキに掛かったまま残る) ため、この機能は Chromium 限定とする。
