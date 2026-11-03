@@ -120,7 +120,6 @@ const ui_icon_define = {
     add_explore_column:"icon/exp_column.svg",
     add_list_column:"icon/list_column.svg",
     profile_save:"icon/profile_save.svg",
-    system_settings: "icon/settings.svg",
     profile_delete:"icon/profile_delete.svg",
     text_review:"icon/text_review.svg",
     forward:"icon/forward.svg",
@@ -323,12 +322,10 @@ if(location.href == "https://twitter.com/run-opdeck" || location.href == "https:
         });
     }
 }
-async function run(settings){
+function run(settings){
     //最上位の visibilitychange リスナーから呼ばれる関数 (reload_stale_columns_on_visible は関数宣言なので巻き上げで参照できる) を、
     //後続の DOM 構築が途中で例外を投げても代入が済んでいるように run() の冒頭で登録する
     deck_visible_handler = reload_stale_columns_on_visible;
-    //システム設定を準備する
-    const opd_system_settings = await OpdSystemSettingsManager.load();
     //console.log(settings)
     //現在のプロファイルの全体設定。run() の呼び出し元 (init 内の 2 箇所とプロファイル切替) は
     //{column_settings, global_settings} の形で、読み込むプロファイルの global_settings を必ず渡す
@@ -448,7 +445,6 @@ async function run(settings){
     .dsp_btn_post_form_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.post_form)}); }
     .dsp_btn_manage_columns_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_1)}); }
     .dsp_btn_global_settings_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_settings)}); }
-    .dsp_btn_system_settings_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.system_settings)}); }
     .dsp_btn_profile_add_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_save)}); }
     .dsp_btn_profile_delete_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_delete)}); }
     .dsp_column_move_icon{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_move)}); }
@@ -1556,7 +1552,8 @@ async function run(settings){
         z-index: 999;
         display: flex;
         flex-direction: column;
-        width: min(38rem, calc(100vw - var(--opd-sidebar-width) - 1.5rem));
+        /*幅の上限は UI 倍率に追従させず px で持つ。iframe 内の X は自分の viewport の CSS px 幅でレイアウトを切り替え、幅が広いと composer をホームタイムラインの上に重ねたダイアログとして描画するため、ポストフォームだけを表示できる幅に留める*/
+        width: min(608px, calc(100vw - var(--opd-sidebar-width) - 1.5rem));
         height: min(80vh, 44rem);
         overflow: hidden;
         background: var(--opd-surface);
@@ -1824,7 +1821,7 @@ async function run(settings){
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="manage_columns" tabindex="0" role="button" aria-haspopup="dialog" title="${i18n_message("ui_manage_columns_title")}"><div class="dsp_btn_manage_columns_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><div class="dsp_btn_parent" id="open_system_settings" tabindex="0" role="button" title="${i18n_message("ui_open_system_settings_title")}"><div class="dsp_btn_system_settings_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
+    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="manage_columns" tabindex="0" role="button" aria-haspopup="dialog" title="${i18n_message("ui_manage_columns_title")}"><div class="dsp_btn_manage_columns_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
     let main_column_html = ``;
     let side_column_html = ``;
     //カラム配列の empty_column より後をサイドラックへ振り分けるための検出状態
@@ -3585,20 +3582,6 @@ async function run(settings){
         event.preventDefault();
         open_global_settings_dialog(this);
     });
-    //システム設定 (拡張のページ system_settings/system_settings.html を別ウィンドウで開く。カスタム CSS などデッキのプロファイルに属さない設定を扱う)
-    function open_system_settings_window(){
-        window.open(chrome.runtime.getURL("system_settings/system_settings.html"), "Open-Deck Settings", 'width=720, height=600');
-    }
-    document.getElementById("open_system_settings").addEventListener("click", function(){
-        open_system_settings_window();
-    });
-    //ボタンとして振る舞わせるため、Enter と Space でも開く
-    document.getElementById("open_system_settings").addEventListener("keydown", function(event){
-        if(event.repeat) return;
-        if(event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        open_system_settings_window();
-    });
     //プロファイル保存ボタン
     document.getElementById("profile_save").addEventListener("click", async function(){
         if(!(await show_confirm_dialog(i18n_message("msg_profile_save_confirm")))) return;
@@ -4389,8 +4372,6 @@ async function run(settings){
         const tw_view_mode_style = ensure_frame_style("opd_tw_view_mode_css");
         const rt_hidden_style = ensure_frame_style("opd_disable_rt_css");
         const column_type = column_div.getAttribute("opd_column_type");
-        //システム設定のカスタム CSS (サニタイズ済み) は load ごとに 1 回だけ挿入する (applyCustomCss 側で挿入済みなら何もしない)
-        applyCustomCss(column_frame, opd_system_settings.user_custom_css_twitter_sanitized);
         rt_hidden_style.textContent = effective_column_setting(column_div, "hide_rt_tweet", global_settings) === true ? COLUMN_IFRAME_CSS.rt_hidden : ``;
         banner_style.textContent = effective_column_setting(column_div, "banner", global_settings) === true ? `` : COLUMN_IFRAME_CSS.banner_hidden;
         if(effective_column_setting(column_div, "top_visible", global_settings) === true){
@@ -4900,24 +4881,6 @@ async function run(settings){
         if(column_auto_update_state.message_dialog.open_count > 0) return false;
         return true;
     }
-    //カラムにカスタムCSSを挿入する (apply_column_iframe_styles から iframe の load ごとに呼ぶ。同じ document に挿入済みなら何もしない)
-    function applyCustomCss(columnElement, css) {
-        //設定されていない場合は何もしない
-        if (!css) return;
-
-        const columnDocument = columnElement.contentWindow.document;
-        //設定変更時の再適用などで同じ document に対して複数回呼ばれても二重に挿入しない
-        if (columnDocument.querySelector("style[opd_user_custom_css]") !== null) return;
-
-        //Firefoxでは挿入後に中身を入れるとCSP違反になるため、中身を入れてから挿入する
-        const styleElement = columnDocument.createElement("style");
-        styleElement.setAttribute("opd_user_custom_css", "");
-        styleElement.textContent = css;
-
-        //head要素がまだ無い場合はhtml要素に挿入する
-        const insertTarget = columnDocument.head ?? columnDocument.documentElement;
-        insertTarget.append(styleElement);
-    }
     //ランダムID作成
     function create_random_id(){
         return Math.random().toString(32).substring(2);
@@ -5122,6 +5085,7 @@ function main_dsp(react_root){
 //  例外 2 — iframe の head へ注入する CSS 文字列 (COLUMN_IFRAME_CSS、ensure_frame_style や insertAdjacentHTML でリスト選択 iframe に入れる装飾など) は親 UI ではないため置換しない。
 //  レイアウト用の寸法は rem で書いて UI 倍率に追従させる (--opd-sidebar-width、--opd-column-gap、プロファイル一覧の max-height、投稿ポップオーバーの top など)。
 //  px のまま据え置くもの: border 幅・角丸・影・outline と outline-offset・1〜2px の微調整・アニメーションの translateY・JS が測定して書く --opd_side_rack_width・JS の screen_margin (実測値に対する調整であり、UI 倍率で伸ばすと二重に掛かる)。
+//    投稿ポップオーバーの幅の上限 (608px) も px で持つ。iframe 内の X は自分の viewport の CSS px 幅でレイアウトを切り替え、幅が広いと composer をホームタイムラインの上に重ねたダイアログとして描画するため、UI 倍率で伸ばさない。
 //  select の矢印 (--opd-select-arrow、SVG 16×16) は background-size: 1rem 1rem を付けて UI 倍率に追従させる。
 //  既知の制約: @media (max-width: 60rem) の rem は初期の文字サイズが基準で root の font-size 変更に追従しないため、UI 倍率を変えても切替点は動かない。
 //
@@ -5241,7 +5205,7 @@ function main_dsp(react_root){
 //適用経路は 3 つに分ける:
 //  bind_column_events(column_div)        パネル・カラムバーのイベント登録 (data-opd_settings_initialized で二重登録を防ぐ)
 //  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・パネル表示・ピン止め reconcile・自動更新 interval・更新ボタンの表示)
-//  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード・RT 非表示) と、システム設定のカスタム CSS (applyCustomCss、document ごとに 1 回)。iframe の load ごとに実行し、head 未生成時は何もしない
+//  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード・RT 非表示)。iframe の load ごとに実行し、head 未生成時は何もしない
 //起動時 (run() の初期化でプロファイルからカラムを組み立てたとき) とカラム追加時は、挿入直後に bind_column_events と apply_column_dom_state を同期で呼ぶ (追加時はその後 column_settings_save する)。
 //全体設定の変更時は、その項目が inherit の全カラムに対して apply_column_dom_state と apply_column_iframe_styles を呼び直す。
 const SETTINGS_SCHEMA_VERSION = 2;
