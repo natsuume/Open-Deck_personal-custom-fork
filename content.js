@@ -1556,7 +1556,8 @@ async function run(settings){
         z-index: 999;
         display: flex;
         flex-direction: column;
-        width: min(38rem, calc(100vw - var(--opd-sidebar-width) - 1.5rem));
+        /*幅の上限は UI 倍率に追従させず px で持つ。iframe 内の X は自分の viewport の CSS px 幅でレイアウトを切り替え、幅が広いと composer をホームタイムラインの上に重ねたダイアログとして描画するため、ポストフォームだけを表示できる幅に留める*/
+        width: min(608px, calc(100vw - var(--opd-sidebar-width) - 1.5rem));
         height: min(80vh, 44rem);
         overflow: hidden;
         background: var(--opd-surface);
@@ -5122,6 +5123,7 @@ function main_dsp(react_root){
 //  例外 2 — iframe の head へ注入する CSS 文字列 (COLUMN_IFRAME_CSS、ensure_frame_style や insertAdjacentHTML でリスト選択 iframe に入れる装飾など) は親 UI ではないため置換しない。
 //  レイアウト用の寸法は rem で書いて UI 倍率に追従させる (--opd-sidebar-width、--opd-column-gap、プロファイル一覧の max-height、投稿ポップオーバーの top など)。
 //  px のまま据え置くもの: border 幅・角丸・影・outline と outline-offset・1〜2px の微調整・アニメーションの translateY・JS が測定して書く --opd_side_rack_width・JS の screen_margin (実測値に対する調整であり、UI 倍率で伸ばすと二重に掛かる)。
+//    投稿ポップオーバーの幅の上限 (608px) も px で持つ。iframe 内の X は自分の viewport の CSS px 幅でレイアウトを切り替え、幅が広いと composer をホームタイムラインの上に重ねたダイアログとして描画するため、UI 倍率で伸ばさない。
 //  select の矢印 (--opd-select-arrow、SVG 16×16) は background-size: 1rem 1rem を付けて UI 倍率に追従させる。
 //  既知の制約: @media (max-width: 60rem) の rem は初期の文字サイズが基準で root の font-size 変更に追従しないため、UI 倍率を変えても切替点は動かない。
 //
