@@ -293,12 +293,13 @@ if(location.href == "https://twitter.com/run-opdeck" || location.href == "https:
                     }
 
                     //Updateされたときに設定のバージョンを上げる
+                    //更新内容はこのフォークのマージ済み PR 一覧で確認する (version は upstream と別に付けるため、upstream のリリースページには対応する版が無い)
                     if(ext_update_flag){
                         const setting = JSON.parse(value.opd_settings);
                         setting.version = manifest.version;
                         chrome.storage.local.set({'opd_settings': JSON.stringify(setting)}, function(){
                             if(confirm(i18n_message("app_update"))){
-                                open(`https://github.com/kawa-nobu/Open-Deck/releases/tag/v${manifest.version}`, '_blank', 'popup');
+                                open("https://github.com/natsuume/Open-Deck_personal-custom-fork/pulls?q=is%3Apr+is%3Amerged", '_blank', 'popup');
                             }
                         });
                     }

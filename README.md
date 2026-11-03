@@ -48,3 +48,11 @@
 * お好みのブラウザ版ブランチのzipを落とす 
 * デベロッパーモードで導入する
 * 拡張機能実行用のURL https://twitter.com/run-opdeck を開く
+
+## バージョンの付け方
+このリポジトリは [kawa-nobu/Open-Deck](https://github.com/kawa-nobu/Open-Deck) (以下 upstream) のフォークですが、バージョンは upstream と別に、セマンティックバージョニング (`MAJOR.MINOR.PATCH`) で付けます。
+
+* 拡張の動作を変える PR では、`manifest.json` と `manifest_firefox.json` の `version` を同じ値に上げる
+* 不具合修正は PATCH、機能追加は MINOR を上げる。後方互換のない変更 (機能の削除、保存済みの設定が使えなくなる変更など) は MAJOR を上げる
+* upstream の変更を取り込むときも `version` はこのリポジトリの値のままにし、取り込んだ内容に応じて上げる
+* 既に使っている環境で `version` が変わると、次回起動時に更新の確認ダイアログが出る。OK を押すと、このリポジトリのマージ済み PR 一覧を開く
