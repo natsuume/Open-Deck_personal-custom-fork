@@ -23,8 +23,6 @@
     "extensions/media_viewer_block_helper.js",
     "extensions/list_picker_helper.js",
     "extensions/media_viewer/media_viewer.js",
-    "system_settings/system_settings.html",
-    "system_settings/system_settings.js",
     "icon.png",
     "icon/logo_icon.svg",
     "profile_debug.html",
@@ -68,7 +66,6 @@
     {
       "matches": ["https://twitter.com/*", "https://x.com/*"],
       "js": [
-        "system_setting_manager.js",
         "load_stopper.js",
         "content.js",
         "extensions/text_review.js",
