@@ -26,6 +26,27 @@
   "ui_column_close_title": {
     "message": "Close column"
   },
+  "ui_column_collapse_title": {
+    "message": "Collapse column"
+  },
+  "ui_column_expand_title": {
+    "message": "Expand column"
+  },
+  "ui_column_force_top_title": {
+    "message": "Scroll to top on every auto refresh"
+  },
+  "ui_column_force_top_disabled_title": {
+    "message": "Scroll to top on every auto refresh (available when auto refresh is enabled for this column)"
+  },
+  "ui_side_rack_hide_title": {
+    "message": "Hide side rack"
+  },
+  "ui_side_rack_show_title": {
+    "message": "Show side rack"
+  },
+  "ui_side_rack_empty_title": {
+    "message": "Toggle side rack (the side rack has no columns; add them from Manage columns)"
+  },
   "ui_column_pin_toggle_title": {
     "message": "Toggle pin"
   },

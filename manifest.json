@@ -1,6 +1,6 @@
 {
   "name": "Open-Deck",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "manifest_version": 3,
   "description": "The OpenSource Deck",
   "default_locale": "ja",
@@ -63,7 +63,11 @@
         "icon/forward.svg",
         "icon/next.svg",
         "icon/download.svg",
-        "icon/hashtag_restore.svg"
+        "icon/hashtag_restore.svg",
+        "icon/column_collapse.svg",
+        "icon/column_expand.svg",
+        "icon/side_rack.svg",
+        "icon/force_top.svg"
       ]
     }
   ],

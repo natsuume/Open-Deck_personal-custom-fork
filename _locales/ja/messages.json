@@ -26,6 +26,27 @@
   "ui_column_close_title": {
     "message": "カラムを閉じる"
   },
+  "ui_column_collapse_title": {
+    "message": "カラムを折りたたむ"
+  },
+  "ui_column_expand_title": {
+    "message": "カラムを展開する"
+  },
+  "ui_column_force_top_title": {
+    "message": "自動更新のたびに先頭へ戻す"
+  },
+  "ui_column_force_top_disabled_title": {
+    "message": "自動更新のたびに先頭へ戻す (このカラムの自動更新を有効にすると使えます)"
+  },
+  "ui_side_rack_hide_title": {
+    "message": "サイドラックを隠す"
+  },
+  "ui_side_rack_show_title": {
+    "message": "サイドラックを表示する"
+  },
+  "ui_side_rack_empty_title": {
+    "message": "サイドラックの表示切替 (サイドラックにカラムがありません。カラム管理で追加できます)"
+  },
   "ui_column_pin_toggle_title": {
     "message": "ピン止め切り替え"
   },

@@ -1,8 +1,9 @@
 //自動更新のヘルパー。カラム iframe の page world で動き、content script (extensions/auto_reload.js) からの CustomEvent で指示を受ける
 //
 //受け取るイベント (detail は JSON 文字列):
-//  'opd_column_reload_init'  {token}            照合用トークンを受け取る。以後の 'opd_column_reload' はトークンが一致するものだけ処理する
-//  'opd_column_reload'       {token, keep_top}  タイムラインを更新する。keep_top が true なら更新直後に先頭保持を始める (下記)
+//  'opd_column_reload_init'  {token}                       照合用トークンを受け取る。以後の 'opd_column_reload' はトークンが一致するものだけ処理する
+//  'opd_column_reload'       {token, keep_top, force_top}  タイムラインを更新する。force_top が true なら更新の前に先頭へスクロールし、更新直後に強制先頭保持を始める (下記)。
+//                                                         force_top が true でなく keep_top が true なら、更新前に先頭にいたときだけ先頭保持を始める (下記)
 //
 //更新関数の探索 (reload_func):
 //  div[data-testid="primaryColumn"] 内の section[role="region"] を先に、続けて document 内の残りの section[role="region"] を、それぞれ文書順に候補として並べ、
@@ -17,12 +18,24 @@
 //  終了条件: 開始から KEEP_TOP_WATCH_MS 経過 / 戻した回数が KEEP_TOP_MAX_CORRECTIONS に達した / ユーザ操作 (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知、または上記の DOM 変化を伴わない scroll) があった
 //  世代管理: 開始のたびに世代番号を進め、古い世代のタイマーと scroll 処理は何もしない (新しい更新が始まったら前の保持は無効になる)
 //  isFocusDisabled (更新直後の focus / scrollIntoView の抑制) とは別の状態として持つ
+//
+//強制先頭保持 (force_top):
+//  更新の前: 更新関数を探す前に scrollTo({top:0, behavior:"instant"}) で先頭へ戻す (更新関数が見つからなくても先頭へは戻る)
+//  開始条件: force_top が true で、更新関数を取得して呼べた (更新前のスクロール位置は問わない)
+//  保持中: window の scroll で scrollY が 0 より大きくなったら、DOM の変化の有無に関わらず scrollTo({top:0, behavior:"instant"}) で先頭へ戻す。
+//          先頭保持 (keep_top) と違い、DOM の変化を伴わない scroll でも保持を終えない (新着の高さが確定してから X が位置を合わせ直すまでに間が空いても戻す)。
+//          ユーザ操作は入力イベント (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知) だけで判定する
+//  終了条件: 開始から FORCE_TOP_WATCH_MS 経過 / 戻した回数が FORCE_TOP_MAX_CORRECTIONS に達した / 上記の入力イベントがあった
+//  先頭保持 (keep_top) と同じ状態 (世代番号・タイマー・MutationObserver) を使い、どちらで始めたかを保持中のモードとして持つ。新しい更新が始まったら、どちらのモードの保持も無効になる
 (() => {
     //先頭保持を打ち切るまでの監視時間 (ms) と、先頭へ戻す回数の上限
     const KEEP_TOP_WATCH_MS = 8000;
     const KEEP_TOP_MAX_CORRECTIONS = 5;
     //scroll を新着挿入に伴うものと見なす、直前の DOM 変化からの経過時間の上限 (ms)
     const KEEP_TOP_MUTATION_WINDOW_MS = 250;
+    //強制先頭保持を打ち切るまでの監視時間 (ms) と、先頭へ戻す回数の上限
+    const FORCE_TOP_WATCH_MS = 15000;
+    const FORCE_TOP_MAX_CORRECTIONS = 30;
     let opd_reload_token = null;
     let isFocusDisabled = false;
     
@@ -32,7 +45,7 @@
             isFocusDisabled = false;
         }, { capture: true, passive: true });
     });
-    //ユーザーが自分でスクロール・操作したら先頭保持を終える
+    //ユーザーが自分でスクロール・操作したら先頭保持 (どちらのモードも) を終える
     ['wheel', 'touchstart', 'pointerdown', 'mousedown', 'keydown'].forEach(type => document.addEventListener(type, () => stop_keep_top(), { capture: true, passive: true }));
 
     // 自動更新時にフォーカスされる問題があるので、scrollIntoViewとfocusを一時的に無効化する
@@ -191,9 +204,10 @@
         const propsKey = Object.getOwnPropertyNames(elem).find(k => k.includes(`__react${prop_type}$`));
         return propsKey ? elem[propsKey] : null;
     }
-    //先頭保持の状態 (isFocusDisabled とは別に持つ)
+    //先頭保持の状態 (isFocusDisabled とは別に持つ)。先頭保持 (keep_top) と強制先頭保持 (force_top) で共用する
     let keep_top_generation = 0;
-    let keep_top_active = false;
+    //保持中のモード ("keep_top" | "force_top")。保持していないあいだは null
+    let keep_top_mode = null;
     let keep_top_corrections = 0;
     let keep_top_timer = null;
     //保持中の DOM の childList の変化を最後に観測した時刻 (performance.now())。scroll が新着挿入に伴うものかの判定に使う
@@ -201,11 +215,12 @@
     const keep_top_mutation_observer = new MutationObserver(() => {
         keep_top_last_mutation_at = performance.now();
     });
-    //先頭保持を始める (契約は先頭コメント)。前の保持は無効にして世代を進める
-    function start_keep_top(){
+    //先頭保持を mode ("keep_top" | "force_top") で始める (契約は先頭コメント)。前の保持は無効にして世代を進める
+    //監視時間はモードごとに KEEP_TOP_WATCH_MS / FORCE_TOP_WATCH_MS を使う
+    function start_keep_top(mode){
         stop_keep_top();
         const generation = ++keep_top_generation;
-        keep_top_active = true;
+        keep_top_mode = mode;
         keep_top_corrections = 0;
         //開始直後の scroll は更新関数自身による位置変更と見なすため、開始時刻を最初の観測時刻にする
         keep_top_last_mutation_at = performance.now();
@@ -214,11 +229,11 @@
         keep_top_timer = setTimeout(() => {
             if (generation !== keep_top_generation) return;
             stop_keep_top();
-        }, KEEP_TOP_WATCH_MS);
+        }, mode === 'force_top' ? FORCE_TOP_WATCH_MS : KEEP_TOP_WATCH_MS);
     }
-    //先頭保持を終える。以後の scroll では戻さない
+    //先頭保持を終える (どちらのモードも)。以後の scroll では戻さない
     function stop_keep_top(){
-        keep_top_active = false;
+        keep_top_mode = null;
         keep_top_generation++;
         keep_top_mutation_observer.disconnect();
         if (keep_top_timer !== null) {
@@ -227,17 +242,19 @@
         }
     }
     //保持中に先頭から外れたら戻す。自分の scrollTo で起きる scroll は scrollY が 0 なので何もしない。
-    //直前に DOM の変化が無い scroll はユーザ操作 (スクロールバーのドラッグ等、入力イベントを伴わない移動) と見なして保持を終える
+    //先頭保持 (keep_top) では、直前に DOM の変化が無い scroll はユーザ操作 (スクロールバーのドラッグ等、入力イベントを伴わない移動) と見なして保持を終える。
+    //強制先頭保持 (force_top) では DOM の変化を判定せずに戻す (ユーザ操作は入力イベントだけで判定する)
     window.addEventListener('scroll', () => {
-        if (!keep_top_active) return;
+        if (keep_top_mode === null) return;
         if (window.scrollY <= 0) return;
-        if (performance.now() - keep_top_last_mutation_at > KEEP_TOP_MUTATION_WINDOW_MS) {
+        if (keep_top_mode === 'keep_top' && performance.now() - keep_top_last_mutation_at > KEEP_TOP_MUTATION_WINDOW_MS) {
             stop_keep_top();
             return;
         }
         keep_top_corrections++;
         window.scrollTo({ top: 0, behavior: 'instant' });
-        if (keep_top_corrections >= KEEP_TOP_MAX_CORRECTIONS) stop_keep_top();
+        const max_corrections = keep_top_mode === 'force_top' ? FORCE_TOP_MAX_CORRECTIONS : KEEP_TOP_MAX_CORRECTIONS;
+        if (keep_top_corrections >= max_corrections) stop_keep_top();
     }, { passive: true });
     //機能動作用のトークンを設定
     window.addEventListener('opd_column_reload_init', (e)=>{
@@ -261,6 +278,9 @@
         if(opd_reload_token && opd_reload_token !== detail.token) return;
         //新しい更新が始まったら前の保持は無効にする
         stop_keep_top();
+        const is_force_top = detail.force_top === true;
+        //強制先頭保持は更新関数を探す前に先頭へ戻す (更新関数が見つからなくても先頭へは戻る)
+        if (is_force_top) window.scrollTo({ top: 0, behavior: 'instant' });
         //先頭にいたかどうかは更新関数を呼ぶ前に取る (更新関数が同期的に位置を変えても「更新前」の判定にする)
         const was_at_top = window.scrollY <= 1;
         let is_reloaded = false;
@@ -270,6 +290,12 @@
         } catch (err) {
             console.warn('reload_func threw->', err);
         }
-        if (is_reloaded && detail.keep_top === true && was_at_top) start_keep_top();
+        if (!is_reloaded) return;
+        //強制先頭保持は更新前のスクロール位置を問わずに始め、先頭保持より優先する
+        if (is_force_top) {
+            start_keep_top('force_top');
+            return;
+        }
+        if (detail.keep_top === true && was_at_top) start_keep_top('keep_top');
     }, true);
 })();
