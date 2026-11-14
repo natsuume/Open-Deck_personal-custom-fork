@@ -1,7 +1,9 @@
 // 自動更新機能で使用。Reload(column_window, {keep_top, force_top}) でヘルパーへ 'opd_column_reload' を送る (契約は auto_reload_helper.js の先頭コメント)
+// is_helper_loaded は、ヘルパーのスクリプトが読み込まれて照合用トークンを渡し終えた (= 'opd_column_reload' を処理できる) ときに true になる
 class OpdExtAutoReload {
     constructor() {
         this.opd_reload_token = null;
+        this.is_helper_loaded = false;
         this.Init = (column_frame) => {
             const column_window = column_frame.contentWindow;
             //ヘルパースクリプト追加
@@ -14,6 +16,7 @@ class OpdExtAutoReload {
                 column_window.document.dispatchEvent(new CustomEvent('opd_column_reload_init', {
                     detail: JSON.stringify({ token:this.opd_reload_token })
                 }));
+                this.is_helper_loaded = true;
             });
         }
         this.Reload = (column_window, options = {})=>{

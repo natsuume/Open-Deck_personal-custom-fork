@@ -4810,10 +4810,11 @@ function run(settings){
             return null;
         }
     }
-    //カラムの iframe でヘルパーが準備済みかどうかを返す: iframe 要素の opd_auto_reload があり、ヘルパーを注入した document (opd_auto_reload_document) が今の document と同じなら true。
-    //読み込み直しの途中 (新しい document の load 前) は前の document のヘルパーが残っているため false にする。中身を読めない (別オリジン等) ときも false
+    //カラムの iframe でヘルパーが準備済みかどうかを返す: iframe 要素の opd_auto_reload があり、そのヘルパーのスクリプトが読み込まれ (is_helper_loaded)、
+    //ヘルパーを注入した document (opd_auto_reload_document) が今の document と同じなら true。
+    //iframe の load からヘルパーのスクリプトが読み込まれるまでのあいだと、読み込み直しの途中 (新しい document の load 前。前の document のヘルパーが残っている) は false にする。中身を読めない (別オリジン等) ときも false
     function is_column_reload_helper_ready(column_frame){
-        if(!column_frame?.opd_auto_reload) return false;
+        if(column_frame?.opd_auto_reload?.is_helper_loaded !== true) return false;
         try{
             return column_frame.opd_auto_reload_document === column_frame.contentWindow.document;
         }catch(e){
@@ -5452,7 +5453,7 @@ function main_dsp(react_root){
 //  clear_force_top_pending(column_frame)  保留の印を消し、mark_force_top_pending が付けたリスナーを外す。reload_column が force_top で更新したとき・印を付けたカラムでユーザーが操作したとき・
 //                                          iframe の load (reinit_column_extensions のヘルパー注入時。新しい document は先頭から表示され、前の document のリスナーも届かなくなるため) に呼ぶ
 //  is_column_reload_helper_ready(column_frame)
-//                                         ヘルパーが今の document で準備済みなら true: iframe 要素の opd_auto_reload があり、ヘルパーを注入した document (iframe 要素の opd_auto_reload_document。
+//                                         ヘルパーが今の document で準備済みなら true: iframe 要素の opd_auto_reload があってそのヘルパーのスクリプトが読み込まれており (OpdExtAutoReload の is_helper_loaded)、ヘルパーを注入した document (iframe 要素の opd_auto_reload_document。
 //                                          reinit_column_extensions の load で記録する) が今の contentWindow.document と同じ。読み込み直しの途中 (新しい document の load 前) と、中身を読めないときは false
 //  is_column_timeline_path(path_name)     X の更新関数があると分かっているタイムラインのパスなら true (/home・/search・/i/lists/<リスト ID>)。
 //                                          カラムバーの更新ボタンが X の更新関数で更新するか、自動更新を force_top で行うか、保留の印を付けるかの判定に使う。
