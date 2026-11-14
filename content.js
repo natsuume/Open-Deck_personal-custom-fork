@@ -5619,25 +5619,27 @@ function main_dsp(react_root){
 //  opd_profile_store[n] = {
 //    name, profile: [column...],
 //    settings_schema_version: SETTINGS_SCHEMA_VERSION,
-//    global_settings: {banner, top_visible, tw_view_mode, hide_rt_tweet, column_width, auto_reload, auto_reload_time, auto_reload_keep_top, pinned, side_rack_position, side_rack_visible, text_scale_percent, ui_scale_percent, column_content_scale_percent}
+//    global_settings: {banner, top_visible, tw_view_mode, hide_rt_tweet, column_width, auto_reload, auto_reload_time, auto_reload_keep_top, side_rack_position, side_rack_visible, text_scale_percent, ui_scale_percent, column_content_scale_percent}
 //  }
 //  auto_reload_keep_top (boolean、既定 true) は自動更新後の先頭保持 (「自動更新」節) の有効 / 無効。全体でひとつの値で、カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない。
 //  side_rack_visible (boolean、既定 true) はサイドラックの表示状態 (「サイドラック」節の表示切替)。サイドバーの切替ボタンで変え、全体設定ダイアログには出さない。COLUMN_INHERITABLE_SETTINGS には入れない。
 //  全体設定のキーは GLOBAL_SETTINGS_DEFAULT の項目と normalize_global_settings のキーごとの正規化行を一組で持つ。保存値に無い・型不正の値はその正規化行が既定値で埋めるため、キーの追加に SETTINGS_SCHEMA_VERSION の更新は要らない
+//  保存値の global_settings が GLOBAL_SETTINGS_DEFAULT に無いキーを持っていれば、normalize_profile_store が取り除く
 //  profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック
 //  column = {
-//    type, column_save_path, column_save_title,
+//    type,
+//    column_save_path: string                // explore カラムが最後に表示したページのパス (検索文字列を含む。ポスト単体を表示中は戻り先のページ (explore_column_persist_path))。起動時はこのパスを開く。explore 以外のカラムでは ""
+//    column_save_title,
 //    column_save_title_fetched_at: number(epoch ms)|null   // column_save_title を iframe のページタイトルから取り込んだ時刻。リスト系ページの取り直し間隔の判定に使う (null = 未取得)
 //    banner: boolean|null, top_visible: boolean|null, tw_view_mode: "0"|"1"|"2"|"3"|"4"|null, hide_rt_tweet: boolean|null,
 //    column_width: number(rem)|null, auto_reload: boolean|null, auto_reload_time: number(ms)|null,
-//    column_pinned_override: boolean|null,   // null = 全体設定の pinned に従う
-//    column_pinned_path: string              // 実効ピン止め中のみ非空 (reconcile_column_pinned が保つ不変条件)
 //    collapsed: boolean                      // 折りたたみ中なら true (「カラムの折りたたみ」節)。既定 false
 //    auto_reload_force_top: boolean          // 先頭トグル (更新時に必ず先頭へ。「自動更新」節) がオンなら true。既定 false。home / explore 以外のカラムでは常に false
 //  }
 //  collapsed と auto_reload_force_top は全体設定に従う項目ではないため null を取らず、COLUMN_INHERITABLE_SETTINGS にも入れない。
 //    normalize_profile_store は boolean でない値 (欠損を含む) を false に正規化する。旧形式のプロファイルのリセットでも false にする。
 //    column_settings_save はカラム div の属性が "true" のときだけ true を保存する (属性が無い構造用カラムは false)。
+//  保存形式に含めないカラムのキー (OBSOLETE_COLUMN_SAVE_KEYS: column_pinned_path / column_pinned_override) が保存値に残っていれば、normalize_profile_store が取り除く。
 //
 //実効値 = カラム値 ?? global_settings 値。
 //単位は column_width が rem、auto_reload_time が ms で統一し、UI の入力欄だけ秒 (ms / 1000) で扱う。
@@ -5650,7 +5652,6 @@ function main_dsp(react_root){
 //  opd_setting_hide_rt_tweet       "inherit" | "true" | "false"
 //  opd_setting_auto_reload         "inherit" | "true" | "false"
 //  opd_setting_auto_reload_time    "inherit" | ms 数値文字列
-//  opd_setting_pinned              "inherit" | "true" | "false"
 //設定値とは別に、iframe が表示しているページから導く表示状態も同じカラム div の属性で持つ。
 //  opd_column_kind                 "list" | "explore" (explore カラムのみ。見出しの丸アイコンの絵柄を選ぶ)
 //  opd_column_detail               "post" (ポスト単体を表示中のあいだだけ付く。副見出しの表示と元の見出しの減衰に使う)
@@ -5671,7 +5672,6 @@ function main_dsp(react_root){
 //  RT 非表示        ○     ○             ○
 //  カラム幅         ○     ○             ○
 //  自動更新/間隔    ○     -             ○
-//  ピン止め         -     -             ○
 //  折りたたみ       ○     ○             ○
 //  先頭トグル       ○     -             ○
 //  更新ボタン       ○     ○             ○
@@ -5849,11 +5849,11 @@ function create_default_profile(){
 //  profile 内の type が "second_empty_column" の要素: プロファイルに保存しない構造用カラムなので取り除く
 //  profile 内の empty_column マーカー (メインラックの終了マーカー): 最初の 1 つを残して 2 つ目以降を取り除き、1 つも無ければ配列末尾に補う
 //値の正規化:
-//  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 8 項目を null、column_pinned_path を ""、
-//               collapsed と auto_reload_force_top を false にリセットし、version を更新する
-//  現在のスキーマ: global_settings は normalize_global_settings で欠損・型不正・範囲外を既定値へ戻す。
+//  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 7 項目を null、
+//               collapsed と auto_reload_force_top を false にリセットし、OBSOLETE_COLUMN_SAVE_KEYS のキーを取り除いて、version を更新する
+//  現在のスキーマ: global_settings は normalize_global_settings で欠損・型不正・範囲外を既定値へ戻し、GLOBAL_SETTINGS_DEFAULT に無いキーを取り除く。
 //               カラム側は normalize_column_setting_value で型不正・範囲外を null にする。collapsed と auto_reload_force_top は boolean でなければ (欠損を含む) false にする。
-//               column_pinned_override が false なのに column_pinned_path が非空の場合はパスを "" に戻す
+//               OBSOLETE_COLUMN_SAVE_KEYS のキーがあれば取り除く
 //起動時 (init 内、run の前) に全プロファイルへ適用し、プロファイルローダーが保存した任意の JSON もここで吸収する
 //store 自体が配列でなければ何もせず false を返す (呼び出し側が既定プロファイル 1 件の配列へ差し替える)。
 //正規化を経なかった値は、利用点の clone_global_settings (全体設定) と column_setting_attr_value (カラム属性) が改めて型と範囲を強制する
