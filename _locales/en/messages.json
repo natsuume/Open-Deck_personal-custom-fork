@@ -47,9 +47,6 @@
   "ui_side_rack_empty_title": {
     "message": "Toggle side rack (the side rack has no columns; add them from Manage columns)"
   },
-  "ui_column_pin_toggle_title": {
-    "message": "Toggle pin"
-  },
   "ui_sidebar_logo_title": {
     "message": "Open-Deck\nv$1"
   },
@@ -302,9 +299,6 @@
   "ui_column_manager_cancel_button": {
     "message": "Cancel"
   },
-  "msg_column_manager_pinned_close_confirm": {
-    "message": "The following pinned columns will be closed:\n$1\nContinue?"
-  },
   "msg_list_picker_invalid_manual": {
     "message": "Could not interpret these entries:\n$1"
   },
@@ -331,15 +325,6 @@
   },
   "msg_profile_delete_current_alert": {
     "message": "The currently active profile cannot be deleted."
-  },
-  "msg_explore_pin_confirm": {
-    "message": "Pin this location?"
-  },
-  "msg_explore_unpin_confirm": {
-    "message": "Unpin this location?"
-  },
-  "msg_pinned_column_close_confirm": {
-    "message": "This column is pinned.\nClose the column?"
   },
   "msg_initial_setup_completed_prototype": {
     "message": "Initial setup has completed.\nWelcome to the Open-Deck prototype!"
@@ -391,9 +376,6 @@
   },
   "ui_global_settings_description": {
     "message": "Applied to every column item that is set to \"Follow global settings\". Display sizes apply to the whole profile."
-  },
-  "ui_global_settings_pinned_label": {
-    "message": "Pin Explore / list columns"
   },
   "ui_global_settings_auto_reload_keep_top_label": {
     "message": "Keep columns at the top after auto-load if they were at the top"
@@ -458,9 +440,6 @@
   "ui_settings_top_label": {
     "message": "Top bar"
   },
-  "ui_settings_pinned_label": {
-    "message": "Pin"
-  },
   "ui_settings_visible": {
     "message": "Show"
   },
@@ -472,12 +451,6 @@
   },
   "ui_settings_disabled": {
     "message": "Off"
-  },
-  "ui_settings_pinned": {
-    "message": "Pinned"
-  },
-  "ui_settings_unpinned": {
-    "message": "Unpinned"
   },
   "ui_dialog_ok": {
     "message": "OK"

@@ -47,9 +47,6 @@
   "ui_side_rack_empty_title": {
     "message": "サイドラックの表示切替 (サイドラックにカラムがありません。カラム管理で追加できます)"
   },
-  "ui_column_pin_toggle_title": {
-    "message": "ピン止め切り替え"
-  },
   "ui_sidebar_logo_title": {
     "message": "Open-Deck\nv$1"
   },
@@ -302,9 +299,6 @@
   "ui_column_manager_cancel_button": {
     "message": "キャンセル"
   },
-  "msg_column_manager_pinned_close_confirm": {
-    "message": "ピン止めされているカラムを閉じます:\n$1\n続行しますか？"
-  },
   "msg_list_picker_invalid_manual": {
     "message": "解釈できない入力があります:\n$1"
   },
@@ -331,15 +325,6 @@
   },
   "msg_profile_delete_current_alert": {
     "message": "表示中のプロファイルは削除できません"
-  },
-  "msg_explore_pin_confirm": {
-    "message": "この場所でピン止めしますか?"
-  },
-  "msg_explore_unpin_confirm": {
-    "message": "ピン止めを解除します"
-  },
-  "msg_pinned_column_close_confirm": {
-    "message": "ピン止めされているカラムです\nカラムを閉じますか？"
   },
   "msg_initial_setup_completed_prototype": {
     "message": "初期設定構築が完了しました。\nようこそ！Open-Deck試作版へ！"
@@ -391,9 +376,6 @@
   },
   "ui_global_settings_description": {
     "message": "カラムごとに「全体設定に従う」になっている項目に適用されます。表示サイズはプロファイル全体に適用されます。"
-  },
-  "ui_global_settings_pinned_label": {
-    "message": "Explore / リストカラムのピン止め"
   },
   "ui_global_settings_auto_reload_keep_top_label": {
     "message": "更新前に一番上だったカラムは更新後も一番上に保つ"
@@ -458,9 +440,6 @@
   "ui_settings_top_label": {
     "message": "トップ表示"
   },
-  "ui_settings_pinned_label": {
-    "message": "ピン止め"
-  },
   "ui_settings_visible": {
     "message": "表示"
   },
@@ -472,12 +451,6 @@
   },
   "ui_settings_disabled": {
     "message": "無効"
-  },
-  "ui_settings_pinned": {
-    "message": "ピン止め"
-  },
-  "ui_settings_unpinned": {
-    "message": "解除"
   },
   "ui_dialog_ok": {
     "message": "OK"
