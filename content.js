@@ -4474,25 +4474,29 @@ function run(settings){
                 this.setAttribute("auto_reload_mouse_hover", "false");
             });
             //カラムバーの更新ボタン (全カラムに常に表示)。自動更新の設定に依らず「更新して先頭へ」:
-            //  更新対象のパス (is_column_reload_path) でヘルパーが準備済みなら強制先頭で更新する (先頭へのスクロールはヘルパーが更新の前に行う)
-            //  パスが読めて、更新対象でないページ (通知・プロフィール・ポスト単体など) か、ヘルパーが準備済みでない (通知カラム・読み込み中) ときは、先頭へスクロールしてから iframe を読み込み直す
+            //  タイムラインのパス (is_column_timeline_path) でヘルパーが準備済みなら強制先頭で更新する (先頭へのスクロールはヘルパーが更新の前に行う)
+            //  パスが読めて、それ以外のページ (通知・プロフィール・ポスト単体・リストのサブページなど) か、ヘルパーが準備済みでない (通知カラム・読み込み中) ときは、先頭へスクロールしてから iframe を読み込み直す
             //  (読み込み直しでブラウザーがスクロール位置を復元しても、保存される位置が先頭になるようにするため)
             //  別オリジンを表示していてパスを読めないとき、src を読み込む前の初期の空 document (about:blank) を表示しているときは何もしない
             //  (空 document を読み込み直すと src の読み込みを取り消すおそれがあり、src の読み込みが終われば先頭から表示される)
+            //  更新した後は自動更新の interval を張り直し、次の自動更新を手動更新から間隔後にする (直後に interval が発火して強制先頭保持を止めたり、続けて 2 回更新したりしないようにする)
             column_div.querySelector(".opd_column_reload_btn")?.addEventListener("click", function(){
                 const path_name = column_frame_path_name(column_frame);
                 if(path_name === null) return;
                 if(column_frame.contentWindow.location.protocol === "about:") return;
-                if(is_column_reload_path(path_name) && is_column_reload_helper_ready(column_frame)){
+                if(is_column_timeline_path(path_name) && is_column_reload_helper_ready(column_frame)){
                     reload_column(column_frame, {keep_top: true, force_top: true});
-                    return;
+                }else{
+                    try{
+                        column_frame.contentWindow.scrollTo({ top: 0, behavior: "instant" });
+                        column_frame.contentWindow.location.reload();
+                    }catch(e){
+                        console.warn("column reload: カラムを読み込み直せませんでした->", e);
+                        return;
+                    }
                 }
-                try{
-                    column_frame.contentWindow.scrollTo({ top: 0, behavior: "instant" });
-                    column_frame.contentWindow.location.reload();
-                }catch(e){
-                    console.warn("column reload: カラムを読み込み直せませんでした->", e);
-                }
+                stop_column_auto_reload(column_div);
+                apply_column_auto_reload(column_div);
             });
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
             //iframe の history はタブ全体で共有され、back() は他のカラムの遷移まで巻き戻し、pushState はブラウザの「戻る」の段数を増やすため、replaceState + popstate で X の画面遷移を起こす (X のルーターは popstate で location を読み直す)
@@ -4815,9 +4819,16 @@ function run(settings){
             return false;
         }
     }
-    //自動更新・手動更新の対象になるパスかどうか (/home・/search・/i/lists 配下)
+    //自動更新の対象になるパスかどうか (/home・/search・/i/lists 配下)
     function is_column_reload_path(path_name){
         return ['/home', '/search'].includes(path_name) || path_name.startsWith('/i/lists');
+    }
+    //カラムバーの更新ボタンが X の更新関数 (onRefresh) で更新するパスかどうか (/home・/search・リストのタイムライン /i/lists/<リスト ID>)
+    //is_column_reload_path のうちタイムラインを表示するページに限る。リストのメンバー一覧などのサブページは更新関数があるか分からないため、更新ボタンでは読み込み直す
+    function is_column_timeline_path(path_name){
+        if(['/home', '/search'].includes(path_name)) return true;
+        const list_match = path_name.match(/^\/i\/lists\/([^\/]+)$/);
+        return list_match !== null && is_valid_list_id(list_match[1]);
     }
     //タイムラインを更新する (自動更新 1 回分の処理。カラムバーの更新ボタンからも呼ぶ)。更新は OpdExtAutoReload の Reload (X の onRefresh を呼ぶ) で行う
     //options は {keep_top, force_top} (どちらも boolean)。force_top が true ならヘルパーが更新の前に先頭へ戻して更新後も先頭に保ち (keep_top より優先)、
@@ -5440,6 +5451,8 @@ function main_dsp(react_root){
 //  is_column_reload_helper_ready(column_frame)
 //                                         ヘルパーが今の document で準備済みなら true: iframe 要素の opd_auto_reload があり、ヘルパーを注入した document (iframe 要素の opd_auto_reload_document。
 //                                          reinit_column_extensions の load で記録する) が今の contentWindow.document と同じ。読み込み直しの途中 (新しい document の load 前) と、中身を読めないときは false
+//  is_column_timeline_path(path_name)     カラムバーの更新ボタンが X の更新関数で更新するパスなら true (/home・/search・/i/lists/<リスト ID>)。
+//                                          自動更新の対象 (is_column_reload_path) のうちタイムラインを表示するページに限り、リストのサブページ (/i/lists/<ID>/members など) は含めない
 //  stop_column_auto_reload(column_div)    interval を止める。カラムを閉じる・プロファイルを切り替える前に対象カラム全部へ呼ぶ
 //  is_auto_update()                       停止条件のいずれかに当たれば false
 //  reload_stale_columns_on_visible()      deck のタブが visible に戻ったときの処理 (下記「hidden からの復帰」)。最上位の visibilitychange リスナーから呼ばれる
@@ -5448,13 +5461,15 @@ function main_dsp(react_root){
 //
 //カラムバーの更新ボタン (.opd_column_reload_btn):
 //  home / notification / explore のすべてのカラムに、自動更新の設定に依らず常に表示する。押すと「更新して先頭へ」:
-//    iframe のパスが is_column_reload_path で、ヘルパーが準備済み (is_column_reload_helper_ready)
+//    iframe のパスが is_column_timeline_path (/home・/search・リストのタイムライン /i/lists/<リスト ID>) で、ヘルパーが準備済み (is_column_reload_helper_ready)
 //                                           reload_column(column_frame, {keep_top: true, force_top: true}) を呼ぶ (先頭へのスクロールはヘルパーが更新の前に行う)
-//    パスが読めて、is_column_reload_path でない (通知・プロフィール・ポスト単体など、X の更新関数で更新できないページ) か、ヘルパーが準備済みでない (通知カラム・読み込み中)
+//    パスが読めて、is_column_timeline_path でない (通知・プロフィール・ポスト単体など X の更新関数で更新できないページと、更新関数があるか分からないリストのサブページ) か、ヘルパーが準備済みでない (通知カラム・読み込み中)
 //                                           iframe の contentWindow.location.reload() で読み込み直す。読み込み後の処理 (iframe 内 CSS・見出し・拡張の注入) は通常の load と同じ経路を通る。読み込み直す前に contentWindow.scrollTo({top: 0, behavior: "instant"}) で先頭へスクロールし、ブラウザーが読み込み直しでスクロール位置を復元しても先頭になるようにする
 //    パスが読めない (別オリジンを表示中)     何もしない
 //    src を読み込む前の初期の空 document (location.protocol が "about:") を表示中
 //                                           何もしない (空 document を読み込み直すと src の読み込みを取り消すおそれがあり、src の読み込みが終われば先頭から表示される)。上の 2 つの分岐より先に判定する
+//  更新した後は (どちらの分岐でも) stop_column_auto_reload → apply_column_auto_reload で interval を張り直し、次の自動更新を手動更新から間隔後にする
+//  (直後に interval が発火すると、ヘルパーが新しい更新の冒頭で強制先頭保持を止め、続けて 2 回更新することになるため)
 //先頭トグル (更新時に必ず先頭へ。.opd_column_force_top_btn):
 //  home / explore のカラムバーに出す (notification は自動更新の対象外のため出さない)。押すたびにカラム div の opd_auto_reload_force_top ("true" | "false") を反転し、column_settings_save で保存する。
 //  オンのカラムは、interval による自動更新でも force_top で更新する (更新の前に先頭へ戻し、新着が入っても先頭に保つ)。オフのカラムの interval による自動更新は auto_reload_keep_top に従う。
