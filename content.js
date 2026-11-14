@@ -3863,8 +3863,12 @@ function run(settings){
                 const auto_reload = new OpdExtAutoReload();
                 auto_reload.Init(column_frame);
                 column_frame.opd_auto_reload = auto_reload;
+                //ヘルパーを注入した document。is_column_reload_helper_ready が今の document と比べて、読み込み直しの途中で前の document のヘルパーを使わないようにする
+                column_frame.opd_auto_reload_document = column_frame.contentWindow.document;
                 //load 時に X 自身が最新を取得しているため、最終更新時刻の初期値は load 時刻にする
                 column_frame.opd_auto_reload_last_reload_at = Date.now();
+                //読み込み直した document は先頭から表示されるため、前の document に付けた保留の印は消す
+                clear_force_top_pending(column_frame);
 
                 const blocker = new OpdMediaViewerBlocker();
                 blocker.Init(column_frame);
@@ -4471,13 +4475,15 @@ function run(settings){
             });
             //カラムバーの更新ボタン (全カラムに常に表示)。自動更新の設定に依らず「更新して先頭へ」:
             //  更新対象のパス (is_column_reload_path) でヘルパーが準備済みなら強制先頭で更新する (先頭へのスクロールはヘルパーが更新の前に行う)
-            //  パスが読めて、更新対象でないページ (通知・プロフィール・ポスト単体など) か、ヘルパーが無い (通知カラム・読み込み中) ときは、先頭へスクロールしてから iframe を読み込み直す
+            //  パスが読めて、更新対象でないページ (通知・プロフィール・ポスト単体など) か、ヘルパーが準備済みでない (通知カラム・読み込み中) ときは、先頭へスクロールしてから iframe を読み込み直す
             //  (読み込み直しでブラウザーがスクロール位置を復元しても、保存される位置が先頭になるようにするため)
-            //  別オリジンを表示していてパスを読めないときは何もしない
+            //  別オリジンを表示していてパスを読めないとき、src を読み込む前の初期の空 document (about:blank) を表示しているときは何もしない
+            //  (空 document を読み込み直すと src の読み込みを取り消すおそれがあり、src の読み込みが終われば先頭から表示される)
             column_div.querySelector(".opd_column_reload_btn")?.addEventListener("click", function(){
                 const path_name = column_frame_path_name(column_frame);
                 if(path_name === null) return;
-                if(is_column_reload_path(path_name) && column_frame.opd_auto_reload){
+                if(column_frame.contentWindow.location.protocol === "about:") return;
+                if(is_column_reload_path(path_name) && is_column_reload_helper_ready(column_frame)){
                     reload_column(column_frame, {keep_top: true, force_top: true});
                     return;
                 }
@@ -4706,7 +4712,7 @@ function run(settings){
     }
     //自動更新 1 回分の判定と実行。次を確かめ、1 つでも満たさなければ何もしない:
     //  iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / カラムが隠れていない (is_column_concealed が false) /
-    //  iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
+    //  iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (is_column_reload_helper_ready) / is_auto_update() が true
     //満たせば reload_column で更新して true を返し、満たさなければ false を返す。keep_top には呼び出し時点の global_settings.auto_reload_keep_top を、
     //force_top には「引数 force_top が true、カラムの先頭トグル (opd_auto_reload_force_top) が "true"、または iframe 要素に保留の印 (opd_force_top_pending) がある」を渡す
     //interval の発火 (force_top は false) と reload_stale_column (force_top は true) から呼ぶ
@@ -4720,7 +4726,7 @@ function run(settings){
         if(is_column_concealed(column_div)) return false;
         if(column_frame.getAttribute("auto_reload_mouse_hover") != "false") return false;
         //カラムの自動更新が全体的に許可されていない場合は自動更新を無効化する
-        if(!column_frame.opd_auto_reload || !is_auto_update()) return false;
+        if(!is_column_reload_helper_ready(column_frame) || !is_auto_update()) return false;
         const is_force_top = force_top === true || column_div?.getAttribute("opd_auto_reload_force_top") === "true" || column_frame.opd_force_top_pending === true;
         reload_column(column_frame, {keep_top: global_settings.auto_reload_keep_top === true, force_top: is_force_top});
         return true;
@@ -4751,22 +4757,36 @@ function run(settings){
             return;
         }
         //ホバー中・テキスト入力中・ヘルパーの準備前などで見送ったときは、次に成功する自動更新で先頭へ戻すよう保留の印を付ける
-        //(更新対象でないページを表示しているあいだは印を付けない)
+        //隠れているカラムは見える状態に戻ったときに reload_stale_column が force_top で更新するため、更新対象でないページを表示しているカラムと同じく印を付けない
+        if(is_column_concealed(column_div)) return;
         const path_name = column_frame_path_name(column_frame);
         if(path_name !== null && is_column_reload_path(path_name)) mark_force_top_pending(column_frame);
     }
-    //iframe 要素に force_top の保留の印 (opd_force_top_pending) を付ける。try_auto_reload_column は印のあるカラムを force_top で更新し、reload_column が force_top で更新したときに印を消す
+    //iframe 要素に force_top の保留の印 (opd_force_top_pending) を付ける。try_auto_reload_column は印のあるカラムを force_top で更新する
     //印を付けた後にそのカラムの中でユーザーが操作した (wheel・touchstart・pointerdown・keydown) ときは、読んでいる位置から動かさないよう印を消す。
-    //リスナーは iframe の現在の document に capture・once で付ける。中身を読めない (別オリジン等) ときは印だけを付ける
+    //操作を検知するリスナーは、印 1 つにつき iframe の現在の document へ capture で 1 組だけ付け、clear_force_top_pending で外す (既に印があるときは付け足さない)。
+    //中身を読めない (別オリジン等) ときは印だけを付ける
     function mark_force_top_pending(column_frame){
+        if(column_frame.opd_force_top_pending === true) return;
         column_frame.opd_force_top_pending = true;
         try{
             const frame_document = column_frame.contentWindow.document;
-            const clear_pending = () => { column_frame.opd_force_top_pending = false; };
-            ["wheel", "touchstart", "pointerdown", "keydown"].forEach((type) => frame_document.addEventListener(type, clear_pending, {capture: true, passive: true, once: true}));
+            const event_types = ["wheel", "touchstart", "pointerdown", "keydown"];
+            const on_user_input = () => clear_force_top_pending(column_frame);
+            event_types.forEach((type) => frame_document.addEventListener(type, on_user_input, {capture: true, passive: true}));
+            column_frame.opd_force_top_pending_cleanup = () => {
+                event_types.forEach((type) => frame_document.removeEventListener(type, on_user_input, {capture: true}));
+            };
         }catch(e){
             //中身を読めないときは、次に成功する自動更新まで印を残す
         }
+    }
+    //保留の印を消し、mark_force_top_pending が付けたリスナーを外す。
+    //reload_column が force_top で更新したとき・印を付けたカラムでユーザーが操作したとき・iframe が読み込み直されたとき (reinit_column_extensions の load。新しい document は先頭から表示され、前の document のリスナーも届かなくなるため) に呼ぶ
+    function clear_force_top_pending(column_frame){
+        column_frame.opd_force_top_pending = false;
+        column_frame.opd_force_top_pending_cleanup?.();
+        column_frame.opd_force_top_pending_cleanup = null;
     }
     //カラムの折りたたみ状態を is_collapsed にする。opd_column_collapsed 属性を書き、apply_column_dom_state で表示へ反映して column_settings_save で保存する
     //展開したときは、折りたたみ中に自動更新しなかったカラムを reload_stale_column で古ければ 1 回更新する (属性を書いた後に呼ぶため is_column_concealed に止められない)
@@ -4785,6 +4805,16 @@ function run(settings){
             return null;
         }
     }
+    //カラムの iframe でヘルパーが準備済みかどうかを返す: iframe 要素の opd_auto_reload があり、ヘルパーを注入した document (opd_auto_reload_document) が今の document と同じなら true。
+    //読み込み直しの途中 (新しい document の load 前) は前の document のヘルパーが残っているため false にする。中身を読めない (別オリジン等) ときも false
+    function is_column_reload_helper_ready(column_frame){
+        if(!column_frame?.opd_auto_reload) return false;
+        try{
+            return column_frame.opd_auto_reload_document === column_frame.contentWindow.document;
+        }catch(e){
+            return false;
+        }
+    }
     //自動更新・手動更新の対象になるパスかどうか (/home・/search・/i/lists 配下)
     function is_column_reload_path(path_name){
         return ['/home', '/search'].includes(path_name) || path_name.startsWith('/i/lists');
@@ -4799,7 +4829,7 @@ function run(settings){
         if(frame_window == null) return;
         column_frame.opd_auto_reload_last_reload_at = Date.now();
         //force_top で更新したら、復帰時に見送った分の保留の印 (mark_force_top_pending) は果たしたので消す
-        if(options.force_top === true) column_frame.opd_force_top_pending = false;
+        if(options.force_top === true) clear_force_top_pending(column_frame);
         column_frame.opd_auto_reload?.Reload(frame_window, { keep_top: options.keep_top === true, force_top: options.force_top === true });
     }
     //自動更新 interval を止める。カラムを閉じる・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
@@ -5388,7 +5418,7 @@ function main_dsp(react_root){
 //  try_auto_reload_column(column_frame, force_top)
 //                                         自動更新 1 回分の判定と実行。次を確かめ、1 つでも満たさなければ何もしない:
 //                                            iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / カラムが隠れていない (is_column_concealed が false) /
-//                                            iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
+//                                            iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (is_column_reload_helper_ready) / is_auto_update() が true
 //                                          満たせば reload_column で更新して true を返し (満たさなければ false)、keep_top には呼び出し時点の global_settings.auto_reload_keep_top を、
 //                                          force_top には「引数 force_top が true、カラムの先頭トグル (opd_auto_reload_force_top) が "true"、または iframe 要素に保留の印 (opd_force_top_pending) がある」を渡す。
 //                                          interval の発火 (force_top は false) と reload_stale_column (force_top は true) から呼ぶ
@@ -5399,11 +5429,17 @@ function main_dsp(react_root){
 //  reload_stale_column(column_div)        隠れていたカラムが見える状態に戻ったときの 1 カラム分の処理 (下記「hidden からの復帰」の 1 カラム分と同じ判定)。
 //                                          interval が動作中で、最終更新時刻が数値で、Date.now() - 最終更新時刻 が動作中の間隔以上のときだけ try_auto_reload_column(column_frame, true) を呼び、
 //                                          更新した (true が返った) ときは interval を張り直す。reload_stale_columns_on_visible の各カラム・カラムの展開・サイドラックの再表示から呼ぶ。
-//                                          古いのに更新を見送った (false が返った) ときは、表示中のパスが is_column_reload_path なら mark_force_top_pending を呼ぶ
+//                                          古いのに更新を見送った (false が返った) ときは、カラムが隠れておらず、表示中のパスが is_column_reload_path なら mark_force_top_pending を呼ぶ
+//                                          (隠れているカラムは見える状態に戻ったときにこの関数が force_top で更新するため、印を付けない)
 //  mark_force_top_pending(column_frame)   iframe 要素に保留の印 opd_force_top_pending = true を付ける。印のあるカラムは、次に try_auto_reload_column で更新するときに force_top で更新する。
-//                                          reload_column が force_top で更新したときに印を消す。印を付けた後にそのカラムの iframe の中でユーザーが操作した
-//                                          (wheel・touchstart・pointerdown・keydown。iframe の現在の document に capture・once で付けたリスナーで検知する) ときも、読んでいる位置から動かさないよう印を消す
+//                                          印を付けた後にそのカラムの iframe の中でユーザーが操作した (wheel・touchstart・pointerdown・keydown) ときは、読んでいる位置から動かさないよう印を消す。
+//                                          操作を検知するリスナーは、印 1 つにつき iframe の現在の document へ capture で 1 組だけ付ける (既に印があれば何もしない)
 //                                          (ホバー中・テキスト入力中・ヘルパーの準備前などの一時的な理由で復帰時の更新を見送ったカラムも、その後の最初の更新で先頭へ戻すため)
+//  clear_force_top_pending(column_frame)  保留の印を消し、mark_force_top_pending が付けたリスナーを外す。reload_column が force_top で更新したとき・印を付けたカラムでユーザーが操作したとき・
+//                                          iframe の load (reinit_column_extensions のヘルパー注入時。新しい document は先頭から表示され、前の document のリスナーも届かなくなるため) に呼ぶ
+//  is_column_reload_helper_ready(column_frame)
+//                                         ヘルパーが今の document で準備済みなら true: iframe 要素の opd_auto_reload があり、ヘルパーを注入した document (iframe 要素の opd_auto_reload_document。
+//                                          reinit_column_extensions の load で記録する) が今の contentWindow.document と同じ。読み込み直しの途中 (新しい document の load 前) と、中身を読めないときは false
 //  stop_column_auto_reload(column_div)    interval を止める。カラムを閉じる・プロファイルを切り替える前に対象カラム全部へ呼ぶ
 //  is_auto_update()                       停止条件のいずれかに当たれば false
 //  reload_stale_columns_on_visible()      deck のタブが visible に戻ったときの処理 (下記「hidden からの復帰」)。最上位の visibilitychange リスナーから呼ばれる
@@ -5412,11 +5448,13 @@ function main_dsp(react_root){
 //
 //カラムバーの更新ボタン (.opd_column_reload_btn):
 //  home / notification / explore のすべてのカラムに、自動更新の設定に依らず常に表示する。押すと「更新して先頭へ」:
-//    iframe のパスが is_column_reload_path で、ヘルパーが準備済み (iframe 要素の opd_auto_reload)
+//    iframe のパスが is_column_reload_path で、ヘルパーが準備済み (is_column_reload_helper_ready)
 //                                           reload_column(column_frame, {keep_top: true, force_top: true}) を呼ぶ (先頭へのスクロールはヘルパーが更新の前に行う)
-//    パスが読めて、is_column_reload_path でない (通知・プロフィール・ポスト単体など、X の更新関数で更新できないページ) か、ヘルパーが無い (通知カラム・読み込み中)
+//    パスが読めて、is_column_reload_path でない (通知・プロフィール・ポスト単体など、X の更新関数で更新できないページ) か、ヘルパーが準備済みでない (通知カラム・読み込み中)
 //                                           iframe の contentWindow.location.reload() で読み込み直す。読み込み後の処理 (iframe 内 CSS・見出し・拡張の注入) は通常の load と同じ経路を通る。読み込み直す前に contentWindow.scrollTo({top: 0, behavior: "instant"}) で先頭へスクロールし、ブラウザーが読み込み直しでスクロール位置を復元しても先頭になるようにする
 //    パスが読めない (別オリジンを表示中)     何もしない
+//    src を読み込む前の初期の空 document (location.protocol が "about:") を表示中
+//                                           何もしない (空 document を読み込み直すと src の読み込みを取り消すおそれがあり、src の読み込みが終われば先頭から表示される)。上の 2 つの分岐より先に判定する
 //先頭トグル (更新時に必ず先頭へ。.opd_column_force_top_btn):
 //  home / explore のカラムバーに出す (notification は自動更新の対象外のため出さない)。押すたびにカラム div の opd_auto_reload_force_top ("true" | "false") を反転し、column_settings_save で保存する。
 //  オンのカラムは、interval による自動更新でも force_top で更新する (更新の前に先頭へ戻し、新着が入っても先頭に保つ)。オフのカラムの interval による自動更新は auto_reload_keep_top に従う。
