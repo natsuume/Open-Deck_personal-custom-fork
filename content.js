@@ -110,6 +110,10 @@ const ui_icon_define = {
     column_close:"icon/column_close.svg",
     column_settings: "icon/settings.svg",
     column_reload:"icon/reload.svg",
+    column_collapse:"icon/column_collapse.svg",
+    column_expand:"icon/column_expand.svg",
+    side_rack:"icon/side_rack.svg",
+    force_top:"icon/force_top.svg",
     column_pin:"icon/pin.svg",
     column_pinned:"icon/pinned.svg",
     column_widesize:"icon/column_w_size.svg",
@@ -400,6 +404,8 @@ function run(settings){
         --opd-shadow-sm: 0 1px 2px rgba(15, 20, 25, 0.08);
         --opd-shadow-lg: 0 16px 48px rgba(15, 20, 25, 0.28);
         --opd-sidebar-width: 3.75rem;
+        /*折りたたんだカラム (縦長の帯) の幅*/
+        --opd-column-collapsed-width: 3rem;
         --opd-column-gap: 0.5rem;
         /*親 UI の文字の 1 単位。UI 倍率で rem が伸びても割り戻すため、文字の大きさは文字倍率だけで決まる*/
         --opd-text-em: calc(1rem * var(--opd-text-scale, 1) / var(--opd-ui-scale, 1));
@@ -430,7 +436,10 @@ function run(settings){
     .dsp_column_move_icon,
     .dsp_column_settings_btn,
     .dsp_column_reload_btn,
+    .dsp_column_collapse_btn,
+    .dsp_column_force_top_btn,
     .dsp_column_close_btn,
+    .dsp_btn_side_rack_img,
     .media_viewer_icon_close,
     .media_viewer_icon_forward,
     .media_viewer_icon_next,
@@ -445,12 +454,18 @@ function run(settings){
     }
     .dsp_btn_post_form_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.post_form)}); }
     .dsp_btn_manage_columns_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_1)}); }
+    .dsp_btn_side_rack_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.side_rack)}); }
+    /*サイドラックの切替ボタンの絵柄は右側のサイドラックを描いているため、サイドラックが左にあるときは左右を反転する*/
+    #opd_main_element[opd_side_rack_position="left"] .dsp_btn_side_rack_img{ transform: scaleX(-1); }
     .dsp_btn_global_settings_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_settings)}); }
     .dsp_btn_profile_add_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_save)}); }
     .dsp_btn_profile_delete_img{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.profile_delete)}); }
     .dsp_column_move_icon{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_move)}); }
     .dsp_column_settings_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_settings)}); }
     .dsp_column_reload_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_reload)}); }
+    .dsp_column_collapse_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_collapse)}); }
+    section.opd_column_collapsed .dsp_column_collapse_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_expand)}); }
+    .dsp_column_force_top_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.force_top)}); }
     .dsp_column_close_btn{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_close)}); }
     .opd_icon_column_add_1{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_add_1)}); }
     .media_viewer_icon_close{ --opd-icon: url(${chrome.runtime.getURL(ui_icon_define.column_close)}); }
@@ -691,6 +706,15 @@ function run(settings){
         outline: 2px solid var(--opd-accent);
         outline-offset: -2px;
     }
+    /*押しても何もしない状態 (aria-disabled)。フォーカスと tooltip は残し、薄くしてホバーの強調を出さない*/
+    .dsp_btn_parent[aria-disabled="true"]{
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    .dsp_btn_parent[aria-disabled="true"]:hover,
+    .dsp_btn_parent[aria-disabled="true"]:active{
+        background: transparent;
+    }
     /*投稿ボタンはアクセント色の塗りで主操作として目立たせる*/
     #open_post_form{
         background: var(--opd-accent);
@@ -803,6 +827,11 @@ function run(settings){
     #side_rack_element[hidden]{
         display: none;
     }
+    /*切替ボタンで隠しているサイドラック。display: none にせず iframe を描画から外さないことで、再表示したときにスクロール位置と読み込み済みのタイムラインを保つ。
+      visibility: hidden でフォーカスとポインタの対象から外し、背後のメインラックを操作できるようにする*/
+    #side_rack_element[opd_user_hidden]{
+        visibility: hidden;
+    }
     #main_bar_empty_column{
         display: none;
     }
@@ -848,9 +877,11 @@ function run(settings){
         box-shadow: var(--opd-shadow-sm);
         overflow: hidden;
     }
+    /*カラム div は幅のコンテナにし、幅の狭いカラムではカラムバーをコンテナクエリで詰める (下の @container)*/
     .dsp_column_draggable_true div[opd_column_type]{
         display: flex;
         flex-direction: column;
+        container-type: inline-size;
     }
     .dsp_column iframe{
         border: 0;
@@ -867,6 +898,7 @@ function run(settings){
         align-items: center;
         gap: 0.375rem;
         width: 100%;
+        height: max-content;
         min-height: 3.5rem;
         padding: 0.5rem 0.5rem 0.5rem 0.375rem;
         overflow: hidden;
@@ -955,9 +987,29 @@ function run(settings){
         background: var(--opd-surface-hover);
         color: var(--opd-text);
     }
-    /*設定で出し分けるボタン (更新ボタン) は hidden 属性で隠す。display: flex のクラス指定が UA の [hidden] より優先されるため明示する*/
+    /*hidden 属性を付けたボタンを隠す。display: flex のクラス指定が UA の [hidden] より優先されるため明示する*/
     .dsp_column_btn[hidden]{
         display: none;
+    }
+    /*トグルのボタン (先頭トグル) の状態。:has() を解釈しないブラウザ (Firefox ESR 115) でも効くよう、状態は JS がラッパーに付けるクラスで表す
+      .dsp_column_btn_active: オン (アクセント色の塗りつぶし円)、.dsp_column_btn_disabled: 押しても何もしない (薄くしてホバーの強調を出さない)
+      透明な input がボタン全面を覆うため、カーソルは input と label にも指定する*/
+    .dsp_column_btn.dsp_column_btn_disabled,
+    .dsp_column_btn.dsp_column_btn_disabled label,
+    .dsp_column_btn.dsp_column_btn_disabled input{
+        cursor: not-allowed;
+    }
+    .dsp_column_btn.dsp_column_btn_disabled{
+        opacity: 0.4;
+    }
+    .dsp_column_btn.dsp_column_btn_disabled:hover{
+        background: transparent;
+        color: var(--opd-text-muted);
+    }
+    .dsp_column_btn.dsp_column_btn_active,
+    .dsp_column_btn.dsp_column_btn_active:hover{
+        background: var(--opd-accent-soft);
+        color: var(--opd-accent);
     }
     /*ボタン枠の中の input (透明で全面に重ねる) がキーボード操作でフォーカスされたときだけ枠にリングを出す*/
     .dsp_column_btn:has(input:focus-visible){
@@ -1009,6 +1061,82 @@ function run(settings){
     /*副見出しが主役になるよう、元の見出しは薄くする。設定・閉じるボタンはコントラストを保つため薄くしない*/
     div[opd_column_detail="post"] > .column_bar :is(.opd_column_heading, .opd_column_kind_icon, .dsp_column_move_icon){
         opacity: 0.55;
+    }
+    /*幅の狭いカラム (カラム幅の下限 12rem を含む) では、丸アイコンを隠してカラムバーの間隔とボタンを詰め、全ボタンを切らずに並べる*/
+    @container (max-width: 17rem){
+        .column_bar,
+        .column_bar .dsp_column_title{
+            gap: 0.125rem;
+        }
+        .column_bar .opd_column_kind_icon{
+            display: none;
+        }
+        .column_bar .dsp_column_btn{
+            width: 1.5rem;
+            min-width: 1.5rem;
+            height: 1.5rem;
+        }
+    }
+    /*カラムの折りたたみ (section に opd_column_collapsed クラスが付いているあいだ)。
+      カラム div の幅と iframe には手を入れず section の幅だけを縮め、はみ出した部分を section の overflow: clip で切り取る (X のページを狭い幅で描き直させない)。
+      カラム div は visibility: hidden にし、カラムバーだけを section の左端に重ねた縦長の帯として描く。
+      帯には 展開ボタン → 丸アイコン → 縦書きのタイトル → 空白部分 の順に出す。セレクタの詳細度を上のコンテナクエリより高くし、帯の見た目をカラム幅に依らず揃える*/
+    /*overflow: clip は hidden と違ってスクリプトからのスクロールも受け付けないため、iframe 内の focus などで section が横にスクロールして帯がずれることがない*/
+    section.dsp_column_draggable_true.opd_column_collapsed{
+        position: relative;
+        width: var(--opd-column-collapsed-width);
+        overflow: clip;
+    }
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type]{
+        visibility: hidden;
+    }
+    /*帯の幅は section の左右の枠線 (1px ずつ) を除いた内側の幅にする*/
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar{
+        visibility: visible;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: calc(var(--opd-column-collapsed-width) - 2px);
+        height: 100%;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.5rem 0;
+        border-bottom: 0;
+    }
+    /*隠しているサイドラックの中では、帯も一緒に隠す (帯の visibility: visible がサイドラックの visibility: hidden を打ち消さないようにする)*/
+    #side_rack_element[opd_user_hidden] > section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar{
+        visibility: hidden;
+    }
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar :is(.dsp_column_move_icon, .opd_column_label, .dsp_column_force_top_btn_wrap, .dsp_column_reload_btn_wrap, .dsp_column_settings_btn_wrap, .dsp_column_close_btn_wrap){
+        display: none;
+    }
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar .dsp_column_collapse_btn_wrap{
+        order: -1;
+    }
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar .dsp_column_btn{
+        width: 1.75rem;
+        min-width: 1.75rem;
+        height: 1.75rem;
+    }
+    /*見出し部分は縦に並べ、タイトルが長いときは縮めて末尾を省略する (ドラッグの掴み位置として残す)。残りの高さは空白部分が埋める*/
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar .dsp_column_title{
+        flex-direction: column;
+        flex: 0 1 auto;
+        gap: 0.375rem;
+        min-height: 0;
+    }
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar .opd_column_kind_icon{
+        display: block;
+    }
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar .opd_column_heading{
+        writing-mode: vertical-rl;
+        min-height: 0;
+        overflow: hidden;
+    }
+    section.dsp_column_draggable_true.opd_column_collapsed > div[opd_column_type] > .column_bar .dsp_column_empty_area{
+        flex: 1 1 auto;
+        min-height: 0.5rem;
     }
     /*カラム設定パネル (カラムバー・副見出しの下に開く)*/
     /*縦に短いウィンドウでは iframe に押し潰されず、パネル内をスクロールして全項目に届く*/
@@ -1759,7 +1887,11 @@ function run(settings){
         .dsp_btn_parent > div:not(.dsp_btn_change_profile_btn),
         .dsp_column_move_icon,
         .dsp_column_settings_btn,
+        .dsp_column_reload_btn,
+        .dsp_column_collapse_btn,
+        .dsp_column_force_top_btn,
         .dsp_column_close_btn,
+        .dsp_btn_side_rack_img,
         .opd_column_kind_icon::after,
         .opd_column_manager_type_icon::after,
         .media_viewer_icon_close,
@@ -1780,6 +1912,14 @@ function run(settings){
         }
         .opd_switch:checked{
             background-color: Highlight;
+        }
+        /*オンのトグルボタン (先頭トグル) は背景の塗りが Canvas に置き換わって消えるため、システム色の塗りで状態を示す*/
+        .dsp_column_btn.dsp_column_btn_active{
+            forced-color-adjust: none;
+            background-color: Highlight;
+        }
+        .dsp_column_btn.dsp_column_btn_active .dsp_column_force_top_btn{
+            background-color: HighlightText;
         }
     }
     /* メディア読み込み中アニメーション */
@@ -1805,9 +1945,14 @@ function run(settings){
     }
     </style>`);
     //カラム要素作成-挿入
-    //カラムバー (home / notification / explore で共通)。見出しはドラッグ用グリップ・カラム種別の丸アイコン・2 段組のテキスト (上段: 文脈ラベル、下段: タイトル) で、右端に空白領域 (クリックでカラム先頭へスクロール) と更新 (home カラムで自動更新オフのときだけ表示)・設定・閉じるボタンを置く
+    //カラムバーと副見出しの HTML を返す (home / notification / explore で共通)。
+    //見出しはドラッグ用グリップ・カラム種別の丸アイコン・2 段組のテキスト (上段: 文脈ラベル、下段: タイトル) で、その右に空白領域 (クリックでカラム先頭へスクロール。折りたたみ中は展開) を置き、
+    //続けて 先頭トグル (has_force_top が true のときだけ。home / explore で使う)・更新 (常に表示)・折りたたみ・設定・閉じるボタンをこの順に並べる
     //副見出しはポスト単体を表示しているあいだだけ出す (update_column_subbar が hidden を切り替える)。戻るボタンで元の一覧へ戻す
-    let default_element_bar = `<div class="column_bar" style="height: max-content;"><span class="dsp_column_title"><span class="dsp_column_move_icon" aria-hidden="true"></span><span class="opd_column_kind_icon" aria-hidden="true"></span><span class="opd_column_heading"><span class="opd_column_label">%column_label%</span><span class="opd_column_name">%column_title%</span></span></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div><span class="dsp_column_btn dsp_column_reload_btn_wrap" hidden><label class="dsp_column_reload_btn"><input class="opd_column_reload_btn" type="button" value="R" title="${i18n_message("ui_column_reload_title")}" aria-label="${i18n_message("ui_column_reload_title")}"></label></span><span class="dsp_column_btn"><label class="dsp_column_settings_btn"><input class="opd_settings_btn" type="button" value="S" title="${i18n_message("ui_column_settings_title")}" aria-label="${i18n_message("ui_column_settings_title")}"></label></span><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn"><input type="button" class="column_close_btn" value="X" title="${i18n_message("ui_column_close_title")}" aria-label="${i18n_message("ui_column_close_title")}"/></label></span></div></div><div class="opd_column_subbar" hidden><button type="button" class="opd_column_subbar_back" title="${i18n_message("ui_column_back_button")}" aria-label="${i18n_message("ui_column_back_button")}"><span class="opd_icon opd_icon_close" aria-hidden="true"></span></button><span class="opd_column_heading"><span class="opd_column_label opd_column_subbar_label"></span><span class="opd_column_name opd_column_subbar_name"></span></span></div>`;
+    function build_column_bar_html(has_force_top){
+        const force_top_btn_html = has_force_top ? `<span class="dsp_column_btn dsp_column_force_top_btn_wrap"><label class="dsp_column_force_top_btn"><input class="opd_column_force_top_btn" type="button" value="T" aria-pressed="false" title="${i18n_message("ui_column_force_top_title")}" aria-label="${i18n_message("ui_column_force_top_title")}"></label></span>` : "";
+        return `<div class="column_bar"><span class="dsp_column_title"><span class="dsp_column_move_icon" aria-hidden="true"></span><span class="opd_column_kind_icon" aria-hidden="true"></span><span class="opd_column_heading"><span class="opd_column_label">%column_label%</span><span class="opd_column_name">%column_title%</span></span></span><div class="dsp_column_empty_area opd_column_scroll_to_top"></div>${force_top_btn_html}<span class="dsp_column_btn dsp_column_reload_btn_wrap"><label class="dsp_column_reload_btn"><input class="opd_column_reload_btn" type="button" value="R" title="${i18n_message("ui_column_reload_title")}" aria-label="${i18n_message("ui_column_reload_title")}"></label></span><span class="dsp_column_btn dsp_column_collapse_btn_wrap"><label class="dsp_column_collapse_btn"><input class="opd_column_collapse_btn" type="button" value="C" aria-expanded="true" title="${i18n_message("ui_column_collapse_title")}" aria-label="${i18n_message("ui_column_collapse_title")}"></label></span><span class="dsp_column_btn dsp_column_settings_btn_wrap"><label class="dsp_column_settings_btn"><input class="opd_settings_btn" type="button" value="S" title="${i18n_message("ui_column_settings_title")}" aria-label="${i18n_message("ui_column_settings_title")}"></label></span><div class="dsp_column_close_btn_wrap"><span class="dsp_column_btn"><label class="dsp_column_close_btn"><input type="button" class="column_close_btn" value="X" title="${i18n_message("ui_column_close_title")}" aria-label="${i18n_message("ui_column_close_title")}"/></label></span></div></div><div class="opd_column_subbar" hidden><button type="button" class="opd_column_subbar_back" title="${i18n_message("ui_column_back_button")}" aria-label="${i18n_message("ui_column_back_button")}"><span class="opd_icon opd_icon_close" aria-hidden="true"></span></button><span class="opd_column_heading"><span class="opd_column_label opd_column_subbar_label"></span><span class="opd_column_name opd_column_subbar_name"></span></span></div>`;
+    }
     //カラム設定パネルはカラム種別ごとに出す行が異なる (項目 × カラム種別の適用表に従う)
     let notification_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:false, pinned:false});
     let home_settings_panel = build_column_settings_panel({iframe_styles:true, auto_reload:true, pinned:false});
@@ -1815,14 +1960,14 @@ function run(settings){
     let default_element = {
         /*main_bar_empty_column:{html:`<!--<section draggable="false" class="dsp_column"><div opd_column_type="main_bar_empty_column" opd_column_width="%column_width_num%" id="main_bar_empty_column" style="height:100%;min-width: 70px;"></div></section>-->`},*/
         empty_column:{html:`<section draggable="false" id="column_%column_num%" class="dsp_column_draggable_false dsp_column dsp_column_emptycolumn"><div opd_column_type="empty_column" opd_column_width="%column_width_attr%"><div><span class="opd_icon opd_icon_column_add_1" aria-hidden="true"></span><p>${i18n_message("ui_empty_column_message")}</p></div></div></section>`},
-        home:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="home" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_hide_rt_tweet="%column_setting_hide_rt_tweet%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${home_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com/home" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
-        notification:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="notification" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_hide_rt_tweet="%column_setting_hide_rt_tweet%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${notification_settings_panel}<iframe allow="fullscreen" src="https://x.com/notifications" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
-        explore:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="explore" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_hide_rt_tweet="%column_setting_hide_rt_tweet%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_setting_pinned="%column_setting_pinned%" opd_explore_path="%column_save_path%" opd_explore_title="%column_save_title%" opd_explore_title_fetched_at="%column_save_title_fetched_at%" opd_pinned_path="%column_pinned_save_path%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${default_element_bar}${explore_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com%column_save_path%" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`}
+        home:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="home" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_column_collapsed="%column_collapsed%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_hide_rt_tweet="%column_setting_hide_rt_tweet%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_auto_reload_force_top="%column_auto_reload_force_top%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${build_column_bar_html(true)}${home_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com/home" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
+        notification:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="notification" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_column_collapsed="%column_collapsed%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_hide_rt_tweet="%column_setting_hide_rt_tweet%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${build_column_bar_html(false)}${notification_settings_panel}<iframe allow="fullscreen" src="https://x.com/notifications" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`},
+        explore:{html:`<section draggable="true" id="column_%column_num%" class="dsp_column_draggable_true dsp_column"><div opd_column_type="explore" opd_column_return_path="%column_return_path%" opd_column_width="%column_width_attr%" opd_column_collapsed="%column_collapsed%" opd_setting_banner="%column_setting_banner%" opd_setting_top_visible="%column_setting_top_visible%" opd_setting_tw_view_mode="%column_setting_tw_view_mode%" opd_setting_hide_rt_tweet="%column_setting_hide_rt_tweet%" opd_setting_auto_reload="%column_setting_auto_reload%" opd_setting_auto_reload_time="%column_setting_auto_reload_time%" opd_auto_reload_force_top="%column_auto_reload_force_top%" opd_setting_pinned="%column_setting_pinned%" opd_explore_path="%column_save_path%" opd_explore_title="%column_save_title%" opd_explore_title_fetched_at="%column_save_title_fetched_at%" opd_pinned_path="%column_pinned_save_path%" style="height: 100%;width: %column_width_num%rem;min-width: 1rem;">${build_column_bar_html(true)}${explore_settings_panel}<iframe auto_reload_mouse_hover="false" allow="fullscreen" src="https://x.com%column_save_path%" type="text/html" style="width: 100%;height: 100%;" opd_init_webview></iframe></div></section>`}
     };
     let ins_html = document.createElement("div");
     ins_html.id = "opd_main_element";
     ins_html.style = "position: fixed;z-index: 999999;top:0;width: 100%;height: 100%;display: flex;flex-direction: row;overflow: hidden;";
-    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="manage_columns" tabindex="0" role="button" aria-haspopup="dialog" title="${i18n_message("ui_manage_columns_title")}"><div class="dsp_btn_manage_columns_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
+    let side_bar = `<section class="dsp_column" id="opd_sidebar"><div draggable="false" class="dsp_column_draggable_false" opd_column_type="dsp_column" opd_column_width="%column_width_num%"><div class="main_bar_functions"><div class="opd_ui_logo_parent" title="${i18n_message("ui_sidebar_logo_title", [manifest.version])}"><div class="opd_ui_logo"></div><span class="opd_version_span">${manifest.version}</span></div><hr><div class="opd_debug_menu"><span>${i18n_message("ui_debug_menu_label")}</span><input type="button" class="opd_btn" id="init_settings" value="${i18n_message("ui_button_init_settings")}" /><input type="button" class="opd_btn" id="profile_load_save" value="${i18n_message("ui_button_profile_loader")}" /><input type="button" class="opd_btn" id="dnr_reload" value="${i18n_message("ui_button_dnr_reload")}" /><input type="button" class="opd_btn" id="ext_reload" value="${i18n_message("ui_button_ext_reload")}" /></div><div id="api_limit_status">${i18n_message("ui_button_api_label")}</div><hr><div class="dsp_btn_parent" id="open_post_form" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false" title="${i18n_message("ui_open_post_form_title")}"><div class="dsp_btn_post_form_img"></div></div><hr><div class="dsp_btn_parent" id="manage_columns" tabindex="0" role="button" aria-haspopup="dialog" title="${i18n_message("ui_manage_columns_title")}"><div class="dsp_btn_manage_columns_img"></div></div><div class="dsp_btn_parent" id="toggle_side_rack" tabindex="0" role="button" aria-controls="side_rack_element" aria-expanded="true" title="${i18n_message("ui_side_rack_hide_title")}" aria-label="${i18n_message("ui_side_rack_hide_title")}"><div class="dsp_btn_side_rack_img"></div></div><hr><div class="dsp_btn_parent" id="global_settings" tabindex="0" role="button" title="${i18n_message("ui_global_settings_title")}"><div class="dsp_btn_global_settings_img"></div></div><hr><div class="dsp_btn_parent" title="${i18n_message("ui_profile_save_title")}" id="profile_save"><div class="dsp_btn_profile_add_img"></div></div><div class="dsp_btn_parent" title="${i18n_message("ui_profile_delete_title")}" id="profile_delete"><div class="dsp_btn_profile_delete_img"></div></div>${profile_list_html}</div></div></section><section draggable="false" class="dsp_column_draggable_false dsp_column"><div opd_column_type="main_bar_empty_column" id="main_bar_empty_column"></div></section>`;
     let main_column_html = ``;
     let side_column_html = ``;
     //カラム配列の empty_column より後をサイドラックへ振り分けるための検出状態
@@ -1880,6 +2025,9 @@ function run(settings){
                     column_setting_auto_reload: column_setting_attr_value("auto_reload", saved_auto_reload),
                     column_setting_auto_reload_time: column_setting_attr_value("auto_reload_time", saved_auto_reload_time),
                     column_setting_pinned: column_setting_attr_value("pinned", saved_pinned),
+                    //折りたたみと先頭トグルは保存値が true のときだけ "true" にする
+                    column_collapsed: column_setting.collapsed === true ? "true" : "false",
+                    column_auto_reload_force_top: column_setting.auto_reload_force_top === true ? "true" : "false",
                     column_label: init_heading?.label ?? "",
                     column_title: init_heading?.name ?? "",
                     column_return_path: initial_column_return_path(column_setting.type, init_column_save_path),
@@ -1971,22 +2119,55 @@ function run(settings){
         root_element.style.setProperty("--opd-text-scale", String(global_settings.text_scale_percent / 100));
         root_element.style.setProperty("--opd-column-content-scale", String(global_settings.column_content_scale_percent / 100));
     }
-    //サイドラックの現在の描画幅を --opd_side_rack_width へ書く (非表示なら 0px。小数精度を保つため getBoundingClientRect を使う)
+    //サイドラックの現在の描画幅を --opd_side_rack_width へ書く (小数精度を保つため getBoundingClientRect を使う)
+    //hidden 属性 (実カラムが無い) または opd_user_hidden 属性 (切替ボタンで隠している) が付いているあいだは 0px を書き、メインラックを全幅に広げる
+    //opd_user_hidden は visibility: hidden で隠すだけで描画幅は残るため、属性を見て 0px にする (ResizeObserver から呼ばれたときも同じ)
     function update_side_rack_width(){
         const main_element = document.getElementById("opd_main_element");
         const side_rack = document.getElementById("side_rack_element");
         if(main_element === null || side_rack === null) return;
-        main_element.style.setProperty("--opd_side_rack_width", `${side_rack.getBoundingClientRect().width}px`);
+        const is_side_rack_hidden = side_rack.hidden || side_rack.hasAttribute("opd_user_hidden");
+        main_element.style.setProperty("--opd_side_rack_width", is_side_rack_hidden ? "0px" : `${side_rack.getBoundingClientRect().width}px`);
     }
-    //サイドラックの表示状態を現在の状態から決めて反映する。カラムの追加・閉じる・ドラッグ移動・起動時に呼ぶ
-    //表示条件: サイドラックに section.dsp_column_draggable_true が 1 つ以上ある
+    //サイドラックの表示状態を現在の状態から決めて反映する。カラムの追加・閉じる・ドラッグ移動・表示切替・起動時に呼ぶ
+    //  hidden 属性: サイドラックに section.dsp_column_draggable_true が 1 つも無いあいだ付ける
+    //  opd_user_hidden 属性: 実カラムがあり global_settings.side_rack_visible が false のあいだ付ける (CSS で visibility: hidden にする)
+    //  切替ボタン (#toggle_side_rack): aria-expanded をサイドラックが見えているか、title / aria-label を押したときの動作にする。
+    //    実カラムが無いあいだは aria-disabled="true" と ui_side_rack_empty_title にし、それ以外は aria-disabled を外す
     function update_side_rack_state(){
         const side_rack = document.getElementById("side_rack_element");
         if(side_rack === null) return;
         const has_side_column = side_rack.querySelector(":scope > section.dsp_column_draggable_true") !== null;
+        const is_user_hidden = has_side_column && global_settings.side_rack_visible === false;
         side_rack.hidden = !has_side_column;
+        side_rack.toggleAttribute("opd_user_hidden", is_user_hidden);
+        const toggle_button = document.getElementById("toggle_side_rack");
+        if(toggle_button !== null){
+            let toggle_title = i18n_message("ui_side_rack_empty_title");
+            if(has_side_column) toggle_title = i18n_message(is_user_hidden ? "ui_side_rack_show_title" : "ui_side_rack_hide_title");
+            toggle_button.setAttribute("aria-expanded", String(has_side_column && !is_user_hidden));
+            if(has_side_column){
+                toggle_button.removeAttribute("aria-disabled");
+            }else{
+                toggle_button.setAttribute("aria-disabled", "true");
+            }
+            toggle_button.title = toggle_title;
+            toggle_button.setAttribute("aria-label", toggle_title);
+        }
         //ResizeObserver の反映を待たずに幅を合わせる
         update_side_rack_width();
+    }
+    //サイドバーの切替ボタンから呼ぶ。サイドラックに実カラムが無ければ何もしない
+    //global_settings.side_rack_visible を反転して update_side_rack_state で反映し、column_settings_save で保存する
+    //表示に切り替えたときは、隠しているあいだ自動更新しなかったサイドラックの各カラムを reload_stale_column で古ければ 1 回更新する
+    //(opd_user_hidden を外した後に呼ぶため、is_column_concealed に止められない)
+    function toggle_side_rack_visible(){
+        if(get_rack_columns("side").length === 0) return;
+        global_settings.side_rack_visible = !global_settings.side_rack_visible;
+        update_side_rack_state();
+        column_settings_save("", last_load_profile);
+        if(!global_settings.side_rack_visible) return;
+        get_rack_columns("side").forEach((section) => reload_stale_column(section.querySelector("div[opd_column_type]")));
     }
     //プロファイルリスト切替イベント作成関数
     function create_profile_list_btn(){
@@ -2580,7 +2761,11 @@ function run(settings){
     //  → 新しいカラムの iframe を初期化 (append_object_css) し、ドラッグ・閉じるボタンを登録 → サイドラックの表示を更新 → 保存 → 最初の新しいカラムへスクロール
     //既存カラムの移動は prepare_column_for_dom_move で読み込み先を整えてから行う。動かさない既存カラムには触れないため再読み込みされない
     //メインラックを先に処理するため、サイドラックへ移る既存カラムはメインラックの処理中は元の位置に残り、サイドラックの処理で移る (メインラックの並びは動かさないカラムを基準に決まるため影響しない)
+    //サイドラックへ入るカラム (新しいカラム、または適用前にサイドラックに無かった既存カラム) があり、サイドラックを隠している (global_settings.side_rack_visible が false) ときは、
+    //結果が見えるよう update_side_rack_state の前に side_rack_visible を true にし、表示した後でサイドラックの各カラムを reload_stale_column で古ければ 1 回更新する (保存は最後の column_settings_save が行う)
     function apply_column_layout(layout, closing_sections){
+        //適用前にサイドラックにあった実カラム。サイドラックへ新たに入るカラムの判定に使う
+        const previous_side_sections = new Set(get_rack_columns("side"));
         const new_sections = [];
         const rack_sections = {main: [], side: []};
         ["main", "side"].forEach((rack_id) => {
@@ -2622,7 +2807,12 @@ function run(settings){
         if(new_frames.length > 0) append_object_css("add_column", new_frames);
         column_dd();
         column_close();
+        const is_side_rack_revealed = global_settings.side_rack_visible === false && rack_sections.side.some((section) => !previous_side_sections.has(section));
+        if(is_side_rack_revealed) global_settings.side_rack_visible = true;
         update_side_rack_state();
+        if(is_side_rack_revealed){
+            get_rack_columns("side").forEach((section) => reload_stale_column(section.querySelector("div[opd_column_type]")));
+        }
         column_settings_save("", last_load_profile);
         new_sections[0]?.scrollIntoView({behavior: "smooth", inline: "nearest"});
     }
@@ -3572,6 +3762,17 @@ function run(settings){
         event.preventDefault();
         open_column_manager_dialog(this);
     });
+    //サイドラックの表示を切り替える (サイドラックに実カラムが無いあいだは toggle_side_rack_visible が何もしない)
+    document.getElementById("toggle_side_rack").addEventListener("click", function(){
+        toggle_side_rack_visible();
+    });
+    //ボタンとして振る舞わせるため、Enter と Space でも切り替える
+    document.getElementById("toggle_side_rack").addEventListener("keydown", function(event){
+        if(event.repeat) return;
+        if(event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggle_side_rack_visible();
+    });
     //全体設定ダイアログを開く
     document.getElementById("global_settings").addEventListener("click", function(){
         open_global_settings_dialog(this);
@@ -4064,6 +4265,7 @@ function run(settings){
         return normalized_value === null ? "inherit" : String(normalized_value);
     }
     //カラム追加時のテンプレート値。個別値はすべて "inherit" にし、幅・秒数は全体設定の値、見出しはカラム種別 (column_type) から決めた語をそのまま使う
+    //折りたたみと先頭トグルは "false" (展開した状態・トグルはオフ) で始める
     //explore カラムの見出しは screen_name を使わないため、その取得 (全 iframe の走査) を省く
     function inherit_column_template_values(column_type){
         const heading = build_column_heading(column_type, "", "", column_type === "explore" ? null : get_login_screen_name());
@@ -4079,6 +4281,8 @@ function run(settings){
             column_setting_auto_reload: "inherit",
             column_setting_auto_reload_time: "inherit",
             column_setting_pinned: "inherit",
+            column_collapsed: "false",
+            column_auto_reload_force_top: "false",
             column_pinned_save_path: "",
             column_save_title: "",
             column_save_title_fetched_at: "",
@@ -4130,6 +4334,7 @@ function run(settings){
     //  ピン止めの select の change: opd_setting_pinned を更新 → reconcile_column_pinned → apply_column_dom_state → column_settings_save
     //  副見出しの戻るボタン click: 記録した戻り先パス (opd_column_return_path) を replaceState + popstate で iframe 内に開き直す。iframe の中身を操作できない (別オリジン等) ときだけ読み込み直しで戻す
     //  カスタム幅ボタン: prompt で rem を受け取り、COLUMN_WIDTH_MIN_REM 〜 COLUMN_WIDTH_MAX_REM の範囲なら opd_column_width に明示値を設定
+    //  カラムバーの折りたたみボタン・空白部分・先頭トグル・更新ボタンの click: 挙動は「カラムの折りたたみ」節と「自動更新」節
     function bind_column_events(column_div){
         if(column_div == null) return;
         if(column_div.dataset.opd_settings_initialized === "1") return;
@@ -4235,7 +4440,27 @@ function run(settings){
             reconcile_column_pinned(column_div);
             save_column_setting(false);
         });
+        //カラムバーの折りたたみボタン。押すたびに折りたたみと展開を切り替える
+        column_div.querySelector(".opd_column_collapse_btn")?.addEventListener("click", function(){
+            set_column_collapsed(column_div, column_div.getAttribute("opd_column_collapsed") !== "true");
+        });
+        //カラムバーの先頭トグル (home / explore のみ)。押すたびに opd_auto_reload_force_top を反転して保存する
+        //実効 auto_reload が false のあいだ (aria-disabled="true") は何もしない。表示は apply_column_dom_state が合わせる
+        column_div.querySelector(".opd_column_force_top_btn")?.addEventListener("click", function(){
+            if(this.getAttribute("aria-disabled") === "true") return;
+            column_div.setAttribute("opd_auto_reload_force_top", column_div.getAttribute("opd_auto_reload_force_top") === "true" ? "false" : "true");
+            apply_column_dom_state(column_div);
+            column_settings_save("", last_load_profile);
+        });
         const column_frame = column_div.querySelector("iframe");
+        //カラムバーの空白部分。折りたたみ中は展開し、それ以外はカラムの先頭へスクロールする
+        column_div.querySelector(".opd_column_scroll_to_top")?.addEventListener("click", function(){
+            if(column_div.getAttribute("opd_column_collapsed") === "true"){
+                set_column_collapsed(column_div, false);
+                return;
+            }
+            column_frame?.contentWindow?.scrollTo({ top: 0, behavior: "auto" });
+        });
         if(column_frame !== null){
             //ホバー中は自動更新を止める。mouseleave が届かず "true" が残った場合は、親 document の mouseover (最上位で登録) が直す
             column_frame.addEventListener("mouseover", function(){
@@ -4244,18 +4469,24 @@ function run(settings){
             column_frame.addEventListener("mouseleave", function(){
                 this.setAttribute("auto_reload_mouse_hover", "false");
             });
-            //カラムバー空白領域クリックでトップにスクロール
-            column_div.querySelector(".opd_column_scroll_to_top")?.addEventListener("click", function(){
-                column_frame.contentWindow?.scrollTo({ top: 0, behavior: "auto" });
-            });
-            //カラムバーの更新ボタン (表示の出し分けは apply_column_dom_state)。設定に依らず「更新して先頭へ」: 先に先頭へ戻してから、更新対象のパス (is_column_reload_path) なら先頭保持付きで更新する
-            //別オリジンを表示していてパスを読めないときは何もしない
+            //カラムバーの更新ボタン (全カラムに常に表示)。自動更新の設定に依らず「更新して先頭へ」:
+            //  更新対象のパス (is_column_reload_path) でヘルパーが準備済みなら強制先頭で更新する (先頭へのスクロールはヘルパーが更新の前に行う)
+            //  パスが読めて、更新対象でないページ (通知・プロフィール・ポスト単体など) か、ヘルパーが無い (通知カラム・読み込み中) ときは、先頭へスクロールしてから iframe を読み込み直す
+            //  (読み込み直しでブラウザーがスクロール位置を復元しても、保存される位置が先頭になるようにするため)
+            //  別オリジンを表示していてパスを読めないときは何もしない
             column_div.querySelector(".opd_column_reload_btn")?.addEventListener("click", function(){
                 const path_name = column_frame_path_name(column_frame);
                 if(path_name === null) return;
-                column_frame.contentWindow?.scrollTo({ top: 0, behavior: "instant" });
-                if(!is_column_reload_path(path_name)) return;
-                reload_column(column_frame, true);
+                if(is_column_reload_path(path_name) && column_frame.opd_auto_reload){
+                    reload_column(column_frame, {keep_top: true, force_top: true});
+                    return;
+                }
+                try{
+                    column_frame.contentWindow.scrollTo({ top: 0, behavior: "instant" });
+                    column_frame.contentWindow.location.reload();
+                }catch(e){
+                    console.warn("column reload: カラムを読み込み直せませんでした->", e);
+                }
             });
             //副見出しの戻るボタン。カラムが記録している戻り先パス (ポスト以外で最後に表示したページ) を iframe 内で開き直す
             //iframe の history はタブ全体で共有され、back() は他のカラムの遷移まで巻き戻し、pushState はブラウザの「戻る」の段数を増やすため、replaceState + popstate で X の画面遷移を起こす (X のルーターは popstate で location を読み直す)
@@ -4288,11 +4519,13 @@ function run(settings){
             });
         }
     }
-    //iframe の load を待たずに同期で反映できる項目をカラム div へ適用する
-    //  カラム幅: style.width = 実効 rem、幅 select の選択値 (15→0 / 20→1 / 30→2 / inherit→inherit / その他→3)
+    //iframe の load を待たずに同期で反映できる項目をカラム div へ適用する (何度呼んでも同じ結果になる)
+    //  カラム幅: style.width = 実効 rem、幅 select の選択値 (15→0 / 20→1 / 30→2 / inherit→inherit / その他→3)。折りたたみ中も実効カラム幅のまま書く (帯の幅は section 側の CSS で縮める)
+    //  折りたたみ: opd_column_collapsed を section の opd_column_collapsed クラスへ写し、折りたたみボタンの aria-expanded / title / aria-label を合わせる。折りたたみ中は開いている設定パネルを閉じる
     //  パネル表示: 各 select の選択値と inherit 選択肢の表示文字列、間隔入力の値 (秒) と disabled 状態
     //  ピン止め: reconcile_column_pinned
     //  自動更新: apply_column_auto_reload
+    //  先頭トグル: aria-pressed と、実効 auto_reload が true でないあいだの aria-disabled と title / aria-label、ラッパーの .dsp_column_btn_active / .dsp_column_btn_disabled
     function apply_column_dom_state(column_div){
         if(column_div == null) return;
         //select の選択値を保存値に、inherit 選択肢の表示を現在の全体値に合わせる
@@ -4313,6 +4546,21 @@ function run(settings){
             const saved_width = read_column_setting(column_div, "column_width");
             const width_preset_value = {15: "0", 20: "1", 30: "2"}[saved_width];
             width_select.value = saved_width === null ? "inherit" : (width_preset_value ?? "3");
+        }
+        //折りたたみ。section のクラスで帯の表示に切り替える (Firefox ESR 115 は :has() を解釈しないため、子の属性ではなく section 自身に状態を持たせる)
+        const is_collapsed = column_div.getAttribute("opd_column_collapsed") === "true";
+        column_div.closest("section")?.classList.toggle("opd_column_collapsed", is_collapsed);
+        const collapse_btn = column_div.querySelector(".opd_column_collapse_btn");
+        if(collapse_btn !== null){
+            const collapse_title = i18n_message(is_collapsed ? "ui_column_expand_title" : "ui_column_collapse_title");
+            collapse_btn.setAttribute("aria-expanded", String(!is_collapsed));
+            collapse_btn.title = collapse_title;
+            collapse_btn.setAttribute("aria-label", collapse_title);
+        }
+        const column_settings_panel = column_div.querySelector(".dsp_column_settings_panel");
+        if(is_collapsed && column_settings_panel !== null && column_settings_panel.getAttribute("open") !== null){
+            column_settings_panel.removeAttribute("open");
+            column_settings_panel.style.display = "none";
         }
         //パネルの select
         apply_setting_select(".opd_tw_view_mode", "tw_view_mode");
@@ -4336,11 +4584,24 @@ function run(settings){
         }
         reconcile_column_pinned(column_div);
         apply_column_auto_reload(column_div);
-        //カラムバーの更新ボタンは home カラムで実効 auto_reload が false のときだけ出す (自動更新中は手動更新の出番が無いため隠す)
-        const reload_btn_wrap = column_div.querySelector(".dsp_column_reload_btn_wrap");
-        if(reload_btn_wrap !== null){
-            const is_manual_reload_target = column_div.getAttribute("opd_column_type") === "home" && effective_column_setting(column_div, "auto_reload", global_settings) !== true;
-            reload_btn_wrap.hidden = !is_manual_reload_target;
+        //先頭トグル (home / explore のみ)。実効 auto_reload が true でないあいだはトグルの状態を保ったまま aria-disabled にし、
+        //フォーカスと tooltip は残して title で使える条件を示す (native disabled は tooltip が出ずタブ順からも外れるため使わない)
+        const force_top_btn = column_div.querySelector(".opd_column_force_top_btn");
+        if(force_top_btn !== null){
+            const is_force_top = column_div.getAttribute("opd_auto_reload_force_top") === "true";
+            const is_auto_reload_enabled = effective_column_setting(column_div, "auto_reload", global_settings) === true;
+            const force_top_title = i18n_message(is_auto_reload_enabled ? "ui_column_force_top_title" : "ui_column_force_top_disabled_title");
+            force_top_btn.setAttribute("aria-pressed", String(is_force_top));
+            if(is_auto_reload_enabled){
+                force_top_btn.removeAttribute("aria-disabled");
+            }else{
+                force_top_btn.setAttribute("aria-disabled", "true");
+            }
+            force_top_btn.title = force_top_title;
+            force_top_btn.setAttribute("aria-label", force_top_title);
+            const force_top_btn_wrap = force_top_btn.closest(".dsp_column_btn");
+            force_top_btn_wrap?.classList.toggle("dsp_column_btn_active", is_force_top);
+            force_top_btn_wrap?.classList.toggle("dsp_column_btn_disabled", !is_auto_reload_enabled);
         }
     }
     //iframe 内 head に style 要素 (style[opd_banner_css] / style[opd_top_visible_css] / style[opd_tw_view_mode_css] / style[opd_disable_rt_css]) を用意し、実効値に応じて COLUMN_IFRAME_CSS の文字列を設定する
@@ -4427,7 +4688,7 @@ function run(settings){
     }
     //自動更新 interval を冪等に再構成する: 実効 auto_reload と実効 auto_reload_time (ms) が動作中の interval (iframe 要素の opd_auto_reload_interval_id / opd_auto_reload_interval_ms) と同じなら何もせずカウントダウンを維持し、
     //異なるときだけ既存の interval を clear して作り直す (実効 auto_reload が false なら止めるだけ)
-    //interval は発火のたびに try_auto_reload_column を呼ぶ (interval は間隔が変わらない限り作り直さないため、設定値は interval 作成時に固定せず発火のたびに読む)
+    //interval は発火のたびに try_auto_reload_column を force_top なしで呼ぶ (interval は間隔が変わらない限り作り直さないため、設定値は interval 作成時に固定せず発火のたびに読む)
     function apply_column_auto_reload(column_div){
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
@@ -4440,23 +4701,62 @@ function run(settings){
         if(!is_enabled) return;
         column_frame.opd_auto_reload_interval_ms = auto_reload_time;
         column_frame.opd_auto_reload_interval_id = setInterval(function(){
-            try_auto_reload_column(column_frame);
+            try_auto_reload_column(column_frame, false);
         }, auto_reload_time);
     }
     //自動更新 1 回分の判定と実行。次を確かめ、1 つでも満たさなければ何もしない:
-    //  iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
-    //満たせば reload_column(column_frame, keep_top) で更新して true を返し、満たさなければ false を返す。keep_top には呼び出し時点の global_settings.auto_reload_keep_top を渡す
-    //interval の発火と、hidden からの復帰時 (reload_stale_columns_on_visible) の両方から呼ぶ
-    function try_auto_reload_column(column_frame){
+    //  iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / カラムが隠れていない (is_column_concealed が false) /
+    //  iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
+    //満たせば reload_column で更新して true を返し、満たさなければ false を返す。keep_top には呼び出し時点の global_settings.auto_reload_keep_top を、
+    //force_top には「引数 force_top が true、またはカラムの先頭トグル (opd_auto_reload_force_top) が "true"」を渡す
+    //interval の発火 (force_top は false) と reload_stale_column (force_top は true) から呼ぶ
+    function try_auto_reload_column(column_frame, force_top){
         const path_name = column_frame_path_name(column_frame);
         //別オリジンを表示しているあいだは自動更新しない
         if(path_name === null) return false;
         if(!is_column_reload_path(path_name)) return false;
+        //折りたたみ中・隠したサイドラックのカラムは更新しない (interval は止めずカウントダウンを保ち、見える状態に戻ったときに reload_stale_column で追いつく)
+        const column_div = column_frame.closest("div[opd_column_type]");
+        if(is_column_concealed(column_div)) return false;
         if(column_frame.getAttribute("auto_reload_mouse_hover") != "false") return false;
         //カラムの自動更新が全体的に許可されていない場合は自動更新を無効化する
         if(!column_frame.opd_auto_reload || !is_auto_update()) return false;
-        reload_column(column_frame, global_settings.auto_reload_keep_top === true);
+        const is_force_top = force_top === true || column_div?.getAttribute("opd_auto_reload_force_top") === "true";
+        reload_column(column_frame, {keep_top: global_settings.auto_reload_keep_top === true, force_top: is_force_top});
         return true;
+    }
+    //カラムが隠れているあいだ true を返す: 折りたたみ中 (opd_column_collapsed が "true")、またはサイドラックのカラムでサイドラックを隠している (#side_rack_element に opd_user_hidden 属性がある)
+    function is_column_concealed(column_div){
+        if(column_div == null) return false;
+        if(column_div.getAttribute("opd_column_collapsed") === "true") return true;
+        return column_div.closest("#side_rack_element")?.hasAttribute("opd_user_hidden") === true;
+    }
+    //隠れていたカラムが見える状態に戻ったとき (タブの復帰・カラムの展開・サイドラックの再表示) の 1 カラム分の処理
+    //interval が動作中で、最終更新時刻が数値で、Date.now() - 最終更新時刻 が動作中の間隔以上のときだけ try_auto_reload_column(column_frame, true) を呼ぶ。
+    //更新前のスクロール位置や先頭トグルに依らず force_top で先頭へ戻して保つ (隠れているあいだに X が新着を差し込んで表示位置がずれていても先頭へ戻すため)
+    //更新した (true が返った) ときは interval を張り直して、次の更新がその更新から間隔後になるようにする (直後に残りわずかの interval が発火して二重に更新しない)。
+    //間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する
+    function reload_stale_column(column_div){
+        const column_frame = column_div?.querySelector("iframe");
+        if(!column_frame) return;
+        //interval が動作中でないカラム (自動更新が無効・対象外のカラム) は更新しない
+        if(column_frame.opd_auto_reload_interval_id == null) return;
+        //最終更新時刻が数値でないカラム (ヘルパー注入前で初期値が入っていない) は次の interval を待つ
+        const last_reload_at = column_frame.opd_auto_reload_last_reload_at;
+        if(!Number.isFinite(last_reload_at)) return;
+        if(Date.now() - last_reload_at < column_frame.opd_auto_reload_interval_ms) return;
+        if(!try_auto_reload_column(column_frame, true)) return;
+        stop_column_auto_reload(column_div);
+        apply_column_auto_reload(column_div);
+    }
+    //カラムの折りたたみ状態を is_collapsed にする。opd_column_collapsed 属性を書き、apply_column_dom_state で表示へ反映して column_settings_save で保存する
+    //展開したときは、折りたたみ中に自動更新しなかったカラムを reload_stale_column で古ければ 1 回更新する (属性を書いた後に呼ぶため is_column_concealed に止められない)
+    function set_column_collapsed(column_div, is_collapsed){
+        if(column_div == null) return;
+        column_div.setAttribute("opd_column_collapsed", is_collapsed ? "true" : "false");
+        apply_column_dom_state(column_div);
+        column_settings_save("", last_load_profile);
+        if(!is_collapsed) reload_stale_column(column_div);
     }
     //iframe が表示中のパス (pathname) を返す。iframe が無い・別オリジンを表示していて読めないときは null
     function column_frame_path_name(column_frame){
@@ -4470,14 +4770,16 @@ function run(settings){
     function is_column_reload_path(path_name){
         return ['/home', '/search'].includes(path_name) || path_name.startsWith('/i/lists');
     }
-    //タイムラインを更新する (自動更新 1 回分の処理。カラムバーの更新ボタンからも呼ぶ)。更新は OpdExtAutoReload の Reload (X の onRefresh を呼ぶ) で行い、
-    //keep_top が true ならヘルパーが更新直後に先頭保持を始める。iframe の load 前などでヘルパーがまだ無いときはヘルパーへ送らない (最終更新時刻の記録は行う)。content script 側からは更新後にスクロールしない
-    //更新のたびに iframe 要素の opd_auto_reload_last_reload_at を Date.now() にして、hidden からの復帰時の古さ判定に使う
-    function reload_column(column_frame, keep_top){
+    //タイムラインを更新する (自動更新 1 回分の処理。カラムバーの更新ボタンからも呼ぶ)。更新は OpdExtAutoReload の Reload (X の onRefresh を呼ぶ) で行う
+    //options は {keep_top, force_top} (どちらも boolean)。force_top が true ならヘルパーが更新の前に先頭へ戻して更新後も先頭に保ち (keep_top より優先)、
+    //そうでなく keep_top が true なら、更新前に先頭にいたときだけヘルパーが更新直後に先頭保持を始める
+    //iframe の load 前などでヘルパーがまだ無いときはヘルパーへ送らない (最終更新時刻の記録は行う)。更新の前後のスクロール位置に手を入れるのはヘルパーだけで、content script 側からはスクロールしない
+    //更新のたびに iframe 要素の opd_auto_reload_last_reload_at を Date.now() にして、隠れていたカラムが見える状態に戻ったときの古さ判定に使う
+    function reload_column(column_frame, options = {}){
         const frame_window = column_frame?.contentWindow;
         if(frame_window == null) return;
         column_frame.opd_auto_reload_last_reload_at = Date.now();
-        column_frame.opd_auto_reload?.Reload(frame_window, { keep_top: keep_top === true });
+        column_frame.opd_auto_reload?.Reload(frame_window, { keep_top: options.keep_top === true, force_top: options.force_top === true });
     }
     //自動更新 interval を止める。カラムを閉じる・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
     function stop_column_auto_reload(column_div){
@@ -4489,24 +4791,10 @@ function run(settings){
         column_frame.opd_auto_reload_interval_ms = null;
     }
     //deck のタブが visible に戻ったときに、古くなったカラムだけを 1 回更新する (最上位の visibilitychange リスナーから呼ばれる)。
-    //#opd_main_element が無ければ何もしない。interval が動作中のカラム (iframe 要素の opd_auto_reload_interval_id が非 null) のうち、
-    //Date.now() - opd_auto_reload_last_reload_at が動作中の間隔 (opd_auto_reload_interval_ms) 以上のカラムだけに try_auto_reload_column を呼ぶ (最終更新時刻が数値でないカラムは対象外)。
-    //更新した (true が返った) カラムは interval を張り直して、次の更新がその更新から間隔後になるようにする (直後に残りわずかの interval が発火して二重に更新しない)。
-    //間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する
+    //#opd_main_element が無ければ何もしない。各カラムへ reload_stale_column を呼び、古さの判定・force_top での更新・interval の張り直しはそちらで行う
     function reload_stale_columns_on_visible(){
         if(document.getElementById("opd_main_element") === null) return;
-        get_settings_target_columns().forEach((column_div) => {
-            const column_frame = column_div.querySelector("iframe");
-            if(!column_frame) return;
-            //interval が動作中でないカラム (自動更新が無効・対象外のカラム) は復帰時にも更新しない
-            if(column_frame.opd_auto_reload_interval_id == null) return;
-            const last_reload_at = column_frame.opd_auto_reload_last_reload_at;
-            if(!Number.isFinite(last_reload_at)) return;
-            if(Date.now() - last_reload_at < column_frame.opd_auto_reload_interval_ms) return;
-            if(!try_auto_reload_column(column_frame)) return;
-            stop_column_auto_reload(column_div);
-            apply_column_auto_reload(column_div);
-        });
+        get_settings_target_columns().forEach((column_div) => reload_stale_column(column_div));
     }
     //全体設定の変更を全カラムへ反映する: 適用表の対象カラム (home / notification / explore) それぞれに apply_column_dom_state と apply_column_iframe_styles を呼び、column_settings_save で保存する
     //構造用カラム (main_bar_empty_column / empty_column / dsp_column) には触れない
@@ -4824,6 +5112,7 @@ function run(settings){
     }
     //カラム構成保存
     //各カラムの継承可能 8 項目は read_column_setting で属性から読み (inherit は null)、column_pinned_override は opd_setting_pinned 属性のみから決める
+    //collapsed と auto_reload_force_top は、カラム div の属性 (opd_column_collapsed / opd_auto_reload_force_top) が "true" のときだけ true にする (属性が無い構造用カラムは false)
     //save_object には global_settings と settings_schema_version (= SETTINGS_SCHEMA_VERSION) も含める。プロファイル保存ボタンで新規追加する save_object も同じ 2 つを含める
     function column_settings_save(mode, profile_num){
         let settings_array = {
@@ -4862,6 +5151,8 @@ function run(settings){
                 auto_reload: read_column_setting(column_div, "auto_reload"),
                 auto_reload_time: read_column_setting(column_div, "auto_reload_time"),
                 column_width: read_column_setting(column_div, "column_width"),
+                collapsed: column_div.getAttribute("opd_column_collapsed") === "true",
+                auto_reload_force_top: column_div.getAttribute("opd_auto_reload_force_top") === "true",
             });
         }
         if(mode == "profile_out"){
@@ -5041,10 +5332,11 @@ function main_dsp(react_root){
 //                                               (Firefox ESR 115 は :has() を解釈しないため、子の属性から section を選ばず、section 自身に状態を持たせる)
 //  --opd-column-collapsed-width               折りたたみ表示の幅 (rem で書き、UI 倍率に追従させる)
 //折りたたみ表示の作り方:
-//  カラム div の幅 (style.width = 実効カラム幅) と iframe には手を入れず、section の幅だけを --opd-column-collapsed-width に縮め、はみ出した部分を section の overflow: hidden で切り取る。
+//  カラム div の幅 (style.width = 実効カラム幅) と iframe には手を入れず、section の幅だけを --opd-column-collapsed-width に縮め、はみ出した部分を section の overflow: clip で切り取る
+//  (overflow: hidden と違ってスクリプトからのスクロールも受け付けないため、iframe 内の focus などで section が横にスクロールして帯がずれない)。
 //  iframe の大きさを変えずに隠すことで X のページを狭い幅で描き直させず、展開したときにスクロール位置と読み込み済みのタイムラインを保つ (iframe の display: none や幅の変更は使わない)。
 //  カラム div は visibility: hidden にして、iframe・副見出し・設定パネルを見えなくし、フォーカスとポインタの対象から外す。
-//  カラムバーだけを visibility: visible に戻し、section の左端に重ねた縦長の帯として描く (section を position: relative にし、カラムバーを position: absolute・幅 --opd-column-collapsed-width・高さ 100% の縦 flex にする)。
+//  カラムバーだけを visibility: visible に戻し、section の左端に重ねた縦長の帯として描く (section を position: relative にし、カラムバーを position: absolute・幅 --opd-column-collapsed-width から section の左右の枠線を除いた値・高さ 100% の縦 flex にする)。
 //  帯に出すのは 展開ボタン (折りたたみボタンと同じ要素) → カラム種別の丸アイコン → 縦書きのタイトル (.opd_column_name。文脈ラベルは出さない) → 空白部分 の順で、更新・先頭トグル・設定・閉じるボタンは出さない。
 //  帯の空白部分 (.opd_column_scroll_to_top) のクリックは、折りたたみ中は先頭へのスクロールではなく展開にする。
 //  帯の見出し部分 (.dsp_column_title) はドラッグの掴み位置として残し、折りたたんだままラック内・ラック間で移動できる。
@@ -5094,9 +5386,10 @@ function main_dsp(react_root){
 //
 //カラムバーの更新ボタン (.opd_column_reload_btn):
 //  home / notification / explore のすべてのカラムに、自動更新の設定に依らず常に表示する。押すと「更新して先頭へ」:
-//    iframe のパスが is_column_reload_path   reload_column(column_frame, {keep_top: true, force_top: true}) を呼ぶ (先頭へのスクロールはヘルパーが更新の前に行う)
-//    パスが読めて is_column_reload_path でない (通知・プロフィール・ポスト単体など、X の更新関数で更新できないページ)
-//                                           iframe の contentWindow.location.reload() で読み込み直す。読み込み後の処理 (iframe 内 CSS・見出し・拡張の注入) は通常の load と同じ経路を通る
+//    iframe のパスが is_column_reload_path で、ヘルパーが準備済み (iframe 要素の opd_auto_reload)
+//                                           reload_column(column_frame, {keep_top: true, force_top: true}) を呼ぶ (先頭へのスクロールはヘルパーが更新の前に行う)
+//    パスが読めて、is_column_reload_path でない (通知・プロフィール・ポスト単体など、X の更新関数で更新できないページ) か、ヘルパーが無い (通知カラム・読み込み中)
+//                                           iframe の contentWindow.location.reload() で読み込み直す。読み込み後の処理 (iframe 内 CSS・見出し・拡張の注入) は通常の load と同じ経路を通る。読み込み直す前に contentWindow.scrollTo({top: 0, behavior: "instant"}) で先頭へスクロールし、ブラウザーが読み込み直しでスクロール位置を復元しても先頭になるようにする
 //    パスが読めない (別オリジンを表示中)     何もしない
 //先頭トグル (更新時に必ず先頭へ。.opd_column_force_top_btn):
 //  home / explore のカラムバーに出す (notification は自動更新の対象外のため出さない)。押すたびにカラム div の opd_auto_reload_force_top ("true" | "false") を反転し、column_settings_save で保存する。
@@ -5318,6 +5611,7 @@ const GLOBAL_SETTINGS_DEFAULT = Object.freeze({
     auto_reload_keep_top: true,
     pinned: false,
     side_rack_position: "right",
+    side_rack_visible: true,
     text_scale_percent: 100,
     ui_scale_percent: 100,
     column_content_scale_percent: 100,
@@ -5419,6 +5713,7 @@ function normalize_global_settings(global_settings){
     if(to_boolean_or_null(normalized.auto_reload_keep_top) === null) normalized.auto_reload_keep_top = GLOBAL_SETTINGS_DEFAULT.auto_reload_keep_top;
     if(to_boolean_or_null(normalized.pinned) === null) normalized.pinned = GLOBAL_SETTINGS_DEFAULT.pinned;
     if(to_side_rack_position_or_null(normalized.side_rack_position) === null) normalized.side_rack_position = GLOBAL_SETTINGS_DEFAULT.side_rack_position;
+    if(to_boolean_or_null(normalized.side_rack_visible) === null) normalized.side_rack_visible = GLOBAL_SETTINGS_DEFAULT.side_rack_visible;
     if(to_display_scale_percent_or_null(normalized.text_scale_percent) === null) normalized.text_scale_percent = GLOBAL_SETTINGS_DEFAULT.text_scale_percent;
     if(to_display_scale_percent_or_null(normalized.ui_scale_percent) === null) normalized.ui_scale_percent = GLOBAL_SETTINGS_DEFAULT.ui_scale_percent;
     if(to_display_scale_percent_or_null(normalized.column_content_scale_percent) === null) normalized.column_content_scale_percent = GLOBAL_SETTINGS_DEFAULT.column_content_scale_percent;
@@ -5426,6 +5721,7 @@ function normalize_global_settings(global_settings){
 }
 //既定プロファイルのカラム配列を新しく作って返す (呼び出しごとに別の配列・別のカラムオブジェクトになる)
 //継承可能 8 項目と column_pinned_override は null (全体設定に従う)。ただし home カラムの banner だけは true の明示値にする (既定プロファイルの Home はバナー表示)
+//collapsed と auto_reload_force_top は false (展開中・先頭トグルはオフ)
 function create_default_profile_columns(){
     //カラム 1 件分の保存形式。overrides で既定から変える項目だけを指定する
     function default_column(type, overrides){
@@ -5443,6 +5739,8 @@ function create_default_profile_columns(){
             auto_reload: null,
             auto_reload_time: null,
             column_width: null,
+            collapsed: false,
+            auto_reload_force_top: false,
         }, overrides);
     }
     return [
@@ -5466,9 +5764,10 @@ function create_default_profile(){
 //  profile 内の type が "second_empty_column" の要素: プロファイルに保存しない構造用カラムなので取り除く
 //  profile 内の empty_column マーカー (メインラックの終了マーカー): 最初の 1 つを残して 2 つ目以降を取り除き、1 つも無ければ配列末尾に補う
 //値の正規化:
-//  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 8 項目を null、column_pinned_path を "" にリセットし、version を更新する
+//  settings_schema_version が無い / SETTINGS_SCHEMA_VERSION 未満: 既定の global_settings を与え、各カラムの継承可能 8 項目を null、column_pinned_path を ""、
+//               collapsed と auto_reload_force_top を false にリセットし、version を更新する
 //  現在のスキーマ: global_settings は normalize_global_settings で欠損・型不正・範囲外を既定値へ戻す。
-//               カラム側は normalize_column_setting_value で型不正・範囲外を null にする。
+//               カラム側は normalize_column_setting_value で型不正・範囲外を null にする。collapsed と auto_reload_force_top は boolean でなければ (欠損を含む) false にする。
 //               column_pinned_override が false なのに column_pinned_path が非空の場合はパスを "" に戻す
 //起動時 (init 内、run の前) に全プロファイルへ適用し、プロファイルローダーが保存した任意の JSON もここで吸収する
 //store 自体が配列でなければ何もせず false を返す (呼び出し側が既定プロファイル 1 件の配列へ差し替える)。
@@ -5525,6 +5824,8 @@ function normalize_profile_store(store){
                     auto_reload: null,
                     auto_reload_time: null,
                     column_width: null,
+                    collapsed: false,
+                    auto_reload_force_top: false,
                 });
                 is_changed = true;
             }
@@ -5546,6 +5847,8 @@ function normalize_profile_store(store){
                 column.auto_reload_time = null;
                 column.column_pinned_override = null;
                 column.column_pinned_path = "";
+                column.collapsed = false;
+                column.auto_reload_force_top = false;
             }
             is_changed = true;
             continue;
@@ -5589,6 +5892,15 @@ function normalize_profile_store(store){
             //ピン止めを明示的に外しているカラムはピン止めパスを残さない
             if(column.column_pinned_override === false && column.column_pinned_path !== ""){
                 column.column_pinned_path = "";
+                is_changed = true;
+            }
+            //折りたたみと先頭トグルは全体設定に従う項目ではないため null を取らず、boolean でない値 (欠損を含む) は false にする
+            if(typeof column.collapsed !== "boolean"){
+                column.collapsed = false;
+                is_changed = true;
+            }
+            if(typeof column.auto_reload_force_top !== "boolean"){
+                column.auto_reload_force_top = false;
                 is_changed = true;
             }
         }

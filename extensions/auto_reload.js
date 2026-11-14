@@ -21,7 +21,7 @@ class OpdExtAutoReload {
             column_window.document.dispatchEvent(new CustomEvent('opd_column_reload', {
                 bubbles: true,
                 composed: true,
-                detail: JSON.stringify({ token:this.opd_reload_token, keep_top: options.keep_top === true })
+                detail: JSON.stringify({ token:this.opd_reload_token, keep_top: options.keep_top === true, force_top: options.force_top === true })
             }));
         }
     }
