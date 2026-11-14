@@ -4708,7 +4708,7 @@ function run(settings){
     //  iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / カラムが隠れていない (is_column_concealed が false) /
     //  iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
     //満たせば reload_column で更新して true を返し、満たさなければ false を返す。keep_top には呼び出し時点の global_settings.auto_reload_keep_top を、
-    //force_top には「引数 force_top が true、またはカラムの先頭トグル (opd_auto_reload_force_top) が "true"」を渡す
+    //force_top には「引数 force_top が true、カラムの先頭トグル (opd_auto_reload_force_top) が "true"、または iframe 要素に保留の印 (opd_force_top_pending) がある」を渡す
     //interval の発火 (force_top は false) と reload_stale_column (force_top は true) から呼ぶ
     function try_auto_reload_column(column_frame, force_top){
         const path_name = column_frame_path_name(column_frame);
@@ -4721,7 +4721,7 @@ function run(settings){
         if(column_frame.getAttribute("auto_reload_mouse_hover") != "false") return false;
         //カラムの自動更新が全体的に許可されていない場合は自動更新を無効化する
         if(!column_frame.opd_auto_reload || !is_auto_update()) return false;
-        const is_force_top = force_top === true || column_div?.getAttribute("opd_auto_reload_force_top") === "true";
+        const is_force_top = force_top === true || column_div?.getAttribute("opd_auto_reload_force_top") === "true" || column_frame.opd_force_top_pending === true;
         reload_column(column_frame, {keep_top: global_settings.auto_reload_keep_top === true, force_top: is_force_top});
         return true;
     }
@@ -4735,7 +4735,7 @@ function run(settings){
     //interval が動作中で、最終更新時刻が数値で、Date.now() - 最終更新時刻 が動作中の間隔以上のときだけ try_auto_reload_column(column_frame, true) を呼ぶ。
     //更新前のスクロール位置や先頭トグルに依らず force_top で先頭へ戻して保つ (隠れているあいだに X が新着を差し込んで表示位置がずれていても先頭へ戻すため)
     //更新した (true が返った) ときは interval を張り直して、次の更新がその更新から間隔後になるようにする (直後に残りわずかの interval が発火して二重に更新しない)。
-    //間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する
+    //間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する。古いのに更新を見送ったカラムには mark_force_top_pending で保留の印を付ける
     function reload_stale_column(column_div){
         const column_frame = column_div?.querySelector("iframe");
         if(!column_frame) return;
@@ -4745,9 +4745,28 @@ function run(settings){
         const last_reload_at = column_frame.opd_auto_reload_last_reload_at;
         if(!Number.isFinite(last_reload_at)) return;
         if(Date.now() - last_reload_at < column_frame.opd_auto_reload_interval_ms) return;
-        if(!try_auto_reload_column(column_frame, true)) return;
-        stop_column_auto_reload(column_div);
-        apply_column_auto_reload(column_div);
+        if(try_auto_reload_column(column_frame, true)){
+            stop_column_auto_reload(column_div);
+            apply_column_auto_reload(column_div);
+            return;
+        }
+        //ホバー中・テキスト入力中・ヘルパーの準備前などで見送ったときは、次に成功する自動更新で先頭へ戻すよう保留の印を付ける
+        //(更新対象でないページを表示しているあいだは印を付けない)
+        const path_name = column_frame_path_name(column_frame);
+        if(path_name !== null && is_column_reload_path(path_name)) mark_force_top_pending(column_frame);
+    }
+    //iframe 要素に force_top の保留の印 (opd_force_top_pending) を付ける。try_auto_reload_column は印のあるカラムを force_top で更新し、reload_column が force_top で更新したときに印を消す
+    //印を付けた後にそのカラムの中でユーザーが操作した (wheel・touchstart・pointerdown・keydown) ときは、読んでいる位置から動かさないよう印を消す。
+    //リスナーは iframe の現在の document に capture・once で付ける。中身を読めない (別オリジン等) ときは印だけを付ける
+    function mark_force_top_pending(column_frame){
+        column_frame.opd_force_top_pending = true;
+        try{
+            const frame_document = column_frame.contentWindow.document;
+            const clear_pending = () => { column_frame.opd_force_top_pending = false; };
+            ["wheel", "touchstart", "pointerdown", "keydown"].forEach((type) => frame_document.addEventListener(type, clear_pending, {capture: true, passive: true, once: true}));
+        }catch(e){
+            //中身を読めないときは、次に成功する自動更新まで印を残す
+        }
     }
     //カラムの折りたたみ状態を is_collapsed にする。opd_column_collapsed 属性を書き、apply_column_dom_state で表示へ反映して column_settings_save で保存する
     //展開したときは、折りたたみ中に自動更新しなかったカラムを reload_stale_column で古ければ 1 回更新する (属性を書いた後に呼ぶため is_column_concealed に止められない)
@@ -4779,6 +4798,8 @@ function run(settings){
         const frame_window = column_frame?.contentWindow;
         if(frame_window == null) return;
         column_frame.opd_auto_reload_last_reload_at = Date.now();
+        //force_top で更新したら、復帰時に見送った分の保留の印 (mark_force_top_pending) は果たしたので消す
+        if(options.force_top === true) column_frame.opd_force_top_pending = false;
         column_frame.opd_auto_reload?.Reload(frame_window, { keep_top: options.keep_top === true, force_top: options.force_top === true });
     }
     //自動更新 interval を止める。カラムを閉じる・プロファイルを切り替える (#opd_main_element を外す) 前に対象カラム全部へ呼ぶ
@@ -5278,7 +5299,7 @@ function main_dsp(react_root){
 //  隠しているあいだは #side_rack_element に opd_user_hidden 属性を付け、CSS で visibility: hidden にする (フォーカスとポインタの対象から外れ、背後のメインラックを操作できる)。
 //  hidden 属性 (display: none) は使わない。カラムの iframe を描画から外さず、再表示したときに X のページのスクロール位置と読み込み済みのタイムラインを保つため。
 //  --opd_side_rack_width は隠しているあいだ 0px にし、メインラックを全幅に広げる。
-//  隠しているあいだのサイドラックのカラムは自動更新しない (「自動更新」節の is_column_concealed)。再表示したときは、サイドラックの各カラムへ reload_stale_column を呼ぶ。
+//  隠しているあいだのサイドラックのカラムは自動更新しない (「自動更新」節の is_column_concealed)。再表示したときは、サイドラックの各カラムへ reload_stale_column を呼ぶ (古ければ 1 回更新し、タブ復帰時と同じく force_top で先頭へ戻す)。
 //  カラム管理ダイアログの適用で、サイドラックに新しいカラムを追加した、またはメインラックからカラムを移した場合は、結果が見えるよう side_rack_visible を true にして表示する。
 //切替ボタン (#toggle_side_rack):
 //  サイドバーのカラム管理ボタンの直後に置く (div.dsp_btn_parent、role="button"、tabindex="0"、aria-controls="side_rack_element")。クリックのほか Enter と Space でも押せる。
@@ -5334,7 +5355,7 @@ function main_dsp(react_root){
 //折りたたみ表示の作り方:
 //  カラム div の幅 (style.width = 実効カラム幅) と iframe には手を入れず、section の幅だけを --opd-column-collapsed-width に縮め、はみ出した部分を section の overflow: clip で切り取る
 //  (overflow: hidden と違ってスクリプトからのスクロールも受け付けないため、iframe 内の focus などで section が横にスクロールして帯がずれない)。
-//  iframe の大きさを変えずに隠すことで X のページを狭い幅で描き直させず、展開したときにスクロール位置と読み込み済みのタイムラインを保つ (iframe の display: none や幅の変更は使わない)。
+//  iframe の大きさを変えずに隠すことで X のページを狭い幅で描き直させず、展開したときに (下記の更新をしない場合は) スクロール位置と読み込み済みのタイムラインを保つ (iframe の display: none や幅の変更は使わない)。
 //  カラム div は visibility: hidden にして、iframe・副見出し・設定パネルを見えなくし、フォーカスとポインタの対象から外す。
 //  カラムバーだけを visibility: visible に戻し、section の左端に重ねた縦長の帯として描く (section を position: relative にし、カラムバーを position: absolute・幅 --opd-column-collapsed-width から section の左右の枠線を除いた値・高さ 100% の縦 flex にする)。
 //  帯に出すのは 展開ボタン (折りたたみボタンと同じ要素) → カラム種別の丸アイコン → 縦書きのタイトル (.opd_column_name。文脈ラベルは出さない) → 空白部分 の順で、更新・先頭トグル・設定・閉じるボタンは出さない。
@@ -5347,7 +5368,7 @@ function main_dsp(react_root){
 //  アイコンは展開中が ui_icon_define.column_collapse、折りたたみ中が ui_icon_define.column_expand。
 //カラムバーのボタンが増えても、カラム幅の下限 (COLUMN_WIDTH_MIN_REM) で全ボタンが切れずに並ぶようにする。
 //  カラム div を container-type: inline-size のコンテナにし、幅の狭いカラムではコンテナクエリでカラム種別の丸アイコンを隠し、カラムバーの gap とボタンの大きさを詰める。見出しのテキストは ellipsis で縮める。
-//自動更新との関係: 折りたたみ中のカラムは自動更新しない (「自動更新」節の is_column_concealed)。展開したときは reload_stale_column で、最後の更新から間隔以上経っていれば 1 回すぐ更新する。
+//自動更新との関係: 折りたたみ中のカラムは自動更新しない (「自動更新」節の is_column_concealed)。展開したときは reload_stale_column で、最後の更新から間隔以上経っていれば 1 回すぐ更新し、タブ復帰時と同じく force_top で先頭へ戻す。
 //
 //run() スコープの関数:
 //  set_column_collapsed(column_div, is_collapsed)
@@ -5369,7 +5390,7 @@ function main_dsp(react_root){
 //                                            iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / カラムが隠れていない (is_column_concealed が false) /
 //                                            iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
 //                                          満たせば reload_column で更新して true を返し (満たさなければ false)、keep_top には呼び出し時点の global_settings.auto_reload_keep_top を、
-//                                          force_top には「引数 force_top が true、またはカラムの先頭トグル (opd_auto_reload_force_top) が "true"」を渡す。
+//                                          force_top には「引数 force_top が true、カラムの先頭トグル (opd_auto_reload_force_top) が "true"、または iframe 要素に保留の印 (opd_force_top_pending) がある」を渡す。
 //                                          interval の発火 (force_top は false) と reload_stale_column (force_top は true) から呼ぶ
 //  reload_column(column_frame, options)   options は {keep_top, force_top} (どちらも boolean)。OpdExtAutoReload.Reload で iframe のヘルパーへ 'opd_column_reload' ({token, keep_top, force_top}) を送り、
 //                                          iframe 要素の opd_auto_reload_last_reload_at を Date.now() にする。content script 側からは更新後にスクロールしない
@@ -5377,7 +5398,12 @@ function main_dsp(react_root){
 //  is_column_concealed(column_div)        カラムが隠れているあいだ true を返す: 折りたたみ中 (opd_column_collapsed が "true")、またはサイドラックのカラムでサイドラックを隠している (#side_rack_element に opd_user_hidden 属性がある)
 //  reload_stale_column(column_div)        隠れていたカラムが見える状態に戻ったときの 1 カラム分の処理 (下記「hidden からの復帰」の 1 カラム分と同じ判定)。
 //                                          interval が動作中で、最終更新時刻が数値で、Date.now() - 最終更新時刻 が動作中の間隔以上のときだけ try_auto_reload_column(column_frame, true) を呼び、
-//                                          更新した (true が返った) ときは interval を張り直す。reload_stale_columns_on_visible の各カラム・カラムの展開・サイドラックの再表示から呼ぶ
+//                                          更新した (true が返った) ときは interval を張り直す。reload_stale_columns_on_visible の各カラム・カラムの展開・サイドラックの再表示から呼ぶ。
+//                                          古いのに更新を見送った (false が返った) ときは、表示中のパスが is_column_reload_path なら mark_force_top_pending を呼ぶ
+//  mark_force_top_pending(column_frame)   iframe 要素に保留の印 opd_force_top_pending = true を付ける。印のあるカラムは、次に try_auto_reload_column で更新するときに force_top で更新する。
+//                                          reload_column が force_top で更新したときに印を消す。印を付けた後にそのカラムの iframe の中でユーザーが操作した
+//                                          (wheel・touchstart・pointerdown・keydown。iframe の現在の document に capture・once で付けたリスナーで検知する) ときも、読んでいる位置から動かさないよう印を消す
+//                                          (ホバー中・テキスト入力中・ヘルパーの準備前などの一時的な理由で復帰時の更新を見送ったカラムも、その後の最初の更新で先頭へ戻すため)
 //  stop_column_auto_reload(column_div)    interval を止める。カラムを閉じる・プロファイルを切り替える前に対象カラム全部へ呼ぶ
 //  is_auto_update()                       停止条件のいずれかに当たれば false
 //  reload_stale_columns_on_visible()      deck のタブが visible に戻ったときの処理 (下記「hidden からの復帰」)。最上位の visibilitychange リスナーから呼ばれる
@@ -5418,9 +5444,10 @@ function main_dsp(react_root){
 //                try_auto_reload_column(column_frame, true) を呼ぶ (条件を満たさなければその回は何もせず次の interval を待つ)。
 //                最終更新時刻が数値でないカラム (ヘルパー注入前で初期値が入っていない) は対象外にして次の interval を待つ。
 //                更新した (true が返った) カラムは interval を張り直し (stop_column_auto_reload してから apply_column_auto_reload)、次の更新がその更新から間隔後になるようにする (直後に残りわずかの interval が発火して二重に更新しない)。
-//                間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する
+//                間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する。条件を満たさず更新しなかった古いカラムには保留の印 (mark_force_top_pending) を付ける
 //  復帰時に更新するカラムは、更新前のスクロール位置や先頭トグルに依らず force_top で先頭へ戻して保つ。
-//                タブが隠れているあいだに X が新着を差し込んで表示位置がずれていても、更新前に先頭にいたかどうかで判定せずに先頭へ戻すため
+//                タブが隠れているあいだに X が新着を差し込んで表示位置がずれていても、更新前に先頭にいたかどうかで判定せずに先頭へ戻すため。
+//                復帰時に見送ったカラムも、保留の印によりその後の最初の自動更新で先頭へ戻す (その前にユーザーがそのカラムを操作したときを除く)
 //
 //ホバー判定 (iframe 要素の属性 auto_reload_mouse_hover、"true" のあいだはそのカラムを更新しない):
 //  iframe 自身の mouseover で "true"、mouseleave で "false" にする (bind_column_events)。
