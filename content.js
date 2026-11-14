@@ -4718,7 +4718,8 @@ function run(settings){
     //  iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / カラムが隠れていない (is_column_concealed が false) /
     //  iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (is_column_reload_helper_ready) / is_auto_update() が true
     //満たせば reload_column で更新して true を返し、満たさなければ false を返す。keep_top には呼び出し時点の global_settings.auto_reload_keep_top を、
-    //force_top には「引数 force_top が true、カラムの先頭トグル (opd_auto_reload_force_top) が "true"、または iframe 要素に保留の印 (opd_force_top_pending) がある」を渡す
+    //force_top には「表示中のパスが is_column_timeline_path で、かつ 引数 force_top が true・カラムの先頭トグル (opd_auto_reload_force_top) が "true"・iframe 要素に保留の印 (opd_force_top_pending) がある のいずれか」を渡す
+    //(リストのサブページなど、更新関数があるか分からないページでは、ヘルパーが更新の前に先頭へ戻しても何も更新されないことがあるため force_top にしない)
     //interval の発火 (force_top は false) と reload_stale_column (force_top は true) から呼ぶ
     function try_auto_reload_column(column_frame, force_top){
         const path_name = column_frame_path_name(column_frame);
@@ -4731,7 +4732,7 @@ function run(settings){
         if(column_frame.getAttribute("auto_reload_mouse_hover") != "false") return false;
         //カラムの自動更新が全体的に許可されていない場合は自動更新を無効化する
         if(!is_column_reload_helper_ready(column_frame) || !is_auto_update()) return false;
-        const is_force_top = force_top === true || column_div?.getAttribute("opd_auto_reload_force_top") === "true" || column_frame.opd_force_top_pending === true;
+        const is_force_top = is_column_timeline_path(path_name) && (force_top === true || column_div?.getAttribute("opd_auto_reload_force_top") === "true" || column_frame.opd_force_top_pending === true);
         reload_column(column_frame, {keep_top: global_settings.auto_reload_keep_top === true, force_top: is_force_top});
         return true;
     }
@@ -4764,7 +4765,7 @@ function run(settings){
         //隠れているカラムは見える状態に戻ったときに reload_stale_column が force_top で更新するため、更新対象でないページを表示しているカラムと同じく印を付けない
         if(is_column_concealed(column_div)) return;
         const path_name = column_frame_path_name(column_frame);
-        if(path_name !== null && is_column_reload_path(path_name)) mark_force_top_pending(column_frame);
+        if(path_name !== null && is_column_timeline_path(path_name)) mark_force_top_pending(column_frame);
     }
     //iframe 要素に force_top の保留の印 (opd_force_top_pending) を付ける。try_auto_reload_column は印のあるカラムを force_top で更新する
     //印を付けた後にそのカラムの中でユーザーが操作した (wheel・touchstart・pointerdown・keydown) ときは、読んでいる位置から動かさないよう印を消す。
@@ -4823,8 +4824,9 @@ function run(settings){
     function is_column_reload_path(path_name){
         return ['/home', '/search'].includes(path_name) || path_name.startsWith('/i/lists');
     }
-    //カラムバーの更新ボタンが X の更新関数 (onRefresh) で更新するパスかどうか (/home・/search・リストのタイムライン /i/lists/<リスト ID>)
-    //is_column_reload_path のうちタイムラインを表示するページに限る。リストのメンバー一覧などのサブページは更新関数があるか分からないため、更新ボタンでは読み込み直す
+    //X の更新関数 (onRefresh) があると分かっているタイムラインのパスかどうか (/home・/search・リストのタイムライン /i/lists/<リスト ID>)
+    //is_column_reload_path のうちタイムラインを表示するページに限る。カラムバーの更新ボタンが更新関数で更新するか、自動更新を force_top で行うか、保留の印を付けるかの判定に使う
+    //(リストのメンバー一覧などのサブページは更新関数があるか分からないため、更新ボタンでは読み込み直し、自動更新では先頭へ戻さない)
     function is_column_timeline_path(path_name){
         if(['/home', '/search'].includes(path_name)) return true;
         const list_match = path_name.match(/^\/i\/lists\/([^\/]+)$/);
@@ -5431,7 +5433,8 @@ function main_dsp(react_root){
 //                                            iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / カラムが隠れていない (is_column_concealed が false) /
 //                                            iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (is_column_reload_helper_ready) / is_auto_update() が true
 //                                          満たせば reload_column で更新して true を返し (満たさなければ false)、keep_top には呼び出し時点の global_settings.auto_reload_keep_top を、
-//                                          force_top には「引数 force_top が true、カラムの先頭トグル (opd_auto_reload_force_top) が "true"、または iframe 要素に保留の印 (opd_force_top_pending) がある」を渡す。
+//                                          force_top には「表示中のパスが is_column_timeline_path で、かつ 引数 force_top が true・カラムの先頭トグル (opd_auto_reload_force_top) が "true"・
+//                                          iframe 要素に保留の印 (opd_force_top_pending) がある のいずれか」を渡す (タイムライン以外では、先頭へ戻しても何も更新されないことがあるため force_top にしない)。
 //                                          interval の発火 (force_top は false) と reload_stale_column (force_top は true) から呼ぶ
 //  reload_column(column_frame, options)   options は {keep_top, force_top} (どちらも boolean)。OpdExtAutoReload.Reload で iframe のヘルパーへ 'opd_column_reload' ({token, keep_top, force_top}) を送り、
 //                                          iframe 要素の opd_auto_reload_last_reload_at を Date.now() にする。content script 側からは更新後にスクロールしない
@@ -5440,7 +5443,7 @@ function main_dsp(react_root){
 //  reload_stale_column(column_div)        隠れていたカラムが見える状態に戻ったときの 1 カラム分の処理 (下記「hidden からの復帰」の 1 カラム分と同じ判定)。
 //                                          interval が動作中で、最終更新時刻が数値で、Date.now() - 最終更新時刻 が動作中の間隔以上のときだけ try_auto_reload_column(column_frame, true) を呼び、
 //                                          更新した (true が返った) ときは interval を張り直す。reload_stale_columns_on_visible の各カラム・カラムの展開・サイドラックの再表示から呼ぶ。
-//                                          古いのに更新を見送った (false が返った) ときは、カラムが隠れておらず、表示中のパスが is_column_reload_path なら mark_force_top_pending を呼ぶ
+//                                          古いのに更新を見送った (false が返った) ときは、カラムが隠れておらず、表示中のパスが is_column_timeline_path なら mark_force_top_pending を呼ぶ
 //                                          (隠れているカラムは見える状態に戻ったときにこの関数が force_top で更新するため、印を付けない)
 //  mark_force_top_pending(column_frame)   iframe 要素に保留の印 opd_force_top_pending = true を付ける。印のあるカラムは、次に try_auto_reload_column で更新するときに force_top で更新する。
 //                                          印を付けた後にそのカラムの iframe の中でユーザーが操作した (wheel・touchstart・pointerdown・keydown) ときは、読んでいる位置から動かさないよう印を消す。
@@ -5451,7 +5454,8 @@ function main_dsp(react_root){
 //  is_column_reload_helper_ready(column_frame)
 //                                         ヘルパーが今の document で準備済みなら true: iframe 要素の opd_auto_reload があり、ヘルパーを注入した document (iframe 要素の opd_auto_reload_document。
 //                                          reinit_column_extensions の load で記録する) が今の contentWindow.document と同じ。読み込み直しの途中 (新しい document の load 前) と、中身を読めないときは false
-//  is_column_timeline_path(path_name)     カラムバーの更新ボタンが X の更新関数で更新するパスなら true (/home・/search・/i/lists/<リスト ID>)。
+//  is_column_timeline_path(path_name)     X の更新関数があると分かっているタイムラインのパスなら true (/home・/search・/i/lists/<リスト ID>)。
+//                                          カラムバーの更新ボタンが X の更新関数で更新するか、自動更新を force_top で行うか、保留の印を付けるかの判定に使う。
 //                                          自動更新の対象 (is_column_reload_path) のうちタイムラインを表示するページに限り、リストのサブページ (/i/lists/<ID>/members など) は含めない
 //  stop_column_auto_reload(column_div)    interval を止める。カラムを閉じる・プロファイルを切り替える前に対象カラム全部へ呼ぶ
 //  is_auto_update()                       停止条件のいずれかに当たれば false
