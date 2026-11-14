@@ -4981,6 +4981,20 @@ function main_dsp(react_root){
 //  #side_rack_element               サイドラック (position:fixed、flex row、高さ 100vh)。非表示のあいだは hidden 属性を付ける (display:flex の指定に負けないよう CSS で [hidden]{display:none} を明示する)
 //  .dsp_column_emptycolumn          メインラックの案内カラム (div[opd_column_type="empty_column"])。保存形式ではメインラックの終了マーカーを兼ねる。サイドラックに案内カラムは無い
 //サイドラックへのカラムの追加・移動はカラム管理ダイアログ (追加先ラックの選択と一覧の並べ替え) で行う。追加先ラックの選択はダイアログ内だけの状態で、開くたびにメインラックに戻る。
+//
+//サイドラックの表示切替: サイドバーの切替ボタン (#toggle_side_rack) で、カラムを置いたままサイドラックを隠せる。
+//  表示状態は global_settings.side_rack_visible (boolean、既定 true) に持ち、プロファイルごとに保存する。全体設定ダイアログには出さない (ダイアログの適用は現在の値を引き継ぐ)。
+//  隠しているあいだは #side_rack_element に opd_user_hidden 属性を付け、CSS で visibility: hidden にする (フォーカスとポインタの対象から外れ、背後のメインラックを操作できる)。
+//  hidden 属性 (display: none) は使わない。カラムの iframe を描画から外さず、再表示したときに X のページのスクロール位置と読み込み済みのタイムラインを保つため。
+//  --opd_side_rack_width は隠しているあいだ 0px にし、メインラックを全幅に広げる。
+//  隠しているあいだのサイドラックのカラムは自動更新しない (「自動更新」節の is_column_concealed)。再表示したときは、サイドラックの各カラムへ reload_stale_column を呼ぶ。
+//  カラム管理ダイアログの適用で、サイドラックに新しいカラムを追加した、またはメインラックからカラムを移した場合は、結果が見えるよう side_rack_visible を true にして表示する。
+//切替ボタン (#toggle_side_rack):
+//  サイドバーのカラム管理ボタンの直後に置く (div.dsp_btn_parent、role="button"、tabindex="0"、aria-controls="side_rack_element")。クリックのほか Enter と Space でも押せる。
+//  aria-expanded をサイドラックの表示状態にし、title と aria-label を押したときの動作 (ui_side_rack_hide_title / ui_side_rack_show_title) にする。
+//  サイドラックに実カラムが無いあいだは aria-disabled="true" にし、title と aria-label を ui_side_rack_empty_title にして、押しても何もしない (フォーカスは受け、理由を tooltip で読める)。
+//  アイコン (ui_icon_define.side_rack) は右側のサイドラックを描いた絵柄で、サイドラックの位置が left のときは左右を反転して描く。
+//
 //空のサイドラックは非表示のため、カラムのドラッグ & ドロップで移せるのはサイドラックに実カラムがあるときに限る。column_dd の drop は落とし先カラムの前に挿入するため、サイドラックの末尾 (最後のカラムの後ろ) へはドラッグでは置けず、カラム管理ダイアログの並べ替えで行う (メインラックは末尾の案内カラムが落とし先になる)。
 //DOM 順序: #opd_main_element の中身は サイドバー → #main_rack_element (> #first_rack_element) → #side_rack_element の順に並べる。
 //column_settings_save は #opd_main_element div[opd_column_type] を DOM 順に走査するため、この順序が「メインラックのカラム → empty_column → サイドラックのカラム」という保存順を保証する。
@@ -4999,16 +5013,56 @@ function main_dsp(react_root){
 //    カラムの追加・並べ替え・ラック間移動・閉じるをまとめて反映する唯一の経路 (カラム管理ダイアログの適用から呼ぶ)。
 //    ラックごとの最終的な並びを受け取り、動かさずに済む既存カラム (pick_stationary_sections) には触れず、それ以外の section を案内カラム (サイドラックでは null = 末尾) を基準に insertBefore で最終位置へ入れる。
 //    既存カラムを動かす前には prepare_column_for_dom_move で読み込み先を整える (column_dd の drop も同じ関数を使う)。
+//    サイドラックへ入るカラム (新しいカラム、または適用前にサイドラックに無かった既存カラム) があり、global_settings.side_rack_visible が false なら、update_side_rack_state を呼ぶ前に true にする (保存は適用の最後の column_settings_save が行う)。
 //  update_side_rack_state()
 //    サイドラックの表示状態を現在の状態から決めて反映する。#side_rack_element は「サイドラックに section.dsp_column_draggable_true が 1 つ以上ある」ときに表示し、それ以外は hidden 属性を付ける。
+//    実カラムがあり global_settings.side_rack_visible が false のときは opd_user_hidden 属性を付け、それ以外は外す。切替ボタンの aria-expanded / aria-disabled / title / aria-label も同じ状態に合わせる。
 //    反映の直後に --opd_side_rack_width も同期で 1 回更新する (通常の更新は #side_rack_element を border-box で監視する ResizeObserver が行う)。
-//    起動時の初期構築後・カラム追加後・カラムを閉じた後・ドラッグ移動の drop 後に呼ぶ。
+//    起動時の初期構築後・カラム追加後・カラムを閉じた後・ドラッグ移動の drop 後・表示切替の後に呼ぶ。
+//  update_side_rack_width()
+//    サイドラックの現在の描画幅を --opd_side_rack_width へ書く。hidden 属性または opd_user_hidden 属性が付いているあいだは 0px を書く。
+//  toggle_side_rack_visible()
+//    切替ボタンから呼ぶ。サイドラックに実カラムが無ければ何もしない。global_settings.side_rack_visible を反転し、update_side_rack_state で反映して column_settings_save で保存する。
+//    表示に切り替えたときは、続けてサイドラックの各カラムへ reload_stale_column を呼ぶ。
 //  apply_side_rack_position()
 //    #opd_main_element の opd_side_rack_position 属性を global_settings.side_rack_position の値にする。run() の初期構築で innerHTML を挿入した直後と、全体設定ダイアログでサイドラックの位置を適用した後に呼ぶ。
 //
 //column_dd (カラムのドラッグ & ドロップ) はサイドラックに合わせて 2 点を守る:
 //  イベントを登録する対象を両ラック直下のカラム (#first_rack_element > .dsp_column, #side_rack_element > .dsp_column) に限り、メインバーの section を drop 先にしない。
 //  dragover の挿入位置表示は outline (負の outline-offset で枠内に描く) で描き、border は使わない。border はカラムの幅を変えるため、サイドラックでは ResizeObserver がその増分を拾ってメインラックの幅が揺れる。outline は子要素より後に描かれるため、不透明な iframe に隠れない。
+
+//===== カラムの折りたたみ (column collapse) =====
+//カラム (home / notification / explore) は、カラムバーの折りたたみボタンで幅の細い縦長の帯 (折りたたみ表示) に切り替えられる。帯の展開ボタンか空白部分を押すと元の幅に戻る。
+//折りたたみ状態はカラムごとにプロファイルへ保存する (保存形式は「全体設定」節の column.collapsed)。
+//
+//DOM 契約:
+//  カラム div の属性 opd_column_collapsed      "true" | "false"。折りたたみ中なら "true"
+//  カラムの section のクラス opd_column_collapsed  カラム div の属性と同じ状態を section に写したもの。section の幅を縮める CSS の手がかりに使う
+//                                               (Firefox ESR 115 は :has() を解釈しないため、子の属性から section を選ばず、section 自身に状態を持たせる)
+//  --opd-column-collapsed-width               折りたたみ表示の幅 (rem で書き、UI 倍率に追従させる)
+//折りたたみ表示の作り方:
+//  カラム div の幅 (style.width = 実効カラム幅) と iframe には手を入れず、section の幅だけを --opd-column-collapsed-width に縮め、はみ出した部分を section の overflow: hidden で切り取る。
+//  iframe の大きさを変えずに隠すことで X のページを狭い幅で描き直させず、展開したときにスクロール位置と読み込み済みのタイムラインを保つ (iframe の display: none や幅の変更は使わない)。
+//  カラム div は visibility: hidden にして、iframe・副見出し・設定パネルを見えなくし、フォーカスとポインタの対象から外す。
+//  カラムバーだけを visibility: visible に戻し、section の左端に重ねた縦長の帯として描く (section を position: relative にし、カラムバーを position: absolute・幅 --opd-column-collapsed-width・高さ 100% の縦 flex にする)。
+//  帯に出すのは 展開ボタン (折りたたみボタンと同じ要素) → カラム種別の丸アイコン → 縦書きのタイトル (.opd_column_name。文脈ラベルは出さない) → 空白部分 の順で、更新・先頭トグル・設定・閉じるボタンは出さない。
+//  帯の空白部分 (.opd_column_scroll_to_top) のクリックは、折りたたみ中は先頭へのスクロールではなく展開にする。
+//  帯の見出し部分 (.dsp_column_title) はドラッグの掴み位置として残し、折りたたんだままラック内・ラック間で移動できる。
+//  折りたたむときに設定パネルが開いていれば閉じる。
+//折りたたみボタン (.opd_column_collapse_btn):
+//  カラムバーの設定ボタンの直前に置き、home / notification / explore のすべてに出す。
+//  aria-expanded にカラムの展開状態 (展開中 "true" / 折りたたみ中 "false") を、title と aria-label に押したときの動作 (ui_column_collapse_title / ui_column_expand_title) を入れる。
+//  アイコンは展開中が ui_icon_define.column_collapse、折りたたみ中が ui_icon_define.column_expand。
+//カラムバーのボタンが増えても、カラム幅の下限 (COLUMN_WIDTH_MIN_REM) で全ボタンが切れずに並ぶようにする。
+//  カラム div を container-type: inline-size のコンテナにし、幅の狭いカラムではコンテナクエリでカラム種別の丸アイコンを隠し、カラムバーの gap とボタンの大きさを詰める。見出しのテキストは ellipsis で縮める。
+//自動更新との関係: 折りたたみ中のカラムは自動更新しない (「自動更新」節の is_column_concealed)。展開したときは reload_stale_column で、最後の更新から間隔以上経っていれば 1 回すぐ更新する。
+//
+//run() スコープの関数:
+//  set_column_collapsed(column_div, is_collapsed)
+//    opd_column_collapsed 属性を書き、apply_column_dom_state で表示へ反映して column_settings_save で保存する。展開したときは続けて reload_stale_column(column_div) を呼ぶ。
+//    折りたたみボタンと、折りたたみ中の帯の空白部分のクリックから呼ぶ (bind_column_events で登録する)。
+//  apply_column_dom_state(column_div) は、折りたたみ状態の表示 (section のクラス・折りたたみボタンの aria-expanded / title / aria-label・折りたたむときに設定パネルを閉じる) も冪等に反映する。
+//    カラム幅を書くのと同じ関数で反映するため、全体設定の適用で apply_column_dom_state が呼び直されても折りたたみ表示は崩れない。
 
 //===== 自動更新 (auto reload) =====
 //home / explore カラムの iframe が表示しているタイムライン (/home・/search・/i/lists 配下) を、実効 auto_reload_time ごとに X の更新関数 (onRefresh) で更新する。
@@ -5018,15 +5072,38 @@ function main_dsp(react_root){
 //run() スコープの関数:
 //  apply_column_auto_reload(column_div)   iframe ごとの setInterval を冪等に張る (実効 auto_reload と実効 auto_reload_time が動作中の interval と同じなら作り直さない)。
 //                                          interval は発火のたびに try_auto_reload_column を呼ぶ (interval は間隔が変わらない限り作り直さないため、設定値は interval 作成時に固定せず発火のたびに読む)
-//  try_auto_reload_column(column_frame)   自動更新 1 回分の判定と実行。次を確かめ、1 つでも満たさなければ何もしない:
-//                                            iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
-//                                          満たせば reload_column(column_frame, keep_top) で更新して true を返し (満たさなければ false)、keep_top には呼び出し時点の global_settings.auto_reload_keep_top を渡す。interval の発火と、hidden からの復帰時 (下記) の両方から呼ぶ
-//  reload_column(column_frame, keep_top)  OpdExtAutoReload.Reload で iframe のヘルパーへ 'opd_column_reload' ({token, keep_top}) を送り、iframe 要素の opd_auto_reload_last_reload_at を Date.now() にする。content script 側からは更新後にスクロールしない
-//                                          (更新後のスクロール位置に手を入れるのはヘルパーの先頭保持だけ。auto_reload_keep_top が false なら更新後の位置は X の挙動のまま)
+//  try_auto_reload_column(column_frame, force_top)
+//                                         自動更新 1 回分の判定と実行。次を確かめ、1 つでも満たさなければ何もしない:
+//                                            iframe のパスが読める (別オリジンを表示中でない) / 表示中のパスが is_column_reload_path / カラムが隠れていない (is_column_concealed が false) /
+//                                            iframe の auto_reload_mouse_hover が "false" / ヘルパーが準備済み (iframe 要素の opd_auto_reload) / is_auto_update() が true
+//                                          満たせば reload_column で更新して true を返し (満たさなければ false)、keep_top には呼び出し時点の global_settings.auto_reload_keep_top を、
+//                                          force_top には「引数 force_top が true、またはカラムの先頭トグル (opd_auto_reload_force_top) が "true"」を渡す。
+//                                          interval の発火 (force_top は false) と reload_stale_column (force_top は true) から呼ぶ
+//  reload_column(column_frame, options)   options は {keep_top, force_top} (どちらも boolean)。OpdExtAutoReload.Reload で iframe のヘルパーへ 'opd_column_reload' ({token, keep_top, force_top}) を送り、
+//                                          iframe 要素の opd_auto_reload_last_reload_at を Date.now() にする。content script 側からは更新後にスクロールしない
+//                                          (更新の前後のスクロール位置に手を入れるのはヘルパーだけ。force_top が false で auto_reload_keep_top も false なら、更新後の位置は X の挙動のまま)
+//  is_column_concealed(column_div)        カラムが隠れているあいだ true を返す: 折りたたみ中 (opd_column_collapsed が "true")、またはサイドラックのカラムでサイドラックを隠している (#side_rack_element に opd_user_hidden 属性がある)
+//  reload_stale_column(column_div)        隠れていたカラムが見える状態に戻ったときの 1 カラム分の処理 (下記「hidden からの復帰」の 1 カラム分と同じ判定)。
+//                                          interval が動作中で、最終更新時刻が数値で、Date.now() - 最終更新時刻 が動作中の間隔以上のときだけ try_auto_reload_column(column_frame, true) を呼び、
+//                                          更新した (true が返った) ときは interval を張り直す。reload_stale_columns_on_visible の各カラム・カラムの展開・サイドラックの再表示から呼ぶ
 //  stop_column_auto_reload(column_div)    interval を止める。カラムを閉じる・プロファイルを切り替える前に対象カラム全部へ呼ぶ
 //  is_auto_update()                       停止条件のいずれかに当たれば false
 //  reload_stale_columns_on_visible()      deck のタブが visible に戻ったときの処理 (下記「hidden からの復帰」)。最上位の visibilitychange リスナーから呼ばれる
-//  カラムバーの更新ボタン                  home カラムで実効 auto_reload が false のときだけ表示する。設定に依らず「更新して先頭へ」: 先に iframe を scrollTo({top:0, behavior:"instant"}) で先頭へ戻してから reload_column(column_frame, true) を呼ぶ
+//
+//隠れているカラム (is_column_concealed) は interval を止めず、発火では何もしない (カウントダウンは保つ)。見える状態に戻ったときに reload_stale_column で古ければ 1 回すぐ更新する。
+//
+//カラムバーの更新ボタン (.opd_column_reload_btn):
+//  home / notification / explore のすべてのカラムに、自動更新の設定に依らず常に表示する。押すと「更新して先頭へ」:
+//    iframe のパスが is_column_reload_path   reload_column(column_frame, {keep_top: true, force_top: true}) を呼ぶ (先頭へのスクロールはヘルパーが更新の前に行う)
+//    パスが読めて is_column_reload_path でない (通知・プロフィール・ポスト単体など、X の更新関数で更新できないページ)
+//                                           iframe の contentWindow.location.reload() で読み込み直す。読み込み後の処理 (iframe 内 CSS・見出し・拡張の注入) は通常の load と同じ経路を通る
+//    パスが読めない (別オリジンを表示中)     何もしない
+//先頭トグル (更新時に必ず先頭へ。.opd_column_force_top_btn):
+//  home / explore のカラムバーに出す (notification は自動更新の対象外のため出さない)。押すたびにカラム div の opd_auto_reload_force_top ("true" | "false") を反転し、column_settings_save で保存する。
+//  オンのカラムは、interval による自動更新でも force_top で更新する (更新の前に先頭へ戻し、新着が入っても先頭に保つ)。オフのカラムの interval による自動更新は auto_reload_keep_top に従う。
+//  aria-pressed をトグルの状態にする。カラムの実効 auto_reload が false のあいだは aria-disabled="true" にし、title と aria-label を ui_column_force_top_disabled_title にして押しても何もしない
+//  (トグルの状態は保ったまま表示し、自動更新を有効にすると効く)。それ以外のときの title と aria-label は ui_column_force_top_title。表示の反映は apply_column_dom_state が行う。
+//  手動の更新ボタンと、隠れていたカラムの復帰時の更新 (reload_stale_column) は、トグルに依らず常に force_top で更新する。
 //
 //停止条件 (is_auto_update。全カラム共通):
 //  deck のタブが hidden     document.visibilityState が "hidden" (別タブの裏・最小化。別ウィンドウに完全に覆われた状態を hidden にするかはブラウザと OS の occlusion 検知に依存し、Windows 版 Chrome は hidden にする)。
@@ -5044,10 +5121,13 @@ function main_dsp(react_root){
 //                reload_column を呼ぶたび (interval 経由・復帰時・手動更新ボタン経由のすべて) に上書きする。停止条件で何もしなかった発火では変えない
 //  復帰時の処理: 最上位の visibilitychange リスナー (content script の最上位で 1 回だけ登録し、run() が最上位の変数 deck_visible_handler に代入した関数を呼ぶ。run() の再実行では代入が上書きされるだけでリスナーは増えない) が
 //                document.visibilityState が "visible" になったときに呼ぶ。deck_visible_handler が未代入 (run() の実行前・deck を表示していないページ) なら、リスナーは何もしない。呼ばれた側も #opd_main_element が無ければ何もしない。
-//                interval が動作中のカラム (iframe 要素の opd_auto_reload_interval_id が非 null) のうち、Date.now() - opd_auto_reload_last_reload_at が動作中の間隔 (opd_auto_reload_interval_ms) 以上のカラムだけに try_auto_reload_column を呼ぶ (条件を満たさなければその回は何もせず次の interval を待つ)。
+//                各カラムへ reload_stale_column を呼ぶ。interval が動作中のカラム (iframe 要素の opd_auto_reload_interval_id が非 null) のうち、Date.now() - opd_auto_reload_last_reload_at が動作中の間隔 (opd_auto_reload_interval_ms) 以上のカラムだけに
+//                try_auto_reload_column(column_frame, true) を呼ぶ (条件を満たさなければその回は何もせず次の interval を待つ)。
 //                最終更新時刻が数値でないカラム (ヘルパー注入前で初期値が入っていない) は対象外にして次の interval を待つ。
 //                更新した (true が返った) カラムは interval を張り直し (stop_column_auto_reload してから apply_column_auto_reload)、次の更新がその更新から間隔後になるようにする (直後に残りわずかの interval が発火して二重に更新しない)。
 //                間隔未満のカラムと、条件を満たさず更新しなかったカラムのカウントダウンは維持する
+//  復帰時に更新するカラムは、更新前のスクロール位置や先頭トグルに依らず force_top で先頭へ戻して保つ。
+//                タブが隠れているあいだに X が新着を差し込んで表示位置がずれていても、更新前に先頭にいたかどうかで判定せずに先頭へ戻すため
 //
 //ホバー判定 (iframe 要素の属性 auto_reload_mouse_hover、"true" のあいだはそのカラムを更新しない):
 //  iframe 自身の mouseover で "true"、mouseleave で "false" にする (bind_column_events)。
@@ -5057,6 +5137,9 @@ function main_dsp(react_root){
 //先頭保持 (auto_reload_keep_top。ヘルパー側の契約は extensions/auto_reload_helper.js の先頭コメント):
 //  更新前に先頭 (scrollY が 1 以下) だったカラムは、X が新着を先頭に挿入するときに表示位置を旧先頭ポストに合わせ直す (見かけ上スクロールが下がる) のを打ち消して、更新後も先頭に保ち新着を見せる。
 //  更新前に先頭でなかったカラムには何もしない。
+//強制先頭 (force_top。ヘルパー側の契約は同じく extensions/auto_reload_helper.js の先頭コメント):
+//  更新前のスクロール位置に依らず、更新の前に先頭へ戻し、更新後もユーザーの入力操作があるまで先頭に保つ。keep_top より優先する。
+//  手動の更新ボタン・隠れていたカラムの復帰時の更新・先頭トグルがオンのカラムの自動更新で使う。
 //
 //===== 表示サイズ (display scale) =====
 //デッキの表示サイズは全体設定の 3 項目で決める。デッキのタブではブラウザ標準ズーム (Ctrl +/-) を無効化し、拡大縮小はこの 3 項目だけで行う。
@@ -5158,9 +5241,10 @@ function main_dsp(react_root){
 //  opd_profile_store[n] = {
 //    name, profile: [column...],
 //    settings_schema_version: SETTINGS_SCHEMA_VERSION,
-//    global_settings: {banner, top_visible, tw_view_mode, hide_rt_tweet, column_width, auto_reload, auto_reload_time, auto_reload_keep_top, pinned, side_rack_position, text_scale_percent, ui_scale_percent, column_content_scale_percent}
+//    global_settings: {banner, top_visible, tw_view_mode, hide_rt_tweet, column_width, auto_reload, auto_reload_time, auto_reload_keep_top, pinned, side_rack_position, side_rack_visible, text_scale_percent, ui_scale_percent, column_content_scale_percent}
 //  }
 //  auto_reload_keep_top (boolean、既定 true) は自動更新後の先頭保持 (「自動更新」節) の有効 / 無効。全体でひとつの値で、カラム側で上書きできる項目ではないため COLUMN_INHERITABLE_SETTINGS には入れない。
+//  side_rack_visible (boolean、既定 true) はサイドラックの表示状態 (「サイドラック」節の表示切替)。サイドバーの切替ボタンで変え、全体設定ダイアログには出さない。COLUMN_INHERITABLE_SETTINGS には入れない。
 //  全体設定のキーは GLOBAL_SETTINGS_DEFAULT の項目と normalize_global_settings のキーごとの正規化行を一組で持つ。保存値に無い・型不正の値はその正規化行が既定値で埋めるため、キーの追加に SETTINGS_SCHEMA_VERSION の更新は要らない
 //  profile (カラム配列) は type == "empty_column" の要素より前がメインラック、後がサイドラック
 //  column = {
@@ -5170,7 +5254,12 @@ function main_dsp(react_root){
 //    column_width: number(rem)|null, auto_reload: boolean|null, auto_reload_time: number(ms)|null,
 //    column_pinned_override: boolean|null,   // null = 全体設定の pinned に従う
 //    column_pinned_path: string              // 実効ピン止め中のみ非空 (reconcile_column_pinned が保つ不変条件)
+//    collapsed: boolean                      // 折りたたみ中なら true (「カラムの折りたたみ」節)。既定 false
+//    auto_reload_force_top: boolean          // 先頭トグル (更新時に必ず先頭へ。「自動更新」節) がオンなら true。既定 false。home / explore 以外のカラムでは常に false
 //  }
+//  collapsed と auto_reload_force_top は全体設定に従う項目ではないため null を取らず、COLUMN_INHERITABLE_SETTINGS にも入れない。
+//    normalize_profile_store は boolean でない値 (欠損を含む) を false に正規化する。旧形式のプロファイルのリセットでも false にする。
+//    column_settings_save はカラム div の属性が "true" のときだけ true を保存する (属性が無い構造用カラムは false)。
 //
 //実効値 = カラム値 ?? global_settings 値。
 //単位は column_width が rem、auto_reload_time が ms で統一し、UI の入力欄だけ秒 (ms / 1000) で扱う。
@@ -5189,8 +5278,11 @@ function main_dsp(react_root){
 //  opd_column_detail               "post" (ポスト単体を表示中のあいだだけ付く。副見出しの表示と元の見出しの減衰に使う)
 //  opd_column_return_path          副見出しの ✕ で開き直すパス (ポスト以外で最後に表示したページ。初期値はカラム種別の基準パス)
 //  opd_explore_title_fetched_at    opd_explore_title を iframe のページタイトルから取り込んだ時刻 (epoch ms の数値文字列。未取得は空文字。explore カラムのみ)
-//カラムバーは見出し (カラム種別の丸アイコン・文脈ラベル・タイトル) と更新・設定・閉じるボタンを持ち、個別値の変更はカラム設定パネルから行う。
-//更新ボタン (.dsp_column_reload_btn_wrap) は home カラムで実効 auto_reload が false のときだけ表示し (hidden 属性で出し分ける)、タイムラインを更新して先頭へスクロールする。
+//カラムバーの操作で切り替える状態も、同じカラム div の属性で持つ (どちらも "inherit" を取らない)。
+//  opd_column_collapsed            "true" | "false" (home / notification / explore。折りたたみ中なら "true")
+//  opd_auto_reload_force_top       "true" | "false" (home / explore のみ。先頭トグルがオンなら "true")
+//カラムバーは見出し (カラム種別の丸アイコン・文脈ラベル・タイトル) と、先頭トグル (home / explore のみ)・更新・折りたたみ・設定・閉じるボタンをこの順に持つ。個別値の変更はカラム設定パネルから行う。
+//更新ボタン (.dsp_column_reload_btn_wrap) は全カラムに常に表示し、カラムを更新して先頭へスクロールする (挙動は「自動更新」節のカラムバーの更新ボタン)。
 //カラム設定パネルの select は inherit 選択肢を持ち、その表示文字列に現在の全体値を併記する。
 //
 //項目 × カラム種別の適用表 (○ = 適用対象。構造用カラム main_bar_empty_column / empty_column / dsp_column は対象外):
@@ -5202,10 +5294,13 @@ function main_dsp(react_root){
 //  カラム幅         ○     ○             ○
 //  自動更新/間隔    ○     -             ○
 //  ピン止め         -     -             ○
+//  折りたたみ       ○     ○             ○
+//  先頭トグル       ○     -             ○
+//  更新ボタン       ○     ○             ○
 //
 //適用経路は 3 つに分ける:
 //  bind_column_events(column_div)        パネル・カラムバーのイベント登録 (data-opd_settings_initialized で二重登録を防ぐ)
-//  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・パネル表示・ピン止め reconcile・自動更新 interval・更新ボタンの表示)
+//  apply_column_dom_state(column_div)    iframe の load を待たず同期で反映する項目 (幅・折りたたみ表示・パネル表示・ピン止め reconcile・自動更新 interval・先頭トグルの表示)
 //  apply_column_iframe_styles(column_div) iframe 内 head へ style を注入する項目 (バナー・トップ表示・表示モード・RT 非表示)。iframe の load ごとに実行し、head 未生成時は何もしない
 //起動時 (run() の初期化でプロファイルからカラムを組み立てたとき) とカラム追加時は、挿入直後に bind_column_events と apply_column_dom_state を同期で呼ぶ (追加時はその後 column_settings_save する)。
 //全体設定の変更時は、その項目が inherit の全カラムに対して apply_column_dom_state と apply_column_iframe_styles を呼び直す。

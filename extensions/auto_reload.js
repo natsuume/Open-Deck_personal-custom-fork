@@ -1,4 +1,4 @@
-// 自動更新機能で使用。Reload(column_window, {keep_top}) でヘルパーへ 'opd_column_reload' を送る (契約は auto_reload_helper.js の先頭コメント)
+// 自動更新機能で使用。Reload(column_window, {keep_top, force_top}) でヘルパーへ 'opd_column_reload' を送る (契約は auto_reload_helper.js の先頭コメント)
 class OpdExtAutoReload {
     constructor() {
         this.opd_reload_token = null;

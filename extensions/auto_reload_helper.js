@@ -1,8 +1,9 @@
 //自動更新のヘルパー。カラム iframe の page world で動き、content script (extensions/auto_reload.js) からの CustomEvent で指示を受ける
 //
 //受け取るイベント (detail は JSON 文字列):
-//  'opd_column_reload_init'  {token}            照合用トークンを受け取る。以後の 'opd_column_reload' はトークンが一致するものだけ処理する
-//  'opd_column_reload'       {token, keep_top}  タイムラインを更新する。keep_top が true なら更新直後に先頭保持を始める (下記)
+//  'opd_column_reload_init'  {token}                       照合用トークンを受け取る。以後の 'opd_column_reload' はトークンが一致するものだけ処理する
+//  'opd_column_reload'       {token, keep_top, force_top}  タイムラインを更新する。force_top が true なら更新の前に先頭へスクロールし、更新直後に強制先頭保持を始める (下記)。
+//                                                         force_top が true でなく keep_top が true なら、更新前に先頭にいたときだけ先頭保持を始める (下記)
 //
 //更新関数の探索 (reload_func):
 //  div[data-testid="primaryColumn"] 内の section[role="region"] を先に、続けて document 内の残りの section[role="region"] を、それぞれ文書順に候補として並べ、
@@ -17,6 +18,15 @@
 //  終了条件: 開始から KEEP_TOP_WATCH_MS 経過 / 戻した回数が KEEP_TOP_MAX_CORRECTIONS に達した / ユーザ操作 (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知、または上記の DOM 変化を伴わない scroll) があった
 //  世代管理: 開始のたびに世代番号を進め、古い世代のタイマーと scroll 処理は何もしない (新しい更新が始まったら前の保持は無効になる)
 //  isFocusDisabled (更新直後の focus / scrollIntoView の抑制) とは別の状態として持つ
+//
+//強制先頭保持 (force_top):
+//  更新の前: 更新関数を探す前に scrollTo({top:0, behavior:"instant"}) で先頭へ戻す (更新関数が見つからなくても先頭へは戻る)
+//  開始条件: force_top が true で、更新関数を取得して呼べた (更新前のスクロール位置は問わない)
+//  保持中: window の scroll で scrollY が 0 より大きくなったら、DOM の変化の有無に関わらず scrollTo({top:0, behavior:"instant"}) で先頭へ戻す。
+//          先頭保持 (keep_top) と違い、DOM の変化を伴わない scroll でも保持を終えない (新着の高さが確定してから X が位置を合わせ直すまでに間が空いても戻す)。
+//          ユーザ操作は入力イベント (wheel・touchstart・pointerdown・mousedown・keydown を capture で検知) だけで判定する
+//  終了条件: 開始から FORCE_TOP_WATCH_MS 経過 / 戻した回数が FORCE_TOP_MAX_CORRECTIONS に達した / 上記の入力イベントがあった
+//  先頭保持 (keep_top) と同じ状態 (世代番号・タイマー・MutationObserver) を使い、どちらで始めたかを保持中のモードとして持つ。新しい更新が始まったら、どちらのモードの保持も無効になる
 (() => {
     //先頭保持を打ち切るまでの監視時間 (ms) と、先頭へ戻す回数の上限
     const KEEP_TOP_WATCH_MS = 8000;
